@@ -1,3 +1,4 @@
+import type { RunFailure } from '@tcp/shared';
 import {
   AIMessage,
   HumanMessage,
@@ -39,6 +40,11 @@ import { InitialStateService } from './initial-state.service';
 import { AgentLoopEventRecorder } from './loop-events.service';
 import { AgentRunEnvironmentService } from './run-environment.service';
 import { AgentRunStatusService } from './run-status.service';
+
+/** Matches the {@link RunFailure} `notifyFailed` was given, by its message. */
+function failureWith(message: unknown): RunFailure {
+  return expect.objectContaining({ message }) as RunFailure;
+}
 
 const ALL_ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
@@ -411,6 +417,39 @@ describe('AgentLoopService', () => {
     expect(notifyFailed).not.toHaveBeenCalled();
   });
 
+  it('stops without reporting a second failure when the agent fails its own assignment', async () => {
+    const { agent } = await seedAgentAndRole();
+    // `fail_assignment` has tcp-server mark the agent failed mid-turn; the
+    // run must notice and stop, not fail it again or complete it.
+    const stubGraph = {
+      streamEvents: jest.fn().mockImplementation(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          for (const ev of SUCCESS_EVENTS) yield ev;
+          await agentRepo.update(agent.id, { status: AgentStatus.Failed });
+        },
+      })),
+      getState: jest
+        .fn()
+        .mockResolvedValue({ values: { messages: [] }, next: [] }),
+      updateState: jest.fn().mockResolvedValue({}),
+    };
+    jest.mocked(StateGraph).mockImplementation(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest.fn().mockReturnValue(stubGraph),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyComplete).not.toHaveBeenCalled();
+    expect(notifyFailed).not.toHaveBeenCalled();
+  });
+
   it('checks context budget before running, using the resolved window size and loaded tools', async () => {
     const { agent } = await seedAgentAndRole();
 
@@ -503,7 +542,7 @@ describe('AgentLoopService', () => {
       expect.any(Array),
       expect.any(Object),
       { agentId: agent.id, companyId: agent.companyId },
-      { required: true },
+      expect.objectContaining({ required: true }),
     );
   });
 
@@ -531,7 +570,9 @@ describe('AgentLoopService', () => {
     );
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      "The tasks service (MCP) didn't respond. Check it is running, then start the task again.",
+      failureWith(
+        "The tasks service (MCP) didn't respond. Check it is running, then start the task again.",
+      ),
     );
     expect(compile).not.toHaveBeenCalled();
   });
@@ -709,7 +750,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('No model is set for this role'),
+      failureWith(expect.stringContaining('No model is set for this role')),
     );
   });
 
@@ -794,7 +835,7 @@ describe('AgentLoopService', () => {
     // Not an SDK error, so it comes from this system: its text is kept.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('LLM connection refused'),
+      failureWith(expect.stringContaining('LLM connection refused')),
     );
 
     expect(auditRecord).toHaveBeenCalledWith(
@@ -905,7 +946,9 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringMatching(/^The agent ran out of time \(\d+ seconds\)/),
+      failureWith(
+        expect.stringMatching(/^The agent ran out of time \(\d+ seconds\)/),
+      ),
     );
   });
 
@@ -926,7 +969,9 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'Something unexpected went wrong. Details are in the server log.',
+      failureWith(
+        'Something unexpected went wrong. Details are in the server log.',
+      ),
     );
   });
 
@@ -980,7 +1025,7 @@ describe('AgentLoopService', () => {
     expect(notifyComplete).not.toHaveBeenCalled();
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('The model returned nothing'),
+      failureWith(expect.stringContaining('The model returned nothing')),
     );
   });
 
@@ -1048,7 +1093,7 @@ describe('AgentLoopService', () => {
     // server via notifyFailed, not locally.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('more than 10 steps'),
+      failureWith(expect.stringContaining('more than 10 steps')),
     );
   });
 
@@ -1242,7 +1287,7 @@ describe('AgentLoopService', () => {
       expect(graph.streamEvents).toHaveBeenCalledTimes(3);
       expect(notifyFailed).toHaveBeenCalledWith(
         agent.id,
-        expect.stringContaining('complete_assignment'),
+        failureWith(expect.stringContaining('complete_assignment')),
       );
       expect(notifyComplete).not.toHaveBeenCalled();
       const updated = await agentRepo.findOneByOrFail({ id: agent.id });

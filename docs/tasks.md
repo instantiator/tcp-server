@@ -37,6 +37,7 @@ finalisation), `TaskFailureService` (the paths that end a task badly), and
 | `expected`              | `TcpTaskCompletedArtifact[]`           | Artifacts the task should produce                                                  |
 | `completed`             | `TcpTaskCompletedArtifact[]`, nullable | Set at finalisation (part 7)                                                       |
 | `failureReason`         | text, nullable                         | Why the task failed, in plain words. See [Failure reasons](#failure-reasons)       |
+| `failureCode`           | text, nullable                         | The `RunFailureCode` behind `failureReason`, when known (001.04)                   |
 | `pausedAt`              | timestamp, nullable                    | Set while a user's pause holds the task. See [Pause and resume](#pause-and-resume) |
 | `pausedBy`              | text, nullable                         | Who paused it                                                                      |
 | `visualisationClosedAt` | timestamp, nullable                    | Set when a user closes a finished task's room in the office view                   |
@@ -64,6 +65,7 @@ finalisation), `TaskFailureService` (the paths that end a task badly), and
 | `qaFeedback`         | text, nullable                     |                                                                                                                                                                                                                                                                                    |
 | `qaAttempts`         | int                                | Never reset                                                                                                                                                                                                                                                                        |
 | `failureReason`      | text, nullable                     | Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`                                                                                                                                                                                |
+| `failureCode`        | text, nullable                     | The `RunFailureCode` behind `failureReason`, when known (001.04)                                                                                                                                                                                                                   |
 
 `orderIndex` is a linear-plan implementation detail — a future DAG-shaped
 plan (branch/join) would replace it with an edge list; `selectNextAssignments`
@@ -299,7 +301,32 @@ in `libs/tcp-shared/src/llm/run-failure.ts`; see
 [tcp-agent.md](tcp-agent.md#why-a-run-fails).
 
 A task can fail with no step to blame, for example when recovery or a
-recompute finds it failed. It then takes the failed step's reason. A failed task can't be run again yet: fix what the reason names, then create a
+recompute finds it failed. It then takes the failed step's reason.
+
+Since 001.04 the reason's **code** is stored too, as `failureCode` on the step
+and the task, so tools can tell reasons apart without reading the words. The
+web task dialog shows each failed step's reason under it, without expanding
+the step, and both reasons reach an open dialog live.
+
+**An agent can fail its own assignment** with `fail_assignment`
+([tcp-mcp-tasks.md](tcp-mcp-tasks.md#fail_assignment)), giving one of three
+reasons and a sentence the user will read:
+
+| Code                      | When                                                                      |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `data_protection`         | The work would mean storing data on the company's do-not-store list       |
+| `tools_exhausted`         | It tried every approach it could think of and the tools still didn't work |
+| `information_unavailable` | Information the task needs can't be found or obtained                     |
+
+A review that rejects a step too many times fails it with `review_exhausted`:
+"Step 2 stopped. The work didn't pass review after 3 attempts…".
+
+**A failure that can't be recorded halts the system.** If tcp-agent can't
+reach tcp-server after three retries (1s, 5s, 25s), its worker stops taking
+jobs. If tcp-server can't save the failure, it logs it, tries an audit row,
+and starts a graceful drain flagged `haltedOnError`; every page's banner says
+the system stopped itself. An administrator cancels the shutdown or restarts
+once the cause is fixed. A failed task can't be run again yet: fix what the reason names, then create a
 new task.
 
 ## Orchestration flow

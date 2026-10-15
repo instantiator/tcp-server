@@ -56,6 +56,7 @@ const taskFixture = (overrides: Partial<Task> = {}): Task => ({
   expected: [],
   completed: null,
   failureReason: null,
+  failureCode: null,
   spendCapExempt: false,
   createdAt: NOW,
   updatedAt: NOW,

@@ -1,0 +1,25 @@
+/* The Data protection tab: sections stacked, each sheet below its heading. Theme tokens only (ADR-026). */
+.data-protection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-lg);
+  /* A wide sheet scrolls rather than widening the page. */
+  min-inline-size: 0;
+}
+
+.data-protection__search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--tcp-space-sm);
+}
+
+.data-protection__actions {
+  display: flex;
+  gap: var(--tcp-space-sm);
+  margin-block: var(--tcp-space-sm);
+}
+
+.data-protection__group {
+  margin-block-end: var(--tcp-space-lg);
+}

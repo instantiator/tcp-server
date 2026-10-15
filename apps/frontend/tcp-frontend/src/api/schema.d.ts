@@ -686,7 +686,8 @@ export interface paths {
         /** Download every record table as a zip of CSVs */
         get: operations["RecordsController_export"];
         put?: never;
-        post?: never;
+        /** Download chosen records */
+        post: operations["RecordsController_exportSelection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -763,6 +764,93 @@ export interface paths {
         head?: never;
         /** Change a record */
         patch: operations["RecordsController_updateRow"];
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search every record table */
+        post: operations["RecordsController_search"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/rows/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete chosen records */
+        post: operations["RecordsController_deleteRows"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set a record table's retention */
+        put: operations["RecordsController_setRetention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/do-not-store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the do-not-store list */
+        get: operations["RecordsController_listDoNotStore"];
+        put?: never;
+        /** Add to the do-not-store list */
+        post: operations["RecordsController_addDoNotStore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/do-not-store/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a do-not-store entry */
+        delete: operations["RecordsController_removeDoNotStore"];
+        options?: never;
+        head?: never;
+        /** Change a do-not-store entry */
+        patch: operations["RecordsController_updateDoNotStore"];
         trace?: never;
     };
     "/api/role": {
@@ -1654,6 +1742,8 @@ export interface components {
             /** @enum {string} */
             status: "ready" | "in-progress" | "in-qa" | "succeeded" | "failed" | "cancelled";
             failureReason: string | null;
+            /** @enum {string|null} */
+            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
             agentId?: string | null;
             targetAssignmentId?: string | null;
             parentAssignmentId?: string | null;
@@ -1947,6 +2037,8 @@ export interface components {
         };
         FailDto: {
             reason: string;
+            /** @enum {string} */
+            code?: "unreachable" | "llm_timeout" | "auth_rejected" | "forbidden" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable";
         };
         UpdateStorageChangesDto: {
             created?: string[];
@@ -1969,6 +2061,8 @@ export interface components {
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
             failureReason: string | null;
+            /** @enum {string|null} */
+            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2090,6 +2184,10 @@ export interface components {
             };
             required?: string[];
         };
+        RecordTableRetentionDto: {
+            days: number;
+            from: string;
+        };
         RecordTableDefinitionDto: {
             uniqueKeys: string[][];
             id: string;
@@ -2097,6 +2195,7 @@ export interface components {
             purpose: string;
             schema: components["schemas"]["RecordTableSchemaDto"];
             primaryKey: string[];
+            retention: components["schemas"]["RecordTableRetentionDto"] | null;
         };
         TimedRecordDto: {
             data: {
@@ -2130,6 +2229,50 @@ export interface components {
                 [key: string]: unknown;
             };
             version: number;
+        };
+        SearchRecordsDto: {
+            q: string;
+        };
+        RecordSearchGroupDto: {
+            definition: components["schemas"]["RecordTableDefinitionDto"];
+            rows: components["schemas"]["TimedRecordDto"][];
+        };
+        RecordSearchResultDto: {
+            groups: components["schemas"]["RecordSearchGroupDto"][];
+            truncated: boolean;
+        };
+        ExportRecordsDto: {
+            tables: {
+                [key: string]: "all" | string[];
+            };
+        };
+        VersionedRefDto: {
+            id: string;
+            version: number;
+        };
+        DeleteRecordsDto: {
+            rows: components["schemas"]["VersionedRefDto"][];
+        };
+        SetRetentionDto: {
+            retention: components["schemas"]["RecordTableRetentionDto"] | null;
+        };
+        DoNotStoreEntryDto: {
+            /** @enum {string} */
+            addedByRole: "user" | "agent";
+            id: string;
+            value: string;
+            note: string | null;
+            addedById: string | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        AddDoNotStoreDto: {
+            value: string;
+            note?: string;
+        };
+        UpdateDoNotStoreDto: {
+            note?: string | null;
+            value?: string;
         };
         CreateRoleDto: {
             /** Format: uuid */
@@ -2321,6 +2464,7 @@ export interface components {
             /** @enum {string} */
             state: "idle" | "draining" | "quiesced";
             restart: boolean;
+            haltedOnError: boolean;
         };
         SystemStatusResponseDto: {
             admin: boolean;
@@ -2348,6 +2492,7 @@ export interface components {
             agentsRunning: number;
             restart: boolean;
             restartSupported: boolean;
+            haltedOnError: boolean;
         };
         TaskExpectedArtifactDto: {
             /** @enum {string} */
@@ -2399,6 +2544,8 @@ export interface components {
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
             failureReason: string | null;
+            /** @enum {string|null} */
+            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -3709,6 +3856,32 @@ export interface operations {
             };
         };
     };
+    RecordsController_exportSelection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRecordsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/zip": string;
+                };
+            };
+        };
+    };
     RecordsController_readTable: {
         parameters: {
             query?: never;
@@ -3777,7 +3950,10 @@ export interface operations {
     };
     RecordsController_appendCsv: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Store data that matches the do-not-store list; without it a match is refused with 409 `do_not_store`. */
+                confirmDoNotStore?: boolean;
+            };
             header?: never;
             path: {
                 companyId: string;
@@ -3806,7 +3982,10 @@ export interface operations {
     };
     RecordsController_addRow: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Store data that matches the do-not-store list; without it a match is refused with 409 `do_not_store`. */
+                confirmDoNotStore?: boolean;
+            };
             header?: never;
             path: {
                 companyId: string;
@@ -3877,7 +4056,10 @@ export interface operations {
     };
     RecordsController_updateRow: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Store data that matches the do-not-store list; without it a match is refused with 409 `do_not_store`. */
+                confirmDoNotStore?: boolean;
+            };
             header?: never;
             path: {
                 companyId: string;
@@ -3898,6 +4080,175 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimedRecordDto"];
+                };
+            };
+        };
+    };
+    RecordsController_search: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchRecordsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordSearchResultDto"];
+                };
+            };
+        };
+    };
+    RecordsController_deleteRows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteRecordsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedRecordsDto"];
+                };
+            };
+        };
+    };
+    RecordsController_setRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRetentionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_listDoNotStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoNotStoreEntryDto"][];
+                };
+            };
+        };
+    };
+    RecordsController_addDoNotStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddDoNotStoreDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoNotStoreEntryDto"];
+                };
+            };
+        };
+    };
+    RecordsController_removeDoNotStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RecordsController_updateDoNotStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDoNotStoreDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoNotStoreEntryDto"];
                 };
             };
         };

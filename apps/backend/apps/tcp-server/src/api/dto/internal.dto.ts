@@ -1,3 +1,4 @@
+import { RUN_FAILURE_CODES, type RunFailureCode } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import {
   IsArray,
@@ -72,6 +73,11 @@ export class FailDto {
   @IsString()
   @IsNotEmpty()
   reason!: string;
+
+  /** The {@link RunFailureCode}; absent from a caller that predates codes. */
+  @IsOptional()
+  @IsIn(RUN_FAILURE_CODES)
+  code?: RunFailureCode;
 }
 
 /** Body for `PATCH /internal/agent/:agentId/storage`. */

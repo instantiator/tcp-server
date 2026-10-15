@@ -16,6 +16,7 @@ import { AgentRegistryService } from '../registry/agent-registry.service';
 import { AgentWorkerService } from './agent-worker.service';
 import { ModelSlotService } from './model-slot.service';
 import { ShutdownListenerService } from './shutdown-listener.service';
+import { FailureUnreportedError } from '../agent/run-status.service';
 
 jest.mock('bullmq', () => ({
   Worker: jest.fn().mockImplementation(() => ({
@@ -210,6 +211,21 @@ describe('AgentWorkerService', () => {
     await expect(processor(job(agentId))).rejects.toThrow('boom');
 
     expect(registry.isRunning(agentId)).toBe(false);
+  });
+
+  it('halts the worker when a failure could not be reported, and only then', async () => {
+    const halt = jest
+      .spyOn(module.get(ShutdownListenerService), 'halt')
+      .mockResolvedValue(undefined);
+
+    loopRun.mockRejectedValueOnce(new Error('boom'));
+    await expect(processor(job('agent-e'))).rejects.toThrow('boom');
+    expect(halt).not.toHaveBeenCalled();
+
+    loopRun.mockRejectedValueOnce(new FailureUnreportedError('never told'));
+    await expect(processor(job('agent-f'))).rejects.toThrow('never told');
+    expect(halt).toHaveBeenCalledWith('never told');
+    halt.mockRestore();
   });
 
   // Regression test for the TOCTOU race that let a stalled-job retry start a

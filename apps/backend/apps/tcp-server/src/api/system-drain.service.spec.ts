@@ -72,6 +72,32 @@ describe('SystemDrainService', () => {
     );
   });
 
+  describe('haltOnError', () => {
+    it('drains, and says the system started it, until cancelled', async () => {
+      const drain = build([runningOn('a1', task)]);
+
+      await drain.haltOnError();
+
+      expect(update).toHaveBeenCalledWith(
+        'a1',
+        expect.objectContaining({ pauseReason: 'shutdown' }),
+      );
+      expect(await drain.status()).toEqual(
+        expect.objectContaining({ state: 'draining', haltedOnError: true }),
+      );
+      await drain.cancel();
+      expect((await drain.status()).haltedOnError).toBe(false);
+    });
+
+    it('never throws, even when running agents cannot be paused', async () => {
+      update.mockRejectedValue(new Error('database is down'));
+      const drain = build([runningOn('a1', task)]);
+
+      await expect(drain.haltOnError()).resolves.toBeUndefined();
+      expect((await drain.status()).haltedOnError).toBe(true);
+    });
+  });
+
   describe('restart', () => {
     it('is refused where nothing would start the services again', async () => {
       await expect(build([]).begin(false, true)).rejects.toThrow(

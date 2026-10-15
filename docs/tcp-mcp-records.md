@@ -51,6 +51,7 @@ Every tool takes `companyId` and `agentId`. The agent side injects both (see [Ac
 | [`delete`](#delete)                   | `delete(table, id \| key)`                                       | Delete one record                                |
 | [`query`](#query)                     | `query(table, filters?, sort?, limit?, offset?)`                 | Find records                                     |
 | [`aggregate`](#aggregate)             | `aggregate(table, op, field?, group_by?, filters?)`              | Count, sum, average, minimum or maximum, exactly |
+| [`do_not_store`](#do_not_store)       | `do_not_store(action, value, reason)`                            | Add someone to the do-not-store list             |
 
 Tool descriptions live in `apps/backend/apps/tcp-mcp-records/src/tools.jsonc`. The `describe_server` text lives in `prompts.jsonc` beside it.
 
@@ -243,6 +244,25 @@ Returns a list of `{ group, value }`. Without `group_by`, there is one row and `
 
 ---
 
+## `do_not_store`
+
+Adds an entry to the company's do-not-store list (001.04): a name, email address or other text that records may not contain. `action` is `add`, `remove` or `change`.
+
+- **`add`** stores the entry, with `reason` as its note. An entry already on the list (in any case or spacing) is answered as done.
+- **`remove` and `change` do nothing.** Taking someone off the list is a person's decision, so the tool answers with advice: ask a user with `request_user_input`, naming the entry and why.
+
+It is offered in every mode, read-only ones too: a customer may ask in a chat, and adding to the list only protects people. Agents can't read the list; they learn of an entry only when a write is refused.
+
+### Refused writes
+
+`insert` and `update` check the record (for `update`, the changed fields) against the list first. A text field matches when it contains an entry as a whole word or phrase, ignoring case, spacing and accents: "Ann Lee" matches "Deliver to ann lee, 3 High St" but "Ann" doesn't match "Annual". Fields that aren't text are not checked.
+
+A match stores nothing and answers `{ status: "not_stored", fields, note }`. The note tells the agent not to try another spelling, and to call `fail_assignment` with reason `data_protection` if the task can't be done without the data. The refusal is audited as a read naming the fields, never their values.
+
+The check runs just before the write, outside its transaction, so an entry added in that instant can miss one write.
+
+---
+
 ## Idempotency
 
 An agent that retries, or restarts after a crash, must not add a record twice. So `insert` never makes a duplicate. If a record already holds the same primary or unique key, nothing is added. The result says so:
@@ -376,6 +396,34 @@ The export is built in memory (see [outstanding-issues.md](outstanding-issues.md
 
 `RecordsError` now has a `code`: `not_found`, `conflict` or `invalid`. The controller maps it to 404, 409 or 400. The MCP tool outputs did not change.
 
+## Data protection (001.04)
+
+### Routes
+
+All under `/api/company/:companyId/records`, members only.
+
+| Route                                                        | Does                                                                                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST search` `{q}`                                          | Rows in every table with a field containing `q`, any case, grouped by table. At most 1,000. A POST so the name stays out of URLs and logs |
+| `POST export` `{tables: {[name]: ids \| "all"}}`             | One table as CSV, several as a zip of CSVs                                                                                                |
+| `POST tables/:table/rows/delete` `{rows: [{id, version}]}`   | Deletes those rows, all or none. 409 `stale` if any moved on                                                                              |
+| `PUT tables/:table/retention` `{retention}`                  | Sets `{days, from}` or clears it with `null`. 400 if `from` isn't `updated` or a date field                                               |
+| `GET`/`POST do-not-store`, `PATCH`/`DELETE do-not-store/:id` | The list. A duplicate entry is 409                                                                                                        |
+
+Adding a row, editing one, and appending CSV return **409 `do_not_store`** with the matching `fields` when the data matches the list. The web client asks the person, then repeats the call with `?confirmDoNotStore=true`. People are warned, not stopped.
+
+### Retention
+
+A table's `retention` is `{days, from}`: rows are deleted `days` after `from`, which is `updated` (the row's last change) or one of the table's date fields. A row whose date field is blank, or not a date, is kept. `RecordsRetentionService` in tcp-server sweeps every hour; a table that fails to sweep is logged and skipped.
+
+### Audit
+
+Bulk deletes, retention changes and sweeps, and list changes are `state_change` with `source: records`. They carry ids, counts, table and field names, never row values or list entries: the audit log isn't erased with the rows, so it mustn't keep what they held. A sweep is audited as role `system`; a person's override of the list is recorded as `doNotStoreOverride: [fields]`.
+
+### What it doesn't reach
+
+Search, export and delete cover record tables only, not the audit log, transcripts, knowledge, company resources, files, agents' memory or backups. The web page says so, and [outstanding-issues.md](outstanding-issues.md#data-protection-reaches-record-tables-only) tracks it.
+
 ---
 
 ## Configuration
@@ -406,7 +454,7 @@ A template import that replaces a company by slug leaves the old company's recor
 
 The records server has its own migration list, `apps/backend/apps/tcp-mcp-records/src/migrations-list.ts` (`RECORDS_MIGRATIONS`). Like tcp-server's, it is registered by hand, because a glob does not survive the webpack bundle. The server runs them on start (`migrationsRun: true`) and records them in the `records_migrations` table, so they never mix with tcp-server's `typeorm_migrations`. See [db-migrations.md](db-migrations.md#the-records-servers-migrations).
 
-The one migration, `1784870000000-RecordTables`, makes the three tables. It adds the company foreign keys (`ON DELETE CASCADE`) only when `tcp_company` exists in the database.
+The first migration, `1784870000000-RecordTables`, makes the three tables. It adds the company foreign keys (`ON DELETE CASCADE`) only when `tcp_company` exists in the database. `1784910000000-DataProtection` adds `record_table.retention` and the `record_do_not_store` list, the same way. `deleteCompany` clears the list too, for a separate database with no foreign key.
 
 The test tiers run the records migrations after tcp-server's in `apps/backend/test/support/migrate-database.ts`.
 

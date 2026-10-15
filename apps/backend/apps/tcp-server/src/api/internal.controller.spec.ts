@@ -2,9 +2,11 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { CompanyUser, TcpAgent, TcpRole } from '@tcp/shared';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { SystemDrainService } from './system-drain.service';
 import { TaskFailureService } from './task-failure.service';
 
 describe('InternalController', () => {
@@ -27,6 +29,8 @@ describe('InternalController', () => {
   let agentRepo: { findOneBy: jest.Mock };
   let roleRepo: { findBy: jest.Mock };
   let userRepo: { findBy: jest.Mock };
+  let audit: { record: jest.Mock };
+  let drain: { haltOnError: jest.Mock };
   let controller: InternalController;
 
   beforeEach(() => {
@@ -49,6 +53,8 @@ describe('InternalController', () => {
     agentRepo = { findOneBy: jest.fn() };
     roleRepo = { findBy: jest.fn() };
     userRepo = { findBy: jest.fn() };
+    audit = { record: jest.fn().mockResolvedValue(undefined) };
+    drain = { haltOnError: jest.fn().mockResolvedValue(undefined) };
     controller = new InternalController(
       pauseResume as unknown as PauseAndResumeService,
       taskFailures as unknown as TaskFailureService,
@@ -56,6 +62,8 @@ describe('InternalController', () => {
       agentRepo as unknown as Repository<TcpAgent>,
       roleRepo as unknown as Repository<TcpRole>,
       userRepo as unknown as Repository<CompanyUser>,
+      audit as unknown as AuditService,
+      drain as unknown as SystemDrainService,
     );
   });
 
@@ -249,6 +257,61 @@ describe('InternalController', () => {
       expect(pauseResume.failAgent).toHaveBeenCalledWith(
         agentId,
         'Agent ended without calling complete_task',
+        undefined,
+      );
+    });
+
+    it('halts the system, after auditing and logging, when the failure cannot be recorded', async () => {
+      const agentId = randomUUID();
+      const companyId = randomUUID();
+      agentRepo.findOneBy.mockResolvedValue({ id: agentId, companyId });
+      taskFailures.handleAgentFailed.mockRejectedValue(
+        new Error('database is down'),
+      );
+
+      await expect(
+        controller.fail(agentId, { reason: 'Boom.', code: 'unexpected' }),
+      ).rejects.toThrow('database is down');
+
+      expect(audit.record).toHaveBeenCalledWith(
+        companyId,
+        'system',
+        agentId,
+        'state_change',
+        expect.objectContaining({ entity: 'system', newStatus: 'halted' }),
+      );
+      expect(drain.haltOnError).toHaveBeenCalled();
+    });
+
+    it('still halts when the audit write fails too', async () => {
+      const agentId = randomUUID();
+      pauseResume.failAgent.mockRejectedValue(new Error('database is down'));
+      agentRepo.findOneBy.mockRejectedValue(new Error('database is down'));
+
+      await expect(
+        controller.fail(agentId, { reason: 'Boom.' }),
+      ).rejects.toThrow('database is down');
+
+      expect(drain.haltOnError).toHaveBeenCalled();
+    });
+
+    it('passes the failure code on to the agent and its task', async () => {
+      const agentId = randomUUID();
+
+      await controller.fail(agentId, {
+        reason: 'The agent stopped.',
+        code: 'data_protection',
+      });
+
+      expect(pauseResume.failAgent).toHaveBeenCalledWith(
+        agentId,
+        'The agent stopped.',
+        'data_protection',
+      );
+      expect(taskFailures.handleAgentFailed).toHaveBeenCalledWith(
+        agentId,
+        'The agent stopped.',
+        'data_protection',
       );
     });
   });

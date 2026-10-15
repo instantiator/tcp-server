@@ -15,6 +15,8 @@ export class ShutdownStatusResponseDto implements ShutdownStatus {
   restart!: boolean;
   /** True when this deployment can restart itself (it runs under a supervisor). */
   restartSupported!: boolean;
+  /** True when the system started this drain itself, because a failure couldn't be recorded. */
+  haltedOnError!: boolean;
 }
 
 /** One service's line in {@link SystemHealthResponseDto}. */
@@ -55,6 +57,8 @@ export class PublicShutdownStateDto {
   state!: ShutdownState;
   /** True when the drain ends in a restart, after which work carries on by itself. */
   restart!: boolean;
+  /** True when the system started this drain itself, because a failure couldn't be recorded. */
+  haltedOnError!: boolean;
 }
 
 /**

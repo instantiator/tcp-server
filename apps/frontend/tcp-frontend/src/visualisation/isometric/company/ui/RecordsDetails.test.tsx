@@ -40,6 +40,7 @@ const respond = (tables: unknown[]) =>
             purpose: '',
             primaryKey: ['order_id'],
             uniqueKeys: [],
+            retention: null,
             schema: { properties: { order_id: { type: 'string' } } },
           },
           rows: [],

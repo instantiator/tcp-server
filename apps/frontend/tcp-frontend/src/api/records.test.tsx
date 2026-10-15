@@ -17,16 +17,22 @@ import type { RecordTableRows, TimedRecord } from './dtos';
 import { ApiError } from './errors';
 import {
   downloadAllRecordTables,
+  downloadRecordSelection,
   downloadRecordTableCsv,
   recordErrorBody,
+  useAddDoNotStore,
   useAddRecord,
   useAppendRecordsCsv,
   useClearRecordTable,
   useDeleteRecord,
+  useDeleteRecords,
+  useDoNotStoreList,
   useDropRecordTable,
+  useRecordSearch,
   useRecordTable,
   useRecordTables,
   useReloadRecordTable,
+  useSetRetention,
   useUpdateRecord,
 } from './hooks';
 import { queryKeys } from './query-keys';
@@ -59,6 +65,7 @@ const tableOf = (rows: TimedRecord[]): RecordTableRows => ({
     uniqueKeys: [],
     primaryKey: [],
     schema: { properties: {} },
+    retention: null,
   },
   rows,
   total: rows.length,
@@ -132,7 +139,7 @@ describe('record mutations that patch the cache', () => {
     respondByRoute([[/rows$/, { status: 201, body: row('new') }]]);
     const { result, queryClient, spy } = setup(() => useAddRecord(C, T));
     queryClient.setQueryData(queryKeys.recordTable(C, T), tableOf([row('a')]));
-    await act(() => result.current.mutateAsync({ x: 1 }));
+    await act(() => result.current.mutateAsync({ data: { x: 1 } }));
     expect(call().method).toBe('POST');
     expect(new URL(call().url).pathname).toBe(`${BASE}/tables/${T}/rows`);
     expect(await call().clone().json()).toEqual({ data: { x: 1 } });
@@ -201,9 +208,37 @@ describe('record mutations that patch the cache', () => {
     if (!(error instanceof ApiError)) return;
     expect(error.status).toBe(409);
     expect(recordErrorBody(error).code).toBe('stale');
+    // Any search showing the row reloads too (001.04).
     expect(invalidatedKeys(spy)).toEqual([
       queryKeys.recordTable(C, T),
       queryKeys.recordTables(C),
+      ['record', 'search'],
+    ]);
+  });
+
+  it('an edit made from a search replaces the row where it stands in the search', async () => {
+    respondByRoute([[/rows\/b$/, { body: row('b', 2, { x: 9 }) }]]);
+    const { result, queryClient } = setup(() => useUpdateRecord(C, T));
+    const searchKey = queryKeys.recordSearch(C, 'x');
+    queryClient.setQueryData(searchKey, {
+      groups: [
+        {
+          definition: tableOf([]).definition,
+          rows: [row('a'), row('b'), row('c')],
+        },
+      ],
+      truncated: false,
+    });
+    await act(() =>
+      result.current.mutateAsync({ id: 'b', changes: { x: 9 }, version: 1 }),
+    );
+    const search = queryClient.getQueryData<{
+      groups: { rows: TimedRecord[] }[];
+    }>(searchKey);
+    expect(search?.groups[0].rows.map((r) => [r.id, r.version])).toEqual([
+      ['a', 1],
+      ['b', 2],
+      ['c', 1],
     ]);
   });
 
@@ -219,7 +254,7 @@ describe('record mutations that patch the cache', () => {
     ]);
     const { result } = setup(() => useAddRecord(C, T));
     await act(async () => {
-      await result.current.mutateAsync({}).catch(() => undefined);
+      await result.current.mutateAsync({ data: {} }).catch(() => undefined);
     });
     await waitFor(() => expect(result.current.error).not.toBeNull());
     const error = result.current.error;
@@ -246,7 +281,7 @@ describe('record bulk mutations', () => {
     ]);
     const { result, spy } = setup(() => useAppendRecordsCsv(C, T));
     const out = await act(() =>
-      result.current.mutateAsync(new File(['a,b'], 'x.csv')),
+      result.current.mutateAsync({ file: new File(['a,b'], 'x.csv') }),
     );
     expect(out).toEqual({ inserted: 2, alreadyExists: 1 });
     // postFile calls fetch(URL, init), not with a Request.
@@ -272,7 +307,7 @@ describe('record bulk mutations', () => {
     const { result, spy } = setup(() => useAppendRecordsCsv(C, T));
     await act(async () => {
       await result.current
-        .mutateAsync(new File(['a'], 'x.csv'))
+        .mutateAsync({ file: new File(['a'], 'x.csv') })
         .catch(() => undefined);
     });
     await waitFor(() => expect(result.current.error).not.toBeNull());
@@ -363,5 +398,151 @@ describe('getBlob and downloads', () => {
     await downloadAllRecordTables(C, 'acme');
     expect(new URL(requestedUrls()[0] ?? '').pathname).toBe(`${BASE}/export`);
     expect(names[0]).toMatch(/ acme tables\.zip$/);
+  });
+});
+
+describe('data protection (001.04)', () => {
+  beforeEach(installFetchMock);
+
+  it('sends confirmDoNotStore only when the person confirmed', async () => {
+    respondByRoute([[/rows/, { status: 201, body: row('new') }]]);
+    const { result } = setup(() => useAddRecord(C, T));
+    await act(() => result.current.mutateAsync({ data: { x: 1 } }));
+    await act(() =>
+      result.current.mutateAsync({ data: { x: 1 }, confirmDoNotStore: true }),
+    );
+    expect(new URL(call(0).url).searchParams.has('confirmDoNotStore')).toBe(
+      false,
+    );
+    expect(new URL(call(1).url).searchParams.get('confirmDoNotStore')).toBe(
+      'true',
+    );
+  });
+
+  it('reads the fields a do_not_store refusal names', async () => {
+    respondByRoute([
+      [
+        /rows$/,
+        {
+          status: 409,
+          body: { code: 'do_not_store', fields: ['name', 7], message: 'x' },
+        },
+      ],
+    ]);
+    const { result } = setup(() => useAddRecord(C, T));
+    await act(async () => {
+      await result.current.mutateAsync({ data: {} }).catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    const error = result.current.error;
+    if (!(error instanceof ApiError)) throw new Error('expected ApiError');
+    expect(recordErrorBody(error)).toMatchObject({
+      code: 'do_not_store',
+      fields: ['name'],
+    });
+  });
+
+  it('searches with a POST, keeping the text out of the URL, and idles when empty', async () => {
+    respondByRoute([[/search$/, { body: { groups: [], truncated: false } }]]);
+    const idle = setup(() => useRecordSearch(C, ''));
+    expect(idle.result.current.fetchStatus).toBe('idle');
+
+    const { result } = setup(() => useRecordSearch(C, 'Ann Lee'));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(call().method).toBe('POST');
+    expect(call().url).not.toContain('Ann');
+    expect(await call().clone().json()).toEqual({ q: 'Ann Lee' });
+  });
+
+  it('bulk delete removes the rows where they stand and reloads searches', async () => {
+    respondByRoute([[/rows\/delete$/, { body: { removed: 2 } }]]);
+    const { result, queryClient, spy } = setup(() => useDeleteRecords(C, T));
+    queryClient.setQueryData(
+      queryKeys.recordTable(C, T),
+      tableOf([row('a'), row('b'), row('c')]),
+    );
+    await act(() =>
+      result.current.mutateAsync([
+        { id: 'a', version: 1 },
+        { id: 'c', version: 1 },
+      ]),
+    );
+    expect(await call().clone().json()).toEqual({
+      rows: [
+        { id: 'a', version: 1 },
+        { id: 'c', version: 1 },
+      ],
+    });
+    const cached = queryClient.getQueryData<RecordTableRows>(
+      queryKeys.recordTable(C, T),
+    );
+    expect(cached?.rows.map((r) => r.id)).toEqual(['b']);
+    expect(cached?.total).toBe(1);
+    expect(invalidatedKeys(spy)).toContainEqual(['record', 'search']);
+  });
+
+  it('setting retention updates the cached definition', async () => {
+    const definition = {
+      ...tableOf([]).definition,
+      retention: { days: 30, from: 'updated' },
+    };
+    respondByRoute([[/retention$/, { body: definition }]]);
+    const { result, queryClient } = setup(() => useSetRetention(C, T));
+    queryClient.setQueryData(queryKeys.recordTable(C, T), tableOf([row('a')]));
+    await act(() => result.current.mutateAsync({ days: 30, from: 'updated' }));
+    expect(call().method).toBe('PUT');
+    expect(
+      queryClient.getQueryData<RecordTableRows>(queryKeys.recordTable(C, T))
+        ?.definition.retention,
+    ).toEqual({ days: 30, from: 'updated' });
+  });
+
+  it('adding to the do-not-store list reloads the list', async () => {
+    respondByRoute([[/do-not-store$/, { status: 201, body: { id: 'e1' } }]]);
+    const { result, spy } = setup(() => useAddDoNotStore(C));
+    await act(() => result.current.mutateAsync({ value: 'Ann Lee' }));
+    expect(invalidatedKeys(spy)).toContainEqual(queryKeys.doNotStore(C));
+  });
+
+  it('lists the do-not-store list', async () => {
+    respondByRoute([[/do-not-store$/, { body: [] }]]);
+    const { result } = setup(() => useDoNotStoreList(C));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(new URL(call().url).pathname).toBe(`${BASE}/do-not-store`);
+  });
+
+  describe('downloading a selection', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it.each([
+      [{ orders: ['a'] }, / acme orders\.csv$/],
+      [{ orders: ['a'], stock: 'all' as const }, / acme tables\.zip$/],
+    ])(
+      'posts the selection, and names the file for what comes back',
+      async (tables, name) => {
+        fetchMock.mockResolvedValueOnce(new Response('x', { status: 200 }));
+        URL.createObjectURL = vi.fn(() => 'blob:z');
+        URL.revokeObjectURL = vi.fn();
+        const names: string[] = [];
+        vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+          function (this: HTMLAnchorElement) {
+            names.push(this.download);
+          },
+        );
+        await downloadRecordSelection(C, 'acme', tables);
+        // `send` calls fetch with a URL and init, not a Request.
+        const [url, init] = fetchMock.mock.calls[0] ?? [];
+        expect(url instanceof URL ? url.pathname : url).toBe(`${BASE}/export`);
+        expect(init?.method).toBe('POST');
+        expect(new Headers(init?.headers).get('Content-Type')).toBe(
+          'application/json',
+        );
+        const body = init?.body;
+        expect(typeof body === 'string' ? JSON.parse(body) : body).toEqual({
+          tables,
+        });
+        expect(names[0]).toMatch(name);
+      },
+    );
   });
 });

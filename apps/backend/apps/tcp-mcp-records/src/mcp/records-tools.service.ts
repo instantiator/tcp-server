@@ -159,6 +159,14 @@ export class RecordsToolsService {
       },
       ({ companyId, agentId, table, record }) =>
         this.run(async () => {
+          const refused = await this.refuseDoNotStore(
+            companyId,
+            agentId,
+            'insert',
+            table,
+            record,
+          );
+          if (refused) return refused;
           const result = await this.records.insert(companyId, table, record);
           if (result.status === 'inserted') {
             this.change(companyId, agentId, {
@@ -199,6 +207,15 @@ export class RecordsToolsService {
       },
       ({ companyId, agentId, table, changes, ...ref }) =>
         this.run(async () => {
+          // Fields already stored were checked when they were written.
+          const refused = await this.refuseDoNotStore(
+            companyId,
+            agentId,
+            'update',
+            table,
+            changes,
+          );
+          if (refused) return refused;
           const { record, before } = await this.records.update(
             companyId,
             table,
@@ -307,7 +324,78 @@ export class RecordsToolsService {
         }),
     );
 
+    server.registerTool(
+      'do_not_store',
+      {
+        description: d.do_not_store,
+        inputSchema: {
+          ...identity,
+          action: z.enum(['add', 'remove', 'change']),
+          value: z.string().describe('A name, email address or similar'),
+          reason: z.string().describe('Why, in a sentence'),
+        },
+      },
+      ({ companyId, agentId, action, value, reason }) =>
+        this.run(async () => {
+          // Taking someone off the list is a person's decision, not an agent's.
+          if (action !== 'add') {
+            return interpolate(recordsPrompts.do_not_store_ask_user, {
+              action: action === 'remove' ? 'removed' : 'changed',
+            });
+          }
+          try {
+            const entry = await this.records.addDoNotStore(
+              companyId,
+              { value, note: reason },
+              { role: 'agent', id: agentId },
+            );
+            // The entry's id only: the audit log mustn't collect the very
+            // details the list exists to keep out.
+            this.change(companyId, agentId, {
+              action: 'do_not_store_add',
+              entryId: entry.id,
+            });
+            return recordsPrompts.do_not_store_added;
+          } catch (e) {
+            if (e instanceof RecordsError && e.code === 'conflict') {
+              return recordsPrompts.do_not_store_already;
+            }
+            throw e;
+          }
+        }),
+    );
+
     return server;
+  }
+
+  /**
+   * The refusal for a record holding a do-not-store entry, or `undefined`
+   * when it may be stored. A refusal is audited by field name only.
+   */
+  private async refuseDoNotStore(
+    companyId: string,
+    agentId: string,
+    tool: 'insert' | 'update',
+    table: string,
+    data: Record<string, unknown>,
+  ): Promise<
+    { status: 'not_stored'; fields: string[]; note: string } | undefined
+  > {
+    const fields = await this.records.doNotStoreMatches(companyId, [data]);
+    if (fields.length === 0) return undefined;
+    this.read(companyId, agentId, {
+      tool,
+      table,
+      outcome: 'do_not_store',
+      fields,
+    });
+    return {
+      status: 'not_stored',
+      fields,
+      note: interpolate(recordsPrompts.do_not_store_refused, {
+        fields: fields.map((f) => `'${f}'`).join(', '),
+      }),
+    };
   }
 
   /** Runs a tool body, returning its result as JSON and a {@link RecordsError} as a correctable error. */

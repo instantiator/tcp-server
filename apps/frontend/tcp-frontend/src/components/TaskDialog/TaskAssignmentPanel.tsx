@@ -10,6 +10,8 @@ export interface TaskAssignmentPanelProps {
   readonly roleName: string;
   /** The assignment's own status, already live from the assignments list. */
   readonly status: string;
+  /** Why the step failed; shown, uncollapsed, whenever it has failed. */
+  readonly failureReason: string | null;
   readonly isExpanded: boolean;
   readonly onToggle: () => void;
 }
@@ -27,12 +29,14 @@ export interface TaskAssignmentPanelProps {
  * button that was pressed.
  *
  * An assignment nobody has picked up yet has no `agentId` and so no
- * transcript to show.
+ * transcript to show. A failed one says why, without being expanded: the
+ * reason is what someone opening a failed task came to read.
  */
 export const TaskAssignmentPanel = ({
   agentId,
   roleName,
   status,
+  failureReason,
   isExpanded,
   onToggle,
 }: TaskAssignmentPanelProps) => {
@@ -47,6 +51,11 @@ export const TaskAssignmentPanel = ({
           status: statusLabel(status),
         })}
       </h3>
+      {status === 'failed' && failureReason !== null && (
+        <p className="task-assignment__failure">
+          {t('task.assignment.failureReason', { reason: failureReason })}
+        </p>
+      )}
       <Button
         className="react-aria-Button task-assignment__toggle"
         aria-expanded={isExpanded}

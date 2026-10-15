@@ -94,6 +94,7 @@ export class SupervisedTurnService {
           const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
           return fresh?.status === AgentStatus.Paused ||
             fresh?.status === AgentStatus.Completed ||
+            fresh?.status === AgentStatus.Failed ||
             fresh?.status === AgentStatus.Cancelled
             ? fresh.status
             : null;

@@ -62,6 +62,11 @@ export interface ModeToolAccess {
    * scope gets a resource write folder.
    */
   resources: 'read-write' | 'read-only';
+  /**
+   * Whether the mode is offered `fail_assignment`. Chat has no assignment to
+   * give up on, and a consultee answers a question rather than owning work.
+   */
+  canFail: boolean;
 }
 
 /**
@@ -82,6 +87,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     storage: 'read-only',
     records: 'read-only',
     resources: 'read-only',
+    canFail: true,
   },
   implement: {
     servers: [
@@ -95,6 +101,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     storage: 'read-write',
     records: 'read-write',
     resources: 'read-write',
+    canFail: true,
   },
   qa: {
     servers: [
@@ -108,6 +115,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     storage: 'read-only',
     records: 'read-only',
     resources: 'read-only',
+    canFail: true,
   },
   chat: {
     servers: [
@@ -121,6 +129,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     storage: 'read-write',
     records: 'read-write',
     resources: 'read-write',
+    canFail: false,
   },
   consultee: {
     servers: [
@@ -134,6 +143,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     storage: 'read-write',
     records: 'read-write',
     resources: 'read-only',
+    canFail: false,
   },
   finalise: {
     servers: [
@@ -147,6 +157,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     storage: 'read-write',
     records: 'read-write',
     resources: 'read-write',
+    canFail: true,
   },
 };
 
@@ -184,7 +195,8 @@ export function serverNamesForMode(
  * Filters already-loaded tools to those a mode is offered: only servers in
  * {@link MODE_TOOLS} `.servers`, and — for a `read-only` storage, records or
  * resources mode — with the mutating {@link STORAGE_WRITE_TOOLS},
- * {@link RECORDS_WRITE_TOOLS} or {@link RESOURCE_WRITE_TOOLS} dropped. Generic over the loaded-tool
+ * {@link RECORDS_WRITE_TOOLS} or {@link RESOURCE_WRITE_TOOLS} dropped, and
+ * `fail_assignment` dropped where `canFail` is false. Generic over the loaded-tool
  * shape so both the shared `McpTool` and any test double satisfy it.
  */
 export function filterToolsForMode<
@@ -197,10 +209,12 @@ export function filterToolsForMode<
   const recordWriteTools = new Set(RECORDS_WRITE_TOOLS);
   const dropResourceWrites = MODE_TOOLS[mode].resources === 'read-only';
   const resourceWriteTools = new Set(RESOURCE_WRITE_TOOLS);
+  const { canFail } = MODE_TOOLS[mode];
   return tools.filter((t) => {
     const name = stripServerPrefix(t.toolName);
     return (
       allowedServers.has(t.serverName) &&
+      !(!canFail && t.serverName === 'tasks' && name === 'fail_assignment') &&
       !(dropWrites && writeTools.has(name)) &&
       !(
         dropRecordWrites &&

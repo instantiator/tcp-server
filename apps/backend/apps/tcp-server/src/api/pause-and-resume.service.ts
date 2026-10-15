@@ -5,6 +5,7 @@ import {
   TcpAgent,
   TcpRole,
   PendingConsultation,
+  type RunFailureCode,
 } from '@tcp/shared';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -297,7 +298,11 @@ export class PauseAndResumeService {
    * Does not overwrite a Completed agent — `complete_task` may have won the
    * race against the failure notification.
    */
-  async failAgent(agentId: UUID, reason: string): Promise<void> {
+  async failAgent(
+    agentId: UUID,
+    reason: string,
+    code?: RunFailureCode,
+  ): Promise<void> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) return;
 
@@ -314,7 +319,7 @@ export class PauseAndResumeService {
       agent.companyId,
       role?.name ?? 'agent',
       AgentStatus.Failed,
-      { reason },
+      { reason, ...(code && { code }) },
     );
 
     const consultation = await this.consultRepo.findOne({

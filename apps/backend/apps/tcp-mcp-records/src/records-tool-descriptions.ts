@@ -13,6 +13,7 @@ export interface RecordsToolDescriptions {
   delete: string;
   query: string;
   aggregate: string;
+  do_not_store: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link tools.jsonc} file. */

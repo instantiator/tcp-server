@@ -23,24 +23,30 @@ export interface AgentLoopTracker {
   firedTools: Set<string>;
   /** The model's most recent turn output text, overwritten on each `on_chat_model_end`. */
   lastResponseText: string;
-  /** The last tool call and its result, to spot the same one repeating. */
-  lastCall?: string;
-  /** How many times in a row {@link lastCall} has happened. */
-  callRepeats: number;
+  /** The last tool's base name, to say what the agent was doing if it breaks. */
+  lastTool?: string;
+  /**
+   * How often each distinct call (tool, input and result) has happened this
+   * run, to spot an agent going round in circles.
+   */
+  callCounts: Map<string, number>;
   /** Set when a call repeated too often: the run is stopped for it. */
   repeatedCall?: { tool: string; result: string };
 }
 
 /**
- * How many identical calls, with identical results, in a row stop a run. An
- * agent seen in the wild resent one refused plan until stopped by hand.
+ * How many identical calls, with identical results, stop a run. An agent seen
+ * in the wild resent one refused plan until stopped by hand.
  */
 export const MAX_CALL_REPEATS = 3;
 
 /**
- * Records a finished tool call and says whether it has now repeated
- * {@link MAX_CALL_REPEATS} times in a row — same tool, same input, same
- * result — which means the agent is looping rather than working.
+ * Records a finished tool call and says whether it has now happened
+ * {@link MAX_CALL_REPEATS} times this run — same tool, same input, same
+ * result — which means the agent is looping rather than working. Counted
+ * across the whole run, not just in a row, so an A, B, A, B, A loop is caught
+ * too. The result is part of the match: a call whose answer changes (listing
+ * files while writing them) is progress, not a loop.
  */
 export function noteToolCall(
   tracker: AgentLoopTracker,
@@ -49,15 +55,27 @@ export function noteToolCall(
   output: unknown,
 ): boolean {
   const result = extractResultText(output);
-  const call = JSON.stringify([tool, input, result]);
-  tracker.callRepeats = call === tracker.lastCall ? tracker.callRepeats + 1 : 1;
-  tracker.lastCall = call;
-  if (tracker.callRepeats < MAX_CALL_REPEATS) return false;
+  tracker.lastTool = baseToolName(tool);
+  const call = stableJson([tool, input, result]);
+  const count = (tracker.callCounts.get(call) ?? 0) + 1;
+  tracker.callCounts.set(call, count);
+  if (count < MAX_CALL_REPEATS) return false;
   tracker.repeatedCall = {
     tool: baseToolName(tool),
     result: result.split('\n')[0].slice(0, 200),
   };
   return true;
+}
+
+/** JSON with object keys sorted, so `{a, b}` and `{b, a}` are the same call. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : v,
+  );
 }
 
 /** Creates an empty tracker for a new loop run. */
@@ -67,7 +85,7 @@ export function createTracker(): AgentLoopTracker {
     storage: { created: [], modified: [], deleted: [], moved: [] },
     firedTools: new Set(),
     lastResponseText: '',
-    callRepeats: 0,
+    callCounts: new Map(),
   };
 }
 

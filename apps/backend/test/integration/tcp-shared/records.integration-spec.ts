@@ -715,6 +715,286 @@ describe('RecordsService (integration)', () => {
     });
   });
 
+  describe('data protection (001.04)', () => {
+    describe('the do-not-store list', () => {
+      let companyId: string;
+      beforeAll(async () => {
+        companyId = await newCompany();
+      });
+
+      it('adds, lists, edits and removes an entry', async () => {
+        const added = await records.addDoNotStore(
+          companyId,
+          { value: '  Ann   Lee ', note: 'Asked by email' },
+          { role: 'user', id: 'user-1' },
+        );
+        expect(added).toMatchObject({
+          value: 'Ann   Lee',
+          note: 'Asked by email',
+          addedByRole: 'user',
+          addedById: 'user-1',
+        });
+        const edited = await records.updateDoNotStore(companyId, added.id, {
+          value: 'Ann Lee-Smith',
+        });
+        expect(edited).toMatchObject({
+          value: 'Ann Lee-Smith',
+          note: 'Asked by email',
+        });
+        expect(await records.listDoNotStore(companyId)).toEqual([edited]);
+        await records.removeDoNotStore(companyId, added.id);
+        expect(await records.listDoNotStore(companyId)).toEqual([]);
+      });
+
+      it('refuses the same entry twice, in another case or spacing', async () => {
+        await records.addDoNotStore(
+          companyId,
+          { value: 'bob@example.com' },
+          { role: 'agent', id: null },
+        );
+        await expect(
+          records.addDoNotStore(
+            companyId,
+            { value: ' BOB@example.com ' },
+            { role: 'user', id: 'u' },
+          ),
+        ).rejects.toMatchObject({ code: 'conflict' });
+      });
+
+      it.each(['ab', '---', ''])(
+        'refuses %j as too short to mean anyone',
+        async (value) => {
+          await expect(
+            records.addDoNotStore(
+              companyId,
+              { value },
+              { role: 'user', id: 'u' },
+            ),
+          ).rejects.toThrow(/at least three characters/);
+        },
+      );
+
+      it('matches whole words in text fields only', async () => {
+        await records.addDoNotStore(
+          companyId,
+          { value: 'Cara Diaz' },
+          { role: 'user', id: 'u' },
+        );
+        expect(
+          await records.doNotStoreMatches(companyId, [
+            {
+              customer: 'Mrs CARA  diaz',
+              note: 'Deliver to Cara Diazepam Ltd',
+              qty: 1,
+            },
+          ]),
+        ).toEqual(['customer']);
+      });
+
+      it("keeps one company's list from another", async () => {
+        const other = await newCompany();
+        expect(await records.listDoNotStore(other)).toEqual([]);
+        expect(
+          await records.doNotStoreMatches(other, [{ customer: 'Cara Diaz' }]),
+        ).toEqual([]);
+        const [entry] = await records.listDoNotStore(companyId);
+        await expect(
+          records.removeDoNotStore(other, entry.id),
+        ).rejects.toMatchObject({ code: 'not_found' });
+        await expect(
+          records.updateDoNotStore(other, entry.id, { note: 'x' }),
+        ).rejects.toMatchObject({ code: 'not_found' });
+      });
+    });
+
+    describe('search, selection export and bulk delete', () => {
+      let companyId: string;
+      beforeAll(async () => {
+        companyId = await newCompany();
+        await records.createTable(companyId, ORDERS, null);
+        await records.createTable(
+          companyId,
+          {
+            name: 'contacts',
+            purpose: 'People.',
+            schema: {
+              type: 'object',
+              properties: { email: { type: 'string' } },
+              required: ['email'],
+            },
+            primaryKey: ['email'],
+          },
+          null,
+        );
+        await records.insert(companyId, 'orders', order(1)); // Ann
+        await records.insert(companyId, 'orders', order(2)); // Bob
+        await records.insert(
+          companyId,
+          'orders',
+          order(3, { note: '50%_off' }),
+        );
+        await records.insert(companyId, 'contacts', {
+          email: 'ann@example.com',
+        });
+      });
+
+      it('finds rows in every table, grouped by table, in any case', async () => {
+        const result = await records.search(companyId, 'ANN');
+        expect(result.truncated).toBe(false);
+        expect(
+          result.groups.map((g) => [g.definition.name, g.rows.length]),
+        ).toEqual([
+          ['contacts', 1],
+          ['orders', 2],
+        ]);
+      });
+
+      it('takes %, _ and \\ literally', async () => {
+        const result = await records.search(companyId, '%_');
+        expect(result.groups.flatMap((g) => g.rows.map((r) => r.data))).toEqual(
+          [expect.objectContaining({ note: '50%_off' })],
+        );
+      });
+
+      it("never finds another company's rows", async () => {
+        const other = await newCompany();
+        expect((await records.search(other, 'Ann')).groups).toEqual([]);
+      });
+
+      it('refuses a search too short to be useful', async () => {
+        await expect(records.search(companyId, ' a ')).rejects.toThrow(
+          /at least 2/,
+        );
+      });
+
+      it('exports only the chosen rows', async () => {
+        const { groups } = await records.search(companyId, 'Bob');
+        const ids = groups[0].rows.map((r) => r.id);
+        expect(await records.readRowsById(companyId, 'orders', ids)).toEqual([
+          order(2),
+        ]);
+      });
+
+      it('deletes chosen rows all or none, refusing a stale version', async () => {
+        const { rows } = await records.readRows(companyId, 'orders');
+        const refs = rows.map((r) => ({ id: r.id, version: r.version }));
+        await expect(
+          records.deleteRows(companyId, 'orders', [
+            refs[0],
+            { ...refs[1], version: refs[1].version + 1 },
+          ]),
+        ).rejects.toMatchObject({ code: 'stale' });
+        expect((await records.readRows(companyId, 'orders')).total).toBe(3);
+
+        expect(
+          await records.deleteRows(companyId, 'orders', refs.slice(0, 2)),
+        ).toBe(2);
+        expect((await records.readRows(companyId, 'orders')).total).toBe(1);
+      });
+
+      it("can't delete another company's rows", async () => {
+        const { rows } = await records.readRows(companyId, 'orders');
+        const other = await newCompany();
+        await records.createTable(other, ORDERS, null);
+        await expect(
+          records.deleteRows(other, 'orders', [
+            { id: rows[0].id, version: rows[0].version },
+          ]),
+        ).rejects.toMatchObject({ code: 'stale' });
+        expect((await records.readRows(companyId, 'orders')).total).toBe(1);
+      });
+    });
+
+    describe('retention', () => {
+      let companyId: string;
+      const NOW = new Date('2026-10-12T12:00:00Z');
+      const noErrors = (table: string, err: unknown) => {
+        throw new Error(`sweeping ${table} failed: ${String(err)}`);
+      };
+
+      beforeAll(async () => {
+        companyId = await newCompany();
+        await records.createTable(companyId, ORDERS, null);
+      });
+
+      it('refuses a field that is not a date, and silly lengths', async () => {
+        await expect(
+          records.setRetention(companyId, 'orders', { days: 30, from: 'note' }),
+        ).rejects.toThrow(/neither/);
+        await expect(
+          records.setRetention(companyId, 'orders', {
+            days: 0,
+            from: 'updated',
+          }),
+        ).rejects.toThrow(/whole number of days/);
+      });
+
+      it('deletes rows past a date field, keeping blank dates and other tables', async () => {
+        await records.insert(
+          companyId,
+          'orders',
+          order(1, { ordered_on: '2026-01-01' }),
+        );
+        await records.insert(
+          companyId,
+          'orders',
+          order(2, { ordered_on: '2026-10-01' }),
+        );
+        await records.insert(companyId, 'orders', order(3));
+        const other = await newCompany();
+        await records.createTable(other, ORDERS, null);
+        await records.insert(
+          other,
+          'orders',
+          order(1, { ordered_on: '2026-01-01' }),
+        );
+
+        const definition = await records.setRetention(companyId, 'orders', {
+          days: 30,
+          from: 'ordered_on',
+        });
+        expect(definition.retention).toEqual({ days: 30, from: 'ordered_on' });
+        expect(
+          (await records.describeTable(companyId, 'orders')).retention,
+        ).toEqual({ days: 30, from: 'ordered_on' });
+
+        const swept = await records.sweepRetention(NOW, noErrors);
+
+        expect(swept).toContainEqual({
+          companyId,
+          table: 'orders',
+          deleted: 1,
+        });
+        const left = (await records.readRows(companyId, 'orders')).rows.map(
+          (r) => r.data.order_id,
+        );
+        expect(left.sort()).toEqual(['A2', 'A3']);
+        expect((await records.readRows(other, 'orders')).total).toBe(1);
+      });
+
+      it('deletes rows not updated for the set days, and stops once cleared', async () => {
+        await records.setRetention(companyId, 'orders', {
+          days: 1,
+          from: 'updated',
+        });
+        const later = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+        await records.setRetention(companyId, 'orders', null);
+        expect(
+          await records.sweepRetention(later, noErrors),
+        ).not.toContainEqual(expect.objectContaining({ companyId }));
+        await records.setRetention(companyId, 'orders', {
+          days: 1,
+          from: 'updated',
+        });
+        expect(await records.sweepRetention(later, noErrors)).toContainEqual({
+          companyId,
+          table: 'orders',
+          deleted: 2,
+        });
+      });
+    });
+  });
+
   describe('company deletion', () => {
     it('cascades from the company row in a shared database', async () => {
       const companyId = await newCompany();
@@ -773,6 +1053,13 @@ describe('RecordsService (integration)', () => {
       expect(
         (await separate.insert(companyId, 'orders', order(1))).status,
       ).toBe('inserted');
+      await separate.addDoNotStore(
+        companyId,
+        { value: 'Ann Lee' },
+        { role: 'user', id: 'u' },
+      );
+      await separate.deleteCompany(companyId);
+      expect(await separate.listDoNotStore(companyId)).toEqual([]);
     });
 
     it('has the company foreign keys in the shared database', async () => {
@@ -781,6 +1068,7 @@ describe('RecordsService (integration)', () => {
       );
       expect(fks.map((f) => f.conname)).toEqual([
         'FK_record_company',
+        'FK_record_do_not_store_company',
         'FK_record_table_company',
       ]);
     });

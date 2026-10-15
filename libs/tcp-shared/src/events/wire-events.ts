@@ -1,3 +1,4 @@
+import type { RunFailureCode } from '../llm/run-failure';
 import type { UUID } from '../uuid';
 import type {
   TcpAssignment,
@@ -90,6 +91,9 @@ export interface TaskChangeSummary {
   pausedBy?: string | null;
   /** When its office-view room was closed (ISO); null or absent while open. */
   visualisationClosedAt?: string | null;
+  /** Why it failed, so an open view shows the reason without a refetch. */
+  failureReason?: string | null;
+  failureCode?: RunFailureCode | null;
 }
 
 /** Builds a {@link TaskChangeSummary} from a task and its implement-mode plan assignments. */
@@ -98,7 +102,16 @@ export function buildTaskChangeSummary(
     TcpTask,
     'id' | 'status' | 'request' | 'shortcode' | 'createdAt' | 'updatedAt'
   > &
-    Partial<Pick<TcpTask, 'pausedAt' | 'pausedBy' | 'visualisationClosedAt'>>,
+    Partial<
+      Pick<
+        TcpTask,
+        | 'pausedAt'
+        | 'pausedBy'
+        | 'visualisationClosedAt'
+        | 'failureReason'
+        | 'failureCode'
+      >
+    >,
   planAssignments: Pick<TcpAssignment, 'status'>[],
 ): TaskChangeSummary {
   return {
@@ -114,6 +127,22 @@ export function buildTaskChangeSummary(
     pausedAt: task.pausedAt?.toISOString() ?? null,
     pausedBy: task.pausedBy ?? null,
     visualisationClosedAt: task.visualisationClosedAt?.toISOString() ?? null,
+    ...failureOf(task),
+  };
+}
+
+/**
+ * The failure fields of a summary, only when the source row carried them: a
+ * caller passing a partial row must not wipe a reason the cache already holds.
+ */
+function failureOf(
+  row: Partial<Pick<TcpTask, 'failureReason' | 'failureCode'>>,
+): Pick<TaskChangeSummary, 'failureReason' | 'failureCode'> {
+  return {
+    ...(row.failureReason !== undefined && {
+      failureReason: row.failureReason,
+    }),
+    ...(row.failureCode !== undefined && { failureCode: row.failureCode }),
   };
 }
 
@@ -125,6 +154,9 @@ export interface AssignmentChangeSummary {
   orderIndex: number | null;
   /** The role working the assignment — what lets a row render a role name. */
   roleId: UUID | null;
+  /** Why it failed, so an open view shows the reason without a refetch. */
+  failureReason?: string | null;
+  failureCode?: RunFailureCode | null;
 }
 
 /** Builds an {@link AssignmentChangeSummary} from an assignment. */
@@ -132,7 +164,8 @@ export function buildAssignmentChangeSummary(
   assignment: Pick<
     TcpAssignment,
     'id' | 'status' | 'mode' | 'orderIndex' | 'roleId'
-  >,
+  > &
+    Partial<Pick<TcpAssignment, 'failureReason' | 'failureCode'>>,
 ): AssignmentChangeSummary {
   return {
     id: assignment.id,
@@ -140,6 +173,7 @@ export function buildAssignmentChangeSummary(
     mode: assignment.mode,
     orderIndex: assignment.orderIndex ?? null,
     roleId: assignment.roleId ?? null,
+    ...failureOf(assignment),
   };
 }
 

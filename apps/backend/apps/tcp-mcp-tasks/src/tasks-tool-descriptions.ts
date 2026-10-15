@@ -8,6 +8,7 @@ export interface TaskToolDescriptions {
   create_plan: string;
   complete_assignment: string;
   assure_assignment: string;
+  fail_assignment: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link tools.jsonc} file. */

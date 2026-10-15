@@ -36,6 +36,9 @@ import type {
   ConversationDetailDTO,
   ConversationDTO,
   KnowledgeDocumentDTO,
+  RecordTableDefinition,
+  RecordSearchResult,
+  RecordTableRetention,
   RecordTableRows,
   TimedRecord,
   NotificationDTO,
@@ -65,9 +68,20 @@ import {
   useRecordTable,
   useRecordTables,
   useUpdateRecordMutation,
+  useAddDoNotStoreMutation,
+  useDeleteRecordsAcrossMutation,
+  useDeleteRecordsMutation,
+  useDoNotStoreList,
+  useRecordSearch,
+  useRemoveDoNotStoreMutation,
+  useSetRetentionMutation,
+  useUpdateDoNotStoreMutation,
+  type DoNotStoreConfirmation,
   getBlob,
+  postJsonForBlob,
   recordTableCsvPath,
   recordsExportPath,
+  recordsSelectionExportPath,
   useCompanyRoles,
   useCompanySpend,
   useCompleteChatMutation,
@@ -684,7 +698,8 @@ export {
   useTranscriptSearch,
 } from './endpoints';
 
-export { useRecordTable, useRecordTables };
+export { useDoNotStoreList, useRecordSearch, useRecordTable, useRecordTables };
+export type { DoNotStoreConfirmation };
 export { recordErrorBody, type RecordErrorBody } from './errors';
 
 /**
@@ -703,14 +718,36 @@ const useRecordCache = (companyId: string, table: string) => {
       queryKey: queryKeys.recordTables(companyId),
     });
   };
-  // A refused edit (often a 409) means the table moved on: reload it.
+  // A refused edit (often a 409) means the table moved on: reload it, and any
+  // search showing its rows.
   const reload = () => {
     void queryClient.invalidateQueries({ queryKey: tableKey });
     void queryClient.invalidateQueries({
       queryKey: queryKeys.recordTables(companyId),
     });
+    void queryClient.invalidateQueries({ queryKey: ['record', 'search'] });
   };
-  return { edit, reload };
+  // A row changed from a search: replace it where it stands in every search
+  // showing it, as an edit does in the table (ADR-027).
+  const replaceInSearches = (row: TimedRecord) =>
+    queryClient.setQueriesData<RecordSearchResult>(
+      { queryKey: ['record', 'search'] },
+      (current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              groups: current.groups.map((group) =>
+                group.definition.name !== table
+                  ? group
+                  : {
+                      ...group,
+                      rows: group.rows.map((r) => (r.id === row.id ? row : r)),
+                    },
+              ),
+            },
+    );
+  return { edit, reload, replaceInSearches };
 };
 
 /** Returns a function that reloads the open table; the UI's explicit "Reload". */
@@ -722,7 +759,9 @@ export const useAddRecord = (companyId: string, table: string) => {
   const { edit, reload } = useRecordCache(companyId, table);
   const add = useAddRecordMutation(companyId, table);
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) => add.mutateAsync(data),
+    mutationFn: (
+      input: { data: Record<string, unknown> } & DoNotStoreConfirmation,
+    ) => add.mutateAsync(input),
     onSuccess: (row: TimedRecord) =>
       edit((t) => ({ ...t, rows: [row, ...t.rows], total: t.total + 1 })),
     onError: reload,
@@ -731,19 +770,23 @@ export const useAddRecord = (companyId: string, table: string) => {
 
 /** Replaces the edited row in the cached table, in the same position. */
 export const useUpdateRecord = (companyId: string, table: string) => {
-  const { edit, reload } = useRecordCache(companyId, table);
+  const { edit, reload, replaceInSearches } = useRecordCache(companyId, table);
   const update = useUpdateRecordMutation(companyId, table);
   return useMutation({
-    mutationFn: (input: {
-      id: string;
-      changes: Record<string, unknown>;
-      version: number;
-    }) => update.mutateAsync(input),
-    onSuccess: (row: TimedRecord) =>
+    mutationFn: (
+      input: {
+        id: string;
+        changes: Record<string, unknown>;
+        version: number;
+      } & DoNotStoreConfirmation,
+    ) => update.mutateAsync(input),
+    onSuccess: (row: TimedRecord) => {
       edit((t) => ({
         ...t,
         rows: t.rows.map((r) => (r.id === row.id ? row : r)),
-      })),
+      }));
+      replaceInSearches(row);
+    },
     onError: reload,
   });
 };
@@ -796,6 +839,96 @@ export const useClearRecordTable = (companyId: string, table: string) =>
 export const useDropRecordTable = (companyId: string, table: string) =>
   useBulkRecordMutation(companyId, table, useDropRecordTableMutation);
 
+/**
+ * Deletes chosen rows together, removing them from the cached table where
+ * they stand; the rest don't move (ADR-027). Searches and counts reload.
+ */
+export const useDeleteRecords = (companyId: string, table: string) => {
+  const queryClient = useQueryClient();
+  const { edit, reload } = useRecordCache(companyId, table);
+  const remove = useDeleteRecordsMutation(companyId, table);
+  return useMutation({
+    mutationFn: (rows: { id: string; version: number }[]) =>
+      remove.mutateAsync(rows),
+    onSuccess: ({ removed }, rows) => {
+      const gone = new Set(rows.map((r) => r.id));
+      edit((t) => ({
+        ...t,
+        rows: t.rows.filter((r) => !gone.has(r.id)),
+        total: t.total - removed,
+      }));
+      void queryClient.invalidateQueries({
+        queryKey: ['record', 'search'],
+      });
+    },
+    onError: reload,
+  });
+};
+
+/**
+ * Deletes chosen rows from several tables, as from a search's results.
+ * Every record query reloads afterwards, whatever happened.
+ */
+export const useDeleteRecordsAcross = (companyId: string) => {
+  const queryClient = useQueryClient();
+  const remove = useDeleteRecordsAcrossMutation(companyId);
+  return useMutation({
+    mutationFn: (
+      byTable: Readonly<
+        Record<string, readonly { id: string; version: number }[]>
+      >,
+    ) => remove.mutateAsync(byTable),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['record'] }),
+  });
+};
+
+/** Sets or clears a table's retention, updating its cached definition. */
+export const useSetRetention = (companyId: string, table: string) => {
+  const queryClient = useQueryClient();
+  const set = useSetRetentionMutation(companyId, table);
+  return useMutation({
+    mutationFn: (retention: RecordTableRetention | null) =>
+      set.mutateAsync(retention),
+    onSuccess: (definition: RecordTableDefinition) => {
+      queryClient.setQueryData<RecordTableRows>(
+        queryKeys.recordTable(companyId, table),
+        (current) =>
+          current === undefined ? current : { ...current, definition },
+      );
+    },
+  });
+};
+
+/** Wraps a do-not-store mutation so the list reloads once it settles. */
+const useDoNotStoreMutation = <TInput, TResult>(
+  companyId: string,
+  useInner: (companyId: string) => {
+    mutateAsync: (input: TInput) => Promise<TResult>;
+  },
+) => {
+  const queryClient = useQueryClient();
+  const inner = useInner(companyId);
+  return useMutation({
+    mutationFn: (input: TInput) => inner.mutateAsync(input),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.doNotStore(companyId),
+      }),
+  });
+};
+
+/** Adds an entry to the do-not-store list; a `409` means it is already there. */
+export const useAddDoNotStore = (companyId: string) =>
+  useDoNotStoreMutation(companyId, useAddDoNotStoreMutation);
+
+/** Changes a do-not-store entry's text or note. */
+export const useUpdateDoNotStore = (companyId: string) =>
+  useDoNotStoreMutation(companyId, useUpdateDoNotStoreMutation);
+
+/** Removes a do-not-store entry. */
+export const useRemoveDoNotStore = (companyId: string) =>
+  useDoNotStoreMutation(companyId, useRemoveDoNotStoreMutation);
+
 /** Saves a blob under a name: a temporary object URL and a clicked anchor. */
 const saveBlob = (blob: Blob, name: string): void => {
   const url = URL.createObjectURL(blob);
@@ -823,4 +956,28 @@ export const downloadAllRecordTables = async (
 ): Promise<void> => {
   const { blob } = await getBlob(recordsExportPath(companyId));
   saveBlob(blob, recordsDownloadName(companySlug, 'tables', 'zip'));
+};
+
+/**
+ * Downloads chosen rows: per table, the ids picked or `all`. One table comes
+ * as a CSV, several as a zip of CSVs.
+ */
+export const downloadRecordSelection = async (
+  companyId: string,
+  companySlug: string,
+  tables: Readonly<Record<string, readonly string[] | 'all'>>,
+): Promise<void> => {
+  const names = Object.keys(tables);
+  const { blob } = await postJsonForBlob(
+    recordsSelectionExportPath(companyId),
+    {
+      tables,
+    },
+  );
+  saveBlob(
+    blob,
+    names.length === 1
+      ? recordsDownloadName(companySlug, names[0], 'csv')
+      : recordsDownloadName(companySlug, 'tables', 'zip'),
+  );
 };

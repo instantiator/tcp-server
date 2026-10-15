@@ -120,3 +120,12 @@ Notifications gained a nullable `companyId` and `taskId`. The original plan was 
 - Every new `PauseReason` needs a branch in `pauseResumePrompt()`, a line in `PAUSE_REASON_TEXT`, a string key in the web client, and a place in `taskWaiting`'s precedence. The first two fail to compile if missed.
 - Deferred, each with its own tracked condition in [outstanding-issues.md](../outstanding-issues.md): supporting services fail a task rather than pause it; no retry for a failed task; a stranded `running` agent when the failure write itself fails; an MCP server that is down at tool-load time is skipped quietly; no CLI `close-room`; the chat `sendMessage` has no pause guard; failed or cancelled rooms get no marker; the task dialog's live agent data comes from the company stream; `UpdateTaskDto` cannot clear a planner; the TUI has no pause or resume keys.
 - See [ADR-026](ADR-026-web-ui-accessibility-and-component-library.md#amendment-as-implemented-p04-000-04) and [ADR-031](ADR-031-spend-tracking-and-notifications.md#amendment-as-implemented-p04-000-04) for the amendments this work made.
+
+## Amendment as implemented (001.04, phase 04) <a id="amendment-as-implemented-p04-001-04"></a>
+
+- **Failure codes are stored** as `failureCode` on assignments and tasks, beside `failureReason`; tcp-agent sends both.
+- **Agents can fail their own assignment** with `fail_assignment` (`data_protection`, `tools_exhausted`, `information_unavailable`), in plan, implement, qa and finalise modes.
+- **QA exhaustion uses plain words** (`review_exhausted`, "Step N stopped. The work didn't pass review after 3 attempts…"), with no assignment id.
+- **Repeated calls are counted across the whole run**, not just in a row; an MCP server refusing three connections in a row mid-run fails the run with `service_unavailable`; `unexpected` names the error type and last tool.
+- **A failure that can't be recorded halts the system**: tcp-agent retries three times then stops taking jobs; tcp-server logs, tries an audit row, and starts a drain flagged `haltedOnError`, which the banner shows.
+- A failed step's reason shows in the task dialog, live.

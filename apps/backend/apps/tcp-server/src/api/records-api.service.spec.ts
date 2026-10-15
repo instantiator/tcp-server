@@ -28,6 +28,7 @@ const DEFINITION: TableDefinition = {
   },
   primaryKey: ['order_id'],
   uniqueKeys: [],
+  retention: null,
 };
 
 const TIMED = {
@@ -53,6 +54,11 @@ describe('RecordsApiService', () => {
     clearTable: jest.fn(),
     dropTable: jest.fn(),
     forEachRowBatch: jest.fn(),
+    doNotStoreMatches: jest.fn(),
+    deleteRows: jest.fn(),
+    readRowsById: jest.fn(),
+    setRetention: jest.fn(),
+    addDoNotStore: jest.fn(),
   };
   const audit = {
     record: jest.fn<
@@ -76,6 +82,7 @@ describe('RecordsApiService', () => {
     }).compile();
     service = module.get(RecordsApiService);
     db.getCompany.mockResolvedValue(company);
+    records.doNotStoreMatches.mockResolvedValue([]);
     acme = await service.company('acme');
     records.describeTable.mockResolvedValue(DEFINITION);
     records.readRow.mockResolvedValue(TIMED);
@@ -311,6 +318,146 @@ describe('RecordsApiService', () => {
       const files = unzipSync(zip.body);
       expect(Object.keys(files)).toEqual(['orders.csv', 'stock.csv']);
       expect(strFromU8(files['stock.csv'])).toContain('A2,2');
+    });
+  });
+
+  describe('data protection (001.04)', () => {
+    it('warns before storing do-not-store data, and stores it once confirmed', async () => {
+      records.doNotStoreMatches.mockResolvedValue(['customer']);
+      records.insert.mockResolvedValue({
+        status: 'inserted',
+        record: { id: 'r1', data: { order_id: 'A1' }, version: 1 },
+      });
+      records.readRow.mockResolvedValue(TIMED);
+
+      await expect(
+        service.addRow(acme, 'orders', { order_id: 'A1' }, 'u1'),
+      ).rejects.toMatchObject({
+        response: { code: 'do_not_store', fields: ['customer'] },
+      });
+      expect(records.insert).not.toHaveBeenCalled();
+
+      await service.addRow(acme, 'orders', { order_id: 'A1' }, 'u1', true);
+      expect(audit.record).toHaveBeenCalledWith(
+        company.id,
+        'user',
+        null,
+        'state_change',
+        expect.objectContaining({
+          action: 'add_row',
+          doNotStoreOverride: ['customer'],
+        }),
+      );
+    });
+
+    it('checks every CSV row against the list in one go', async () => {
+      records.describeTable.mockResolvedValue(DEFINITION);
+      records.doNotStoreMatches.mockResolvedValue(['order_id']);
+
+      await expect(
+        service.appendCsv(
+          acme,
+          'orders',
+          Buffer.from('order_id,qty\nA1,1\nA2,2\n'),
+          'u1',
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(records.doNotStoreMatches).toHaveBeenCalledTimes(1);
+      expect(records.doNotStoreMatches).toHaveBeenCalledWith(company.id, [
+        { order_id: 'A1', qty: 1 },
+        { order_id: 'A2', qty: 2 },
+      ]);
+      expect(records.insertMany).not.toHaveBeenCalled();
+    });
+
+    it('audits a bulk delete by id, never by value', async () => {
+      records.deleteRows.mockResolvedValue(2);
+
+      expect(
+        await service.deleteRows(
+          acme,
+          'orders',
+          [
+            { id: 'r1', version: 1 },
+            { id: 'r2', version: 3 },
+          ],
+          'u1',
+        ),
+      ).toEqual({ removed: 2 });
+      expect(audit.record.mock.calls[0][4]).toEqual({
+        source: 'records',
+        action: 'delete_rows',
+        table: 'orders',
+        recordIds: ['r1', 'r2'],
+        removed: 2,
+        userId: 'u1',
+      });
+    });
+
+    it('audits a do-not-store entry by id, never by its text', async () => {
+      records.addDoNotStore.mockResolvedValue({
+        id: 'e1',
+        value: 'Ann Lee',
+        note: null,
+        addedByRole: 'user',
+        addedById: 'u1',
+        createdAt: '',
+        updatedAt: '',
+      });
+
+      await service.addDoNotStore(acme, { value: 'Ann Lee' }, 'u1');
+
+      expect(records.addDoNotStore).toHaveBeenCalledWith(
+        company.id,
+        { value: 'Ann Lee' },
+        { role: 'user', id: 'u1' },
+      );
+      expect(JSON.stringify(audit.record.mock.calls)).toContain('e1');
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain('Ann Lee');
+    });
+
+    describe('exporting a selection', () => {
+      beforeEach(() => {
+        records.describeTable.mockResolvedValue(DEFINITION);
+        records.readRowsById.mockResolvedValue([{ order_id: 'A2', qty: 2 }]);
+      });
+
+      it('gives one table as CSV, with only the chosen rows', async () => {
+        const csv = await service.exportSelection(acme, { orders: ['r2'] });
+        expect(csv.filename).toMatch(/ acme orders\.csv$/);
+        expect(Buffer.from(csv.body).toString('utf8')).toBe(
+          '\uFEFForder_id,qty\nA2,2\n',
+        );
+        expect(records.readRowsById).toHaveBeenCalledWith(
+          company.id,
+          'orders',
+          ['r2'],
+        );
+      });
+
+      it('gives several tables as a zip', async () => {
+        const zip = await service.exportSelection(acme, {
+          orders: ['r2'],
+          stock: ['s1'],
+        });
+        expect(zip.filename).toMatch(/ acme tables\.zip$/);
+        expect(Object.keys(unzipSync(zip.body))).toEqual([
+          'orders.csv',
+          'stock.csv',
+        ]);
+      });
+
+      it.each([
+        ['no tables', {}],
+        ['a table given neither ids nor all', { orders: 'some' }],
+      ])('refuses %s', async (_label, tables) => {
+        await expect(
+          service.exportSelection(
+            acme,
+            tables as Record<string, string[] | 'all'>,
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
     });
   });
 });

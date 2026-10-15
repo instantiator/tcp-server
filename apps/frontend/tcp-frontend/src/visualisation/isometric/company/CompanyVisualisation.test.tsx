@@ -183,6 +183,7 @@ describe('CompanyVisualisation', () => {
       roleId: ROLE_ID,
       status,
       failureReason: null,
+      failureCode: null,
       agentId: AGENT_ID,
       targetAssignmentId: null,
       parentAssignmentId: null,
@@ -209,6 +210,7 @@ describe('CompanyVisualisation', () => {
       expected: [],
       completed: null,
       failureReason: null,
+      failureCode: null,
       createdAt: NOW,
       updatedAt: NOW,
     });

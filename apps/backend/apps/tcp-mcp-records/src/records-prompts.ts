@@ -7,6 +7,10 @@ export interface RecordsPrompts {
   describe_server: string;
   no_tables: string;
   already_exists: string;
+  do_not_store_refused: string;
+  do_not_store_added: string;
+  do_not_store_already: string;
+  do_not_store_ask_user: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */

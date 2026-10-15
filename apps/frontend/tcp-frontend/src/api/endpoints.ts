@@ -10,6 +10,7 @@ import {
   getBlob,
   postFile,
   postFileForJson,
+  postJsonForBlob,
   unwrap,
 } from './client';
 import { apiError, networkError } from './errors';
@@ -21,7 +22,7 @@ import {
   type ConversationListParams,
   type TaskListParams,
 } from './query-keys';
-import type { AppendRecordsCsvResult } from './dtos';
+import type { AppendRecordsCsvResult, RecordTableRetention } from './dtos';
 import type { components } from './schema';
 import { readWarnings } from './warnings';
 
@@ -591,14 +592,31 @@ export const useRecordTable = (companyId: string, table: string | null) =>
       ),
   });
 
+/**
+ * What a person confirmed when warned that data matches the do-not-store
+ * list. Without it, such data is a `409` with code `do_not_store`.
+ */
+export interface DoNotStoreConfirmation {
+  readonly confirmDoNotStore?: boolean;
+}
+
 /** Adds one row. A duplicate unique key is a `409` carrying the existing `recordId`. */
 export const useAddRecordMutation = (companyId: string, table: string) =>
   useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+    mutationFn: (
+      input: { data: Record<string, unknown> } & DoNotStoreConfirmation,
+    ) =>
       unwrap(
         api.POST('/api/company/{companyId}/records/tables/{table}/rows', {
-          params: { path: { companyId, table } },
-          body: { data },
+          params: {
+            path: { companyId, table },
+            // Sent only when confirmed, so an ordinary save's URL is unchanged.
+            query:
+              input.confirmDoNotStore === true
+                ? { confirmDoNotStore: true }
+                : undefined,
+          },
+          body: { data: input.data },
         }),
       ),
   });
@@ -606,14 +624,23 @@ export const useAddRecordMutation = (companyId: string, table: string) =>
 /** Changes a row; `version` is the one the user read, and a `409` means it moved. */
 export const useUpdateRecordMutation = (companyId: string, table: string) =>
   useMutation({
-    mutationFn: (input: {
-      id: string;
-      changes: Record<string, unknown>;
-      version: number;
-    }) =>
+    mutationFn: (
+      input: {
+        id: string;
+        changes: Record<string, unknown>;
+        version: number;
+      } & DoNotStoreConfirmation,
+    ) =>
       unwrap(
         api.PATCH('/api/company/{companyId}/records/tables/{table}/rows/{id}', {
-          params: { path: { companyId, table, id: input.id } },
+          params: {
+            path: { companyId, table, id: input.id },
+            // Sent only when confirmed, so an ordinary save's URL is unchanged.
+            query:
+              input.confirmDoNotStore === true
+                ? { confirmDoNotStore: true }
+                : undefined,
+          },
           body: { changes: input.changes, version: input.version },
         }),
       ),
@@ -639,10 +666,13 @@ export const useDeleteRecordMutation = (companyId: string, table: string) =>
 /** Appends a CSV's rows; a `400` body lists the bad rows in `errors`. */
 export const useAppendRecordsCsvMutation = (companyId: string, table: string) =>
   useMutation({
-    mutationFn: async (file: File): Promise<AppendRecordsCsvResult> => {
+    mutationFn: async (
+      input: { file: File } & DoNotStoreConfirmation,
+    ): Promise<AppendRecordsCsvResult> => {
       const result = await postFileForJson(
-        recordTableCsvPath(companyId, table),
-        file,
+        recordTableCsvPath(companyId, table) +
+          (input.confirmDoNotStore === true ? '?confirmDoNotStore=true' : ''),
+        input.file,
       );
       if (
         typeof result === 'object' &&
@@ -683,6 +713,131 @@ export const useDropRecordTableMutation = (companyId: string, table: string) =>
       ),
   });
 
+/** Deletes chosen rows together; a `409` means one moved on, and none went. */
+export const useDeleteRecordsMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (rows: { id: string; version: number }[]) =>
+      unwrap(
+        api.POST(
+          '/api/company/{companyId}/records/tables/{table}/rows/delete',
+          { params: { path: { companyId, table } }, body: { rows } },
+        ),
+      ),
+  });
+
+/**
+ * Deletes chosen rows from several tables: each table's rows all or none.
+ * Returns how many went in all.
+ */
+// ponytail: one request per table, so a failure part-way leaves the earlier
+// tables' deletions done. Add a cross-table route if that ever matters.
+export const useDeleteRecordsAcrossMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: async (
+      byTable: Readonly<
+        Record<string, readonly { id: string; version: number }[]>
+      >,
+    ) => {
+      let removed = 0;
+      for (const [table, rows] of Object.entries(byTable)) {
+        const result = await unwrap(
+          api.POST(
+            '/api/company/{companyId}/records/tables/{table}/rows/delete',
+            {
+              params: { path: { companyId, table } },
+              body: { rows: [...rows] },
+            },
+          ),
+        );
+        removed += result.removed;
+      }
+      return { removed };
+    },
+  });
+
+/** Sets how long a table keeps its rows, or `null` to keep them until deleted. */
+export const useSetRetentionMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (retention: RecordTableRetention | null) =>
+      unwrap(
+        api.PUT('/api/company/{companyId}/records/tables/{table}/retention', {
+          params: { path: { companyId, table } },
+          body: { retention },
+        }),
+      ),
+  });
+
+/**
+ * Rows in any table with a field containing `q`, grouped by table; idle
+ * while `q` is empty. A POST under the hood, so the name searched for stays
+ * out of URLs, but a query here: it is read, cached and refreshed like one.
+ */
+export const useRecordSearch = (companyId: string, q: string) =>
+  useQuery({
+    queryKey: queryKeys.recordSearch(companyId, q),
+    enabled: q !== '',
+    // Like a table: a focus refetch would move rows under a reader.
+    refetchOnWindowFocus: false,
+    queryFn: () =>
+      unwrap(
+        api.POST('/api/company/{companyId}/records/search', {
+          params: { path: { companyId } },
+          body: { q },
+        }),
+      ),
+  });
+
+/** The company's do-not-store list. */
+export const useDoNotStoreList = (companyId: string) =>
+  useQuery({
+    queryKey: queryKeys.doNotStore(companyId),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/records/do-not-store', {
+          params: { path: { companyId } },
+        }),
+      ),
+  });
+
+/** Adds an entry; a `409` means it is already on the list. */
+export const useAddDoNotStoreMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: (entry: { value: string; note?: string }) =>
+      unwrap(
+        api.POST('/api/company/{companyId}/records/do-not-store', {
+          params: { path: { companyId } },
+          body: entry,
+        }),
+      ),
+  });
+
+/** Changes an entry's text or note; `note: null` clears it. */
+export const useUpdateDoNotStoreMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: (input: { id: string; value?: string; note?: string | null }) =>
+      unwrap(
+        api.PATCH('/api/company/{companyId}/records/do-not-store/{id}', {
+          params: { path: { companyId, id: input.id } },
+          body: { value: input.value, note: input.note },
+        }),
+      ),
+  });
+
+/** Removes an entry; answers `204`. */
+export const useRemoveDoNotStoreMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: (id: string) =>
+      expectAccepted(
+        api.DELETE('/api/company/{companyId}/records/do-not-store/{id}', {
+          params: { path: { companyId, id } },
+        }),
+      ),
+  });
+
+/** The route a selection export is posted to. */
+export const recordsSelectionExportPath = (companyId: string) =>
+  `${recordsBase(companyId)}/export`;
+
 /** The route a table's CSV download is served from. */
 export const recordTableCsvPath = (companyId: string, table: string) =>
   `${recordsBase(companyId)}/tables/${encodeURIComponent(table)}/csv`;
@@ -691,4 +846,4 @@ export const recordTableCsvPath = (companyId: string, table: string) =>
 export const recordsExportPath = (companyId: string) =>
   `${recordsBase(companyId)}/export`;
 
-export { getBlob };
+export { getBlob, postJsonForBlob };

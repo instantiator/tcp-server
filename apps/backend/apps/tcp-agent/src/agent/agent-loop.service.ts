@@ -40,6 +40,7 @@ import {
 import {
   AgentRunStatusService,
   describeRunFailure,
+  FailureUnreportedError,
   describeAbort,
 } from './run-status.service';
 import { SpendGateService } from './spend-gate.service';
@@ -56,6 +57,7 @@ import {
 interface TerminalLogMessages {
   paused: string;
   completed: string;
+  failed: string;
   cancelled: string;
 }
 
@@ -176,6 +178,8 @@ export class AgentLoopService {
         replyContent,
       );
     } catch (err) {
+      // Already a failure no one could be told about: the worker halts on it.
+      if (err instanceof FailureUnreportedError) throw err;
       // runLoop handles its own errors; this covers checkpointer.setup() and
       // anything else escaping, which would otherwise leave the agent stuck
       // Running (and any pending consultation unresolved forever).
@@ -315,6 +319,7 @@ export class AgentLoopService {
           completed: `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
           // Task cancellation already set this status (and recorded the audit
           // event) — just stop the loop, no further writes.
+          failed: `Agent ${agent.id} loop ending: assignment failed`,
           cancelled: `Agent ${agent.id} loop ending: task cancelled`,
         })
       ) {
@@ -333,6 +338,7 @@ export class AgentLoopService {
 
       await this.completeFromNarration(ctx, tracker, result);
     } catch (err) {
+      if (err instanceof FailureUnreportedError) throw err;
       // A provider refusing the call is a pause, not a failure: the run
       // resumes from its checkpoint once the provider allows it.
       const limit = classifyRateLimit(err, ctx.llm.provider);
@@ -345,7 +351,11 @@ export class AgentLoopService {
       const failure = describeRunFailure(
         err,
         ctx.abortController,
-        { ...ctx, repeatedCall: tracker.repeatedCall },
+        {
+          ...ctx,
+          repeatedCall: tracker.repeatedCall,
+          lastTool: tracker.lastTool,
+        },
         ctx.llmConfig,
       );
       this.logger.error(`Agent ${agent.id} loop error: ${String(err)}`);
@@ -395,6 +405,7 @@ export class AgentLoopService {
         await this.settleRunResult(agent, ctx, result, tracker, {
           paused: `Agent ${agent.id} paused during required-tool reminder — exiting`,
           completed: `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
+          failed: `Agent ${agent.id} loop ending during required-tool reminder: assignment failed`,
           cancelled: `Agent ${agent.id} loop ending during required-tool reminder: task cancelled`,
         })
       ) {
@@ -487,6 +498,10 @@ export class AgentLoopService {
           AuditEventType.AgentLoopCompletion,
           buildCompletionSummary(tracker),
         );
+        return true;
+      // `fail_assignment` already failed the run on tcp-server.
+      case AgentStatus.Failed:
+        this.logger.log(messages.failed);
         return true;
       case AgentStatus.Cancelled:
         this.logger.log(messages.cancelled);

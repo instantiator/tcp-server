@@ -18,6 +18,7 @@ import { ToolFootprintController } from './tool-footprint.controller';
 import { ToolFootprintService } from './tool-footprint.service';
 import { RecordsCleanupService } from './records-cleanup.service';
 import { RecordsApiService } from './records-api.service';
+import { RecordsRetentionService } from './records-retention.service';
 import { RecordsController } from './records.controller';
 import { RecordsModule } from '../records/records.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -138,6 +139,7 @@ import { TaskService } from './task.service';
     ToolFootprintService,
     RecordsCleanupService,
     RecordsApiService,
+    RecordsRetentionService,
     AgentOrchestrationService,
     AssignmentService,
     AssignmentCompletionService,

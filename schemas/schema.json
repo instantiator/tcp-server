@@ -1007,6 +1007,34 @@
       ],
       "type": "object"
     },
+    "RunFailureCode": {
+      "description": "Why an agent run failed: the extendable set behind every `failureReason` a user sees. Adding a reason is one code here, one entry in  {@link  RUN_FAILURE_MESSAGES }  (the type makes it required) and one test.",
+      "enum": [
+        "unreachable",
+        "llm_timeout",
+        "auth_rejected",
+        "forbidden",
+        "model_not_found",
+        "tools_unsupported",
+        "provider_error",
+        "no_llm_config",
+        "run_timed_out",
+        "iteration_limit",
+        "context_too_long",
+        "required_tools_missing",
+        "no_output",
+        "repeating_call",
+        "service_unavailable",
+        "stopped",
+        "interrupted",
+        "unexpected",
+        "review_exhausted",
+        "data_protection",
+        "tools_exhausted",
+        "information_unavailable"
+      ],
+      "type": "string"
+    },
     "SpendCapState": {
       "additionalProperties": false,
       "description": "Per-provider spend-cap state — the single source of truth both tcp-server and tcp-agent read to evaluate and enforce caps. One row per provider that has ever recorded usage.",
@@ -1322,6 +1350,17 @@
           },
           "type": "array"
         },
+        "failureCode": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RunFailureCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The  {@link  RunFailureCode }  behind `failureReason`, when one is known."
+        },
         "failureReason": {
           "description": "Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`.",
           "type": [
@@ -1488,6 +1527,7 @@
         "companyId",
         "createdAt",
         "expected",
+        "failureCode",
         "failureReason",
         "id",
         "materials",
@@ -1958,6 +1998,17 @@
           },
           "type": "array"
         },
+        "failureCode": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RunFailureCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The  {@link  RunFailureCode }  behind `failureReason`, when one is known."
+        },
         "failureReason": {
           "description": "Why the task failed — planner failure, QA exhaustion, etc. Null unless `status` is `failed`.",
           "type": [
@@ -2047,6 +2098,7 @@
         "completed",
         "createdAt",
         "expected",
+        "failureCode",
         "failureReason",
         "id",
         "materials",

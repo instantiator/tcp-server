@@ -5,9 +5,11 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseBoolPipe,
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -26,6 +28,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiProduces,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -34,21 +37,42 @@ import { CompanyScope } from '../auth/company-scope.decorator';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
+  AddDoNotStoreDto,
   AddRecordDto,
   AppendRecordsCsvResultDto,
   CreateRecordTableDto,
+  DeleteRecordsDto,
+  DoNotStoreEntryDto,
+  ExportRecordsDto,
+  RecordSearchResultDto,
   RecordTableDefinitionDto,
   RecordFieldSchemaDto,
   RecordTableRowsDto,
   RecordTableSummaryDto,
   RemovedRecordsDto,
+  SearchRecordsDto,
+  SetRetentionDto,
   TimedRecordDto,
+  UpdateDoNotStoreDto,
   UpdateRecordDto,
 } from './dto/records.dto';
 import { type RecordsDownload, RecordsApiService } from './records-api.service';
 
 /** The largest CSV an append accepts; multer stops reading past it (413). */
 const MAX_CSV_BYTES = 5 * 1024 * 1024;
+
+/**
+ * `?confirmDoNotStore=true`: the person has seen that the data matches the
+ * do-not-store list and stores it anyway. Without it, a match is a 409.
+ */
+const CONFIRM = new ParseBoolPipe({ optional: true });
+const CONFIRM_QUERY = {
+  name: 'confirmDoNotStore',
+  required: false,
+  type: Boolean,
+  description:
+    'Store data that matches the do-not-store list; without it a match is refused with 409 `do_not_store`.',
+} as const;
 
 /** The route's company, from its `:companyId` (UUID or slug). */
 const SCOPE = { from: 'param', key: 'companyId', via: 'company' } as const;
@@ -186,6 +210,7 @@ export class RecordsController {
     },
   })
   @ApiCreatedResponse({ type: AppendRecordsCsvResultDto })
+  @ApiQuery(CONFIRM_QUERY)
   @CompanyScope(SCOPE)
   @Post('tables/:table/csv')
   @UseInterceptors(
@@ -196,6 +221,7 @@ export class RecordsController {
     @Param('table') table: string,
     @UploadedFile() file: Express.Multer.File | undefined,
     @Req() req: Request,
+    @Query('confirmDoNotStore', CONFIRM) confirm?: boolean,
   ) {
     const company = await this.records.company(companyId);
     return this.records.appendCsv(
@@ -203,12 +229,14 @@ export class RecordsController {
       table,
       file?.buffer ?? Buffer.alloc(0),
       getCurrentUserId(req),
+      confirm,
     );
   }
 
   /** Adds one record. */
   @ApiOperation({ summary: 'Add a record' })
   @ApiCreatedResponse({ type: TimedRecordDto })
+  @ApiQuery(CONFIRM_QUERY)
   @CompanyScope(SCOPE)
   @Post('tables/:table/rows')
   async addRow(
@@ -216,6 +244,7 @@ export class RecordsController {
     @Param('table') table: string,
     @Body() body: AddRecordDto,
     @Req() req: Request,
+    @Query('confirmDoNotStore', CONFIRM) confirm?: boolean,
   ) {
     const company = await this.records.company(companyId);
     return this.records.addRow(
@@ -223,6 +252,7 @@ export class RecordsController {
       table,
       body.data,
       getCurrentUserId(req),
+      confirm,
     );
   }
 
@@ -243,6 +273,7 @@ export class RecordsController {
   /** Changes a record. 409 when it has changed since `version`. */
   @ApiOperation({ summary: 'Change a record' })
   @ApiOkResponse({ type: TimedRecordDto })
+  @ApiQuery(CONFIRM_QUERY)
   @CompanyScope(SCOPE)
   @Patch('tables/:table/rows/:id')
   async updateRow(
@@ -251,6 +282,7 @@ export class RecordsController {
     @Param('id') id: string,
     @Body() body: UpdateRecordDto,
     @Req() req: Request,
+    @Query('confirmDoNotStore', CONFIRM) confirm?: boolean,
   ) {
     const company = await this.records.company(companyId);
     return this.records.updateRow(
@@ -260,6 +292,7 @@ export class RecordsController {
       body.changes,
       body.version,
       getCurrentUserId(req),
+      confirm,
     );
   }
 
@@ -284,5 +317,147 @@ export class RecordsController {
       version,
       getCurrentUserId(req),
     );
+  }
+
+  /**
+   * Rows in any table with a field containing `q`, in any case, grouped by
+   * table: "everything about this person". A POST so the name searched for
+   * stays out of URLs and access logs.
+   */
+  @ApiOperation({ summary: 'Search every record table' })
+  @ApiOkResponse({ type: RecordSearchResultDto })
+  @CompanyScope(SCOPE)
+  @HttpCode(200)
+  @Post('search')
+  async search(
+    @Param('companyId') companyId: string,
+    @Body() body: SearchRecordsDto,
+  ) {
+    return this.records.search(await this.records.company(companyId), body.q);
+  }
+
+  /**
+   * Chosen rows as a download: one table as CSV, several as a zip of CSVs.
+   * For a subject access request, or any selection in the sheet.
+   */
+  @ApiOperation({ summary: 'Download chosen records' })
+  @ApiProduces('text/csv', 'application/zip')
+  @ApiOkResponse({ schema: { type: 'string', format: 'binary' } })
+  @CompanyScope(SCOPE)
+  @HttpCode(200)
+  @Post('export')
+  async exportSelection(
+    @Param('companyId') companyId: string,
+    @Body() body: ExportRecordsDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const company = await this.records.company(companyId);
+    const download = await this.records.exportSelection(company, body.tables);
+    sendAttachment(
+      res,
+      download,
+      download.filename.endsWith('.zip')
+        ? 'application/zip'
+        : 'text/csv; charset=utf-8',
+    );
+  }
+
+  /** Deletes chosen records together. 409 when any has changed or gone. */
+  @ApiOperation({ summary: 'Delete chosen records' })
+  @ApiOkResponse({ type: RemovedRecordsDto })
+  @CompanyScope(SCOPE)
+  @HttpCode(200)
+  @Post('tables/:table/rows/delete')
+  async deleteRows(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: DeleteRecordsDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.deleteRows(
+      company,
+      table,
+      body.rows,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Sets how long a table keeps its rows, or clears it with `null`. */
+  @ApiOperation({ summary: "Set a record table's retention" })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Put('tables/:table/retention')
+  async setRetention(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: SetRetentionDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.setRetention(
+      company,
+      table,
+      body.retention ?? null,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** The company's do-not-store list. */
+  @ApiOperation({ summary: 'List the do-not-store list' })
+  @ApiOkResponse({ type: DoNotStoreEntryDto, isArray: true })
+  @CompanyScope(SCOPE)
+  @Get('do-not-store')
+  async listDoNotStore(@Param('companyId') companyId: string) {
+    return this.records.listDoNotStore(await this.records.company(companyId));
+  }
+
+  /** Adds an entry. 409 when it is already on the list. */
+  @ApiOperation({ summary: 'Add to the do-not-store list' })
+  @ApiCreatedResponse({ type: DoNotStoreEntryDto })
+  @CompanyScope(SCOPE)
+  @Post('do-not-store')
+  async addDoNotStore(
+    @Param('companyId') companyId: string,
+    @Body() body: AddDoNotStoreDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.addDoNotStore(company, body, getCurrentUserId(req));
+  }
+
+  /** Changes an entry's text or note. */
+  @ApiOperation({ summary: 'Change a do-not-store entry' })
+  @ApiOkResponse({ type: DoNotStoreEntryDto })
+  @CompanyScope(SCOPE)
+  @Patch('do-not-store/:id')
+  async updateDoNotStore(
+    @Param('companyId') companyId: string,
+    @Param('id') id: string,
+    @Body() body: UpdateDoNotStoreDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.updateDoNotStore(
+      company,
+      id,
+      body,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Removes an entry. */
+  @ApiOperation({ summary: 'Remove a do-not-store entry' })
+  @ApiNoContentResponse()
+  @CompanyScope(SCOPE)
+  @HttpCode(204)
+  @Delete('do-not-store/:id')
+  async removeDoNotStore(
+    @Param('companyId') companyId: string,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<void> {
+    const company = await this.records.company(companyId);
+    await this.records.removeDoNotStore(company, id, getCurrentUserId(req));
   }
 }

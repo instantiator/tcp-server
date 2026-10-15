@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
+import {
+  DO_NOT_STORE_MAX_LENGTH,
+  doNotStoreFields,
+  normaliseDoNotStore,
+} from './do-not-store';
+import type { UUID } from '../uuid';
 import { RecordSql } from './filter-sql';
 import {
   AGGREGATE_OPS,
   type AggregateQuery,
   type AggregateRow,
+  type DoNotStoreEntry,
   type InsertManyResult,
   type InsertResult,
   type NewTable,
@@ -15,12 +22,17 @@ import {
   type RecordQuery,
   type RecordRef,
   RecordsError,
+  type RetentionSweep,
   type RowError,
+  type SearchResult,
   type StoredRecord,
   type TableDefinition,
+  type TableRetention,
   type TableRows,
+  type TableSchema,
   type TableSummary,
   type TimedRecord,
+  type VersionedRef,
 } from './records.types';
 import {
   RECORD_LIMITS,
@@ -44,6 +56,68 @@ const DEFAULT_ROW_CAP = 10_000;
 const EXPORT_BATCH = 1000;
 /** Tries at a batch insert that loses a race on a key before giving up. */
 const INSERT_MANY_TRIES = 3;
+/** Rows a search returns at most, across every table. */
+const SEARCH_CAP = 1000;
+/** The shortest search: anything shorter matches nearly every row. */
+const SEARCH_MIN_LENGTH = 2;
+/** Entries a company's do-not-store list holds at most. */
+const DO_NOT_STORE_CAP = 1000;
+/** The longest retention a table can have: a hundred years. */
+const MAX_RETENTION_DAYS = 36_500;
+/** A letter or digit in any script. */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+interface DoNotStoreRowSql {
+  id: string;
+  value: string;
+  note: string | null;
+  addedByRole: 'user' | 'agent';
+  addedById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function toEntry(row: DoNotStoreRowSql): DoNotStoreEntry {
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * Checks an entry for the do-not-store list. It must hold a letter or digit,
+ * and at least three characters: a shorter one, matched as a whole word,
+ * would still block far more than the person it is about.
+ */
+function checkDoNotStoreValue(value: string): string {
+  const normalised = normaliseDoNotStore(value);
+  if (normalised.length < 3 || !WORD_CHAR.test(normalised)) {
+    throw new RecordsError(
+      'an entry needs at least three characters, including a letter or digit',
+    );
+  }
+  if (normalised.length > DO_NOT_STORE_MAX_LENGTH) {
+    throw new RecordsError(
+      `an entry can be at most ${DO_NOT_STORE_MAX_LENGTH} characters`,
+    );
+  }
+  return normalised;
+}
+
+/** Whether `field` is a text field holding a date: what can start a retention clock. */
+function isDateField(schema: TableSchema, field: string): boolean {
+  const property = schema.properties[field];
+  return (
+    property?.type === 'string' &&
+    (property.format === 'date' || property.format === 'date-time')
+  );
+}
+
+/** A LIKE pattern finding `text` anywhere, with `%`, `_` and `\` taken literally. */
+function likePattern(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
 
 interface TableRow extends TableDefinition {
   companyId: string;
@@ -80,6 +154,7 @@ function definitionOf(table: TableRow): TableDefinition {
     schema: table.schema,
     primaryKey: table.primaryKey,
     uniqueKeys: table.uniqueKeys,
+    retention: table.retention ?? null,
   };
 }
 
@@ -176,6 +251,7 @@ export class RecordsService {
         schema,
         primaryKey,
         uniqueKeys,
+        retention: null,
       };
     } catch (e) {
       if (isUniqueViolation(e)) {
@@ -377,11 +453,18 @@ export class RecordsService {
     }));
   }
 
-  /** Deletes every table (and so every record) of a company. Returns how many tables went. */
+  /**
+   * Deletes every table (and so every record) of a company, and its
+   * do-not-store list. Returns how many tables went.
+   */
   async deleteCompany(companyId: string): Promise<number> {
     // TypeORM answers a DELETE with [rows, affectedCount].
     const [, count] = await this.ds.query<[unknown, number]>(
       `DELETE FROM "record_table" WHERE "companyId" = $1`,
+      [companyId],
+    );
+    await this.ds.query(
+      `DELETE FROM "record_do_not_store" WHERE "companyId" = $1`,
       [companyId],
     );
     return count;
@@ -572,6 +655,320 @@ export class RecordsService {
     });
   }
 
+  /** The company's do-not-store list, alphabetically. */
+  async listDoNotStore(companyId: string): Promise<DoNotStoreEntry[]> {
+    const rows = await this.ds.query<DoNotStoreRowSql[]>(
+      `SELECT "id", "value", "note", "addedByRole", "addedById", "createdAt", "updatedAt"
+       FROM "record_do_not_store" WHERE "companyId" = $1 ORDER BY "normalised"`,
+      [companyId],
+    );
+    return rows.map(toEntry);
+  }
+
+  /**
+   * Adds an entry to the do-not-store list. An entry already there (in any
+   * case or spacing) is a `conflict`.
+   */
+  async addDoNotStore(
+    companyId: string,
+    entry: { value: string; note?: string | null },
+    addedBy: { role: 'user' | 'agent'; id: string | null },
+  ): Promise<DoNotStoreEntry> {
+    const normalised = checkDoNotStoreValue(entry.value);
+    const [{ count }] = await this.ds.query<{ count: number }[]>(
+      `SELECT count(*)::int AS count FROM "record_do_not_store" WHERE "companyId" = $1`,
+      [companyId],
+    );
+    if (count >= DO_NOT_STORE_CAP) {
+      throw new RecordsError(
+        `the do-not-store list already has ${DO_NOT_STORE_CAP} entries, the most allowed`,
+      );
+    }
+    try {
+      const [row] = await this.ds.query<DoNotStoreRowSql[]>(
+        `INSERT INTO "record_do_not_store" ("companyId", "value", "normalised", "note", "addedByRole", "addedById")
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING "id", "value", "note", "addedByRole", "addedById", "createdAt", "updatedAt"`,
+        [
+          companyId,
+          entry.value.trim(),
+          normalised,
+          entry.note?.trim() || null,
+          addedBy.role,
+          addedBy.id,
+        ],
+      );
+      return toEntry(row);
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        throw new RecordsError(
+          'that entry is already on the do-not-store list',
+          'conflict',
+        );
+      }
+      throw e;
+    }
+  }
+
+  /** Changes an entry's text or note. */
+  async updateDoNotStore(
+    companyId: string,
+    id: string,
+    changes: { value?: string; note?: string | null },
+  ): Promise<DoNotStoreEntry> {
+    const value = changes.value?.trim();
+    const normalised =
+      value !== undefined ? checkDoNotStoreValue(value) : undefined;
+    try {
+      // TypeORM answers an UPDATE with [rows, affectedCount].
+      const [rows] = await this.ds.query<[DoNotStoreRowSql[], number]>(
+        `UPDATE "record_do_not_store"
+         SET "value" = coalesce($3, "value"), "normalised" = coalesce($4, "normalised"),
+             "note" = CASE WHEN $5 THEN $6 ELSE "note" END, "updatedAt" = now()
+         WHERE "id"::text = $1 AND "companyId" = $2
+         RETURNING "id", "value", "note", "addedByRole", "addedById", "createdAt", "updatedAt"`,
+        [
+          id,
+          companyId,
+          value ?? null,
+          normalised ?? null,
+          changes.note !== undefined,
+          changes.note?.trim() || null,
+        ],
+      );
+      if (!rows[0]) {
+        throw new RecordsError(
+          'no such entry on the do-not-store list',
+          'not_found',
+        );
+      }
+      return toEntry(rows[0]);
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        throw new RecordsError(
+          'that entry is already on the do-not-store list',
+          'conflict',
+        );
+      }
+      throw e;
+    }
+  }
+
+  /** Removes an entry from the do-not-store list. */
+  async removeDoNotStore(companyId: string, id: string): Promise<void> {
+    // TypeORM answers a DELETE with [rows, affectedCount].
+    const [, count] = await this.ds.query<[unknown, number]>(
+      `DELETE FROM "record_do_not_store" WHERE "id"::text = $1 AND "companyId" = $2`,
+      [id, companyId],
+    );
+    if (count === 0) {
+      throw new RecordsError(
+        'no such entry on the do-not-store list',
+        'not_found',
+      );
+    }
+  }
+
+  /**
+   * The fields, across `rows`, that hold an entry of the company's
+   * do-not-store list as a whole phrase in any case; empty when they may all
+   * be stored. The list is read once, however many rows there are.
+   */
+  // ponytail: checked before the write, outside its transaction, so an entry
+  // added in that instant can miss one write. Lock the list if that matters.
+  async doNotStoreMatches(
+    companyId: string,
+    rows: RecordData[],
+  ): Promise<string[]> {
+    const entries = (
+      await this.ds.query<{ normalised: string }[]>(
+        `SELECT "normalised" FROM "record_do_not_store" WHERE "companyId" = $1`,
+        [companyId],
+      )
+    ).map((r) => r.normalised);
+    return [...new Set(rows.flatMap((row) => doNotStoreFields(row, entries)))];
+  }
+
+  /**
+   * Rows in any of the company's tables with a field containing `text`, in
+   * any case, grouped by table. Broader than the do-not-store match on
+   * purpose: finding should catch near misses, blocking should not.
+   */
+  async search(companyId: string, text: string): Promise<SearchResult> {
+    const q = text.trim();
+    if (q.length < SEARCH_MIN_LENGTH) {
+      throw new RecordsError(
+        `search for at least ${SEARCH_MIN_LENGTH} characters`,
+      );
+    }
+    const rows = await this.ds.query<(TimedRowSql & { tableId: string })[]>(
+      `SELECT r."id", r."data", r."version", r."createdAt", r."updatedAt", r."tableId"
+       FROM "record" r
+       WHERE r."companyId" = $1
+         AND EXISTS (SELECT 1 FROM jsonb_each_text(r."data") f WHERE f."value" ILIKE $2)
+       ORDER BY r."tableId", r."updatedAt" DESC, r."id"
+       LIMIT $3`,
+      [companyId, likePattern(q), SEARCH_CAP + 1],
+    );
+    const truncated = rows.length > SEARCH_CAP;
+    const found = rows.slice(0, SEARCH_CAP);
+    const tables = await this.ds.query<TableRow[]>(
+      `SELECT "id", "companyId", "name", "purpose", "schema", "primaryKey", "uniqueKeys", "retention"
+       FROM "record_table" WHERE "companyId" = $1 AND "id" = ANY($2::uuid[])
+       ORDER BY "name"`,
+      [companyId, [...new Set(found.map((r) => r.tableId))]],
+    );
+    return {
+      groups: tables.map((table) => ({
+        definition: definitionOf(table),
+        rows: found.filter((r) => r.tableId === table.id).map(toTimed),
+      })),
+      truncated,
+    };
+  }
+
+  /** Chosen records of one table, oldest first, for an export of a selection. */
+  async readRowsById(
+    companyId: string,
+    tableName: string,
+    ids: string[],
+  ): Promise<RecordData[]> {
+    const table = await this.table(this.ds.manager, companyId, tableName);
+    const rows = await this.ds.query<{ data: RecordData }[]>(
+      `SELECT "data" FROM "record"
+       WHERE "tableId" = $1 AND "companyId" = $2 AND "id"::text = ANY($3::text[])
+       ORDER BY "createdAt", "id"`,
+      [table.id, companyId, ids],
+    );
+    return rows.map((r) => r.data);
+  }
+
+  /**
+   * Deletes chosen records of one table, all or none: if any has gone or
+   * changed since the caller saw it, nothing is deleted. Returns how many went.
+   */
+  async deleteRows(
+    companyId: string,
+    tableName: string,
+    refs: VersionedRef[],
+  ): Promise<number> {
+    if (refs.length > RECORD_LIMITS.rowsPerInsert) {
+      throw new RecordsError(
+        `at most ${RECORD_LIMITS.rowsPerInsert} records can be deleted at once; this has ${refs.length}`,
+      );
+    }
+    const table = await this.table(this.ds.manager, companyId, tableName);
+    return this.ds.transaction(async (tx) => {
+      const ids = refs.map((r) => r.id);
+      const current = await tx.query<{ id: string; version: number }[]>(
+        `SELECT "id"::text AS "id", "version" FROM "record"
+         WHERE "tableId" = $1 AND "companyId" = $2 AND "id"::text = ANY($3::text[])
+         FOR UPDATE`,
+        [table.id, companyId, ids],
+      );
+      const versions = new Map(current.map((r) => [r.id, r.version]));
+      for (const ref of refs) {
+        const version = versions.get(ref.id);
+        if (version === undefined) {
+          throw new RecordsError(
+            `record ${ref.id} is no longer in '${tableName}'`,
+            'stale',
+          );
+        }
+        checkVersion({ id: ref.id, data: {}, version }, ref.version);
+      }
+      // TypeORM answers a DELETE with [rows, affectedCount].
+      const [, count] = await tx.query<[unknown, number]>(
+        `DELETE FROM "record" WHERE "tableId" = $1 AND "id"::text = ANY($2::text[])`,
+        [table.id, ids],
+      );
+      return count;
+    });
+  }
+
+  /**
+   * Sets how long a table keeps its rows, or clears it with `null`. `from`
+   * must be `updated` or one of the table's date fields.
+   */
+  async setRetention(
+    companyId: string,
+    tableName: string,
+    retention: TableRetention | null,
+  ): Promise<TableDefinition> {
+    const table = await this.table(this.ds.manager, companyId, tableName);
+    if (retention) {
+      const { days, from } = retention;
+      if (!Number.isInteger(days) || days < 1 || days > MAX_RETENTION_DAYS) {
+        throw new RecordsError(
+          `keep rows for a whole number of days, from 1 to ${MAX_RETENTION_DAYS}`,
+        );
+      }
+      if (from !== 'updated' && !isDateField(table.schema, from)) {
+        throw new RecordsError(
+          `rows can be kept from their last update, or from a date field; '${from}' is neither`,
+        );
+      }
+    }
+    await this.ds.query(
+      `UPDATE "record_table" SET "retention" = $1, "updatedAt" = now() WHERE "id" = $2`,
+      [retention ? JSON.stringify(retention) : null, table.id],
+    );
+    return definitionOf({ ...table, retention });
+  }
+
+  /**
+   * Deletes every row past its table's retention, across every company.
+   * A row whose date field is blank, or not a date, is kept. A table that
+   * fails is reported through `onError` and skipped, so one bad table can't
+   * stop the others.
+   */
+  async sweepRetention(
+    now: Date,
+    onError: (table: string, err: unknown) => void,
+  ): Promise<RetentionSweep[]> {
+    const tables = await this.ds.query<
+      {
+        id: string;
+        companyId: UUID;
+        name: string;
+        retention: TableRetention;
+      }[]
+    >(
+      `SELECT "id", "companyId", "name", "retention" FROM "record_table"
+       WHERE "retention" IS NOT NULL`,
+    );
+    const swept: RetentionSweep[] = [];
+    for (const table of tables) {
+      const { days, from } = table.retention;
+      try {
+        // TypeORM answers a DELETE with [rows, affectedCount].
+        const [, deleted] =
+          from === 'updated'
+            ? await this.ds.query<[unknown, number]>(
+                `DELETE FROM "record" WHERE "tableId" = $1
+                 AND "updatedAt" < $2::timestamptz - make_interval(days => $3)`,
+                [table.id, now, days],
+              )
+            : await this.ds.query<[unknown, number]>(
+                `DELETE FROM "record" WHERE "tableId" = $1
+                 AND ("data" ->> $4) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                 AND left("data" ->> $4, 10)::date < ($2::timestamptz - make_interval(days => $3))::date`,
+                [table.id, now, days, from],
+              );
+        if (deleted > 0) {
+          swept.push({
+            companyId: table.companyId,
+            table: table.name,
+            deleted,
+          });
+        }
+      } catch (err) {
+        onError(table.name, err);
+      }
+    }
+    return swept;
+  }
+
   private aggregateExpr(sql: RecordSql, query: AggregateQuery): string {
     if (query.op === 'count') {
       return query.field ? `count(${sql.expr(query.field)})` : 'count(*)';
@@ -613,7 +1010,7 @@ export class RecordsService {
     name: string,
   ): Promise<TableRow> {
     const [table] = await manager.query<TableRow[]>(
-      `SELECT "id", "companyId", "name", "purpose", "schema", "primaryKey", "uniqueKeys"
+      `SELECT "id", "companyId", "name", "purpose", "schema", "primaryKey", "uniqueKeys", "retention"
        FROM "record_table" WHERE "companyId" = $1 AND "name" = $2`,
       [companyId, name],
     );

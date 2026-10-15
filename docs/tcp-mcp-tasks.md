@@ -29,12 +29,13 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                          | Signature                                                    | Mode                                 |
-| --------------------------------------------- | ------------------------------------------------------------ | ------------------------------------ |
-| [`describe_server`](#describe_server)         | `describe_server()`                                          | any                                  |
-| [`create_plan`](#create_plan)                 | `create_plan(agentId, companyId, assignments)`               | `plan`                               |
-| [`complete_assignment`](#complete_assignment) | `complete_assignment(agentId, companyId, summary, prepared)` | `implement`, `consultee`, `finalise` |
-| [`assure_assignment`](#assure_assignment)     | `assure_assignment(agentId, companyId, qa, feedback?)`       | `qa`                                 |
+| Tool                                          | Signature                                                    | Mode                                  |
+| --------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
+| [`describe_server`](#describe_server)         | `describe_server()`                                          | any                                   |
+| [`create_plan`](#create_plan)                 | `create_plan(agentId, companyId, assignments)`               | `plan`                                |
+| [`complete_assignment`](#complete_assignment) | `complete_assignment(agentId, companyId, summary, prepared)` | `implement`, `consultee`, `finalise`  |
+| [`assure_assignment`](#assure_assignment)     | `assure_assignment(agentId, companyId, qa, feedback?)`       | `qa`                                  |
+| [`fail_assignment`](#fail_assignment)         | `fail_assignment(agentId, companyId, reason, explanation)`   | `plan`, `implement`, `qa`, `finalise` |
 
 The three non-`describe_server` tools are **mode-gated**: calling the wrong one for your mode returns a clear error naming the tool you should use instead. All four tools are bound to the model from turn 1 — the describe-then-reveal gating that used to delay the completion tools until after `describe_server` was called was removed in 010.2.8.2 (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)); which tools a mode gets is now decided entirely by `@tcp/shared` `mode-tools.ts`.
 
@@ -99,6 +100,16 @@ A duplicate/concurrent completion loses the atomic claim and gets **409**.
 | `feedback` | string                 | when `qa==reject` | Actionable feedback for the agent                                                                 |
 
 **Backing endpoint:** `POST /internal/assignment/:id/assure`. The caller must be a `qa`-mode agent whose assignment's `targetAssignmentId` is `:id`, and the target must be `in-qa` (atomically claimed via `qaStatus`). `qa` is lower-cased/trimmed by `AssureAssignmentDto` (`@Transform` + `@IsIn`) before validation — the MCP tool layer folds it too, so the local response and audit record match what's stored. It sets `qaStatus`/`qaFeedback`, calls `TaskDispatcher.assignmentAssured` — which owns the accept/reject consequences (promote files and advance, or resume the implementing agent with feedback; see [tasks.md → QA cycle](tasks.md#orchestration-flow)) — then completes the QA agent (its own assignment → `succeeded`, output = the verdict). A duplicate verdict gets **409**.
+
+---
+
+## `fail_assignment`
+
+Ends the caller's assignment as failed, when it can't be done (001.04). `reason` is `data_protection`, `tools_exhausted` or `information_unavailable`; `explanation` is one or two sentences the user will read, at most 500 characters.
+
+It posts to the same `POST /internal/agent/:id/fail` tcp-agent uses when a run breaks, with the message and the code, so the step, the task and any waiting consultation fail exactly as they would then. The agent row turns `failed`, and the agent loop stops on it at its next status check without reporting the failure twice.
+
+Chat and consultee modes never see it (`canFail` in `mode-tools.ts`), and the handler refuses them too. Its description tells the agent to try other approaches and `request_user_input` first.
 
 ---
 

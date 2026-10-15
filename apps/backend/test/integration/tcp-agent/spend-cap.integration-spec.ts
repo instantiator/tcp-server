@@ -16,6 +16,7 @@ import {
   TokenUsage,
   type AuditEventType,
   type McpToolContext,
+  type RunFailure,
 } from '@tcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { INestApplication } from '@nestjs/common';
@@ -413,11 +414,11 @@ describe('Spend cap enforcement across a task run (stub LLM, real queue)', () =>
       .overrideProvider(AuditClientService)
       .useValue({
         notifyComplete: () => {},
-        notifyFailed: (agentId: UUID, reason: string) => {
+        notifyFailed: (agentId: UUID, failure: RunFailure) => {
           axios
             .post(
               `${tcpServerUrl}/internal/agent/${agentId}/fail`,
-              { reason },
+              { reason: failure.message, code: failure.code },
               internalHeaders,
             )
             .catch(() => {});

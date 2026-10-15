@@ -102,6 +102,7 @@ const taskFixture = (overrides: TaskOverrides = {}) => ({
   expected: overrides.expected ?? [],
   completed: null,
   failureReason: overrides.failureReason ?? null,
+  failureCode: null,
   ...(overrides.pausedAt === undefined ? {} : { pausedAt: overrides.pausedAt }),
   ...(overrides.pausedBy === undefined ? {} : { pausedBy: overrides.pausedBy }),
   createdAt: NOW,
@@ -127,6 +128,7 @@ const assignmentFixture = (overrides: AssignmentOverrides) => ({
   roleId: overrides.roleId,
   status: overrides.status ?? 'in-progress',
   failureReason: null,
+  failureCode: null,
   agentId: overrides.agentId ?? null,
   targetAssignmentId: null,
   parentAssignmentId: null,
@@ -178,6 +180,7 @@ interface AssignmentSummary {
   readonly mode: string;
   readonly orderIndex: number | null;
   readonly roleId: string;
+  readonly failureReason?: string | null;
 }
 
 /** A live `assignment` `state_change`, as it arrives on the task's own stream. */
@@ -570,6 +573,38 @@ describe('TaskDialog', () => {
     await screen.findByRole('region', {
       name: assignmentLabel(ROLE_A_NAME, 'succeeded'),
     });
+    expect(requestCount(ASSIGNMENTS_ROUTE)).toBe(before);
+  });
+
+  it("shows a failed step's reason live, without expanding it or refetching", async () => {
+    respondTask();
+    const user = userEvent.setup();
+    renderTaskDialog();
+
+    await openTask(user);
+    const before = requestCount(ASSIGNMENTS_ROUTE);
+    const reason =
+      "The agent stopped because the work would mean storing personal data on the company's do-not-store list.";
+
+    act(() => {
+      streamFor(streamUrls.task(TASK_ID)).emit(
+        assignmentStateChangeEvent({
+          id: ASSIGN_A,
+          status: 'failed',
+          mode: 'implement',
+          orderIndex: 0,
+          roleId: ROLE_A_ID,
+          failureReason: reason,
+        }),
+      );
+    });
+
+    const panel = await screen.findByRole('region', {
+      name: assignmentLabel(ROLE_A_NAME, 'failed'),
+    });
+    expect(
+      within(panel).getByText(t('task.assignment.failureReason', { reason })),
+    ).toBeVisible();
     expect(requestCount(ASSIGNMENTS_ROUTE)).toBe(before);
   });
 

@@ -5,9 +5,11 @@ import { Suspense, lazy, useCallback, useId, useRef, useState } from 'react';
 import { ApiError, recordErrorBody } from '../../api/errors';
 import type { TimedRecord } from '../../api/dtos';
 import {
+  downloadRecordSelection,
   downloadRecordTableCsv,
   useAddRecord,
   useDeleteRecord,
+  useDeleteRecords,
   useRecordTable,
   useReloadRecordTable,
   useUpdateRecord,
@@ -18,9 +20,12 @@ import { ErrorState } from '../ErrorState/ErrorState';
 import { LoadingState } from '../LoadingState/LoadingState';
 import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { AddRowDialog } from './AddRowDialog';
+import { DeleteRowsDialog } from './DeleteRowsDialog';
+import { retentionSummary } from './retention';
 import { RecordTableActions } from './RecordTableActions';
 import { RECORDS_CHANNEL, announceRecords } from './announceRecords';
 import { rowLabel } from './fieldInput';
+import { useDoNotStoreGuard } from './useDoNotStoreGuard';
 import { useUndoStack, type RecordChange } from './useUndoStack';
 import './TableView.css';
 
@@ -85,7 +90,10 @@ export const TableView = ({
   const update = useUpdateRecord(companyId, table);
   const addRecord = useAddRecord(companyId, table);
   const deleteRecord = useDeleteRecord(companyId, table);
+  const deleteRecords = useDeleteRecords(companyId, table);
   const reload = useReloadRecordTable(companyId, table);
+  const { guard, dialog: doNotStoreDialog } =
+    useDoNotStoreGuard(portalContainer);
   const undo = useUndoStack();
   const usageId = useId();
   const titleId = useId();
@@ -94,6 +102,9 @@ export const TableView = ({
   const [adding, setAdding] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [undoing, setUndoing] = useState(false);
+  /** Rows ticked in the sheet: Download and Delete act on these when there are any. */
+  const [selected, setSelected] = useState<TimedRecord[]>([]);
+  const [confirmingBulk, setConfirmingBulk] = useState(false);
 
   const definition = query.data?.definition;
   const labelOf = useCallback(
@@ -104,28 +115,55 @@ export const TableView = ({
 
   const onEdit = useCallback(
     (row: TimedRecord, field: string, value: unknown) => {
-      update.mutate(
-        { id: row.id, changes: { [field]: value }, version: row.version },
-        {
-          onSuccess: () => {
-            undo.push({
-              kind: 'edit',
-              rowId: row.id,
-              row: labelOf(row),
-              field,
-              from: row.data[field],
-            });
-            announceRecords('records.announce.saved', {
-              field,
-              row: labelOf(row),
-            });
-          },
-          onError: announceNotSaved,
-        },
-      );
+      const save = async () => {
+        const saved = await guard((confirmDoNotStore) =>
+          update.mutateAsync({
+            id: row.id,
+            changes: { [field]: value },
+            version: row.version,
+            confirmDoNotStore,
+          }),
+        );
+        if (saved === undefined) return;
+        undo.push({
+          kind: 'edit',
+          rowId: row.id,
+          row: labelOf(row),
+          field,
+          from: row.data[field],
+        });
+        announceRecords('records.announce.saved', {
+          field,
+          row: labelOf(row),
+        });
+      };
+      save().catch(announceNotSaved);
     },
-    [update, undo, labelOf],
+    [guard, update, undo, labelOf],
   );
+
+  const downloadSelected = () =>
+    void downloadRecordSelection(companyId, companySlug, {
+      [table]: selected.map((row) => row.id),
+    }).catch(() => announceRecords('records.downloadFailed'));
+
+  const confirmBulkDelete = async () => {
+    const rows = selected;
+    try {
+      const { removed } = await deleteRecords.mutateAsync(
+        rows.map((row) => ({ id: row.id, version: row.version })),
+      );
+      setConfirmingBulk(false);
+      setSelected([]);
+      announceRecords('records.announce.rowsDeleted', {
+        table,
+        count: removed,
+      });
+    } catch (error) {
+      setConfirmingBulk(false);
+      announceNotSaved(error);
+    }
+  };
 
   const runUndo = async () => {
     const change = undo.last;
@@ -134,7 +172,9 @@ export const TableView = ({
     setUndoing(true);
     try {
       if (change.kind === 'delete') {
-        const restored = await addRecord.mutateAsync({ ...change.data });
+        const restored = await addRecord.mutateAsync({
+          data: { ...change.data },
+        });
         undo.pop(restored.id);
       } else if (current === undefined) {
         throw new Error('row gone');
@@ -220,13 +260,21 @@ export const TableView = ({
         <div className="table-view__actions">
           <RoundIconButton
             icon={Download}
-            label={t('records.download', { table })}
+            label={
+              selected.length > 0
+                ? tCount('records.selected.download', selected.length)
+                : t('records.download', { table })
+            }
             outline
             portalContainer={portalContainer}
             onPress={() =>
-              void downloadRecordTableCsv(companyId, companySlug, table).catch(
-                () => announceRecords('records.downloadFailed'),
-              )
+              selected.length > 0
+                ? downloadSelected()
+                : void downloadRecordTableCsv(
+                    companyId,
+                    companySlug,
+                    table,
+                  ).catch(() => announceRecords('records.downloadFailed'))
             }
           />
           <RoundIconButton
@@ -240,14 +288,20 @@ export const TableView = ({
           <RoundIconButton
             icon={Trash2}
             label={
-              focusedRow === null
-                ? t('records.deleteRow.none')
-                : t('records.deleteRow', { row: labelOf(focusedRow) })
+              selected.length > 0
+                ? tCount('records.selected.delete', selected.length)
+                : focusedRow === null
+                  ? t('records.deleteRow.none')
+                  : t('records.deleteRow', { row: labelOf(focusedRow) })
             }
             outline
-            isDisabled={focusedRow === null}
+            isDisabled={selected.length === 0 && focusedRow === null}
             portalContainer={portalContainer}
-            onPress={() => setConfirmingDelete(true)}
+            onPress={() =>
+              selected.length > 0
+                ? setConfirmingBulk(true)
+                : setConfirmingDelete(true)
+            }
           />
           <RoundIconButton
             icon={Undo2}
@@ -272,10 +326,15 @@ export const TableView = ({
               reload();
             }}
             onDropped={onDropped}
+            definition={definition}
             portalContainer={portalContainer}
           />
         </div>
       </div>
+
+      {definition !== undefined && retentionSummary(definition) !== null && (
+        <p className="table-view__notice">{retentionSummary(definition)}</p>
+      )}
 
       <p id={usageId} className="visually-hidden">
         {t('records.usage')}
@@ -313,6 +372,7 @@ export const TableView = ({
               onApi={(api) => {
                 apiRef.current = api;
               }}
+              onSelectionChange={setSelected}
               portalContainer={portalContainer}
             />
           </Suspense>
@@ -343,6 +403,19 @@ export const TableView = ({
         onConfirm={() => void confirmDelete()}
         onCancel={() => setConfirmingDelete(false)}
       />
+
+      {confirmingBulk && (
+        <DeleteRowsDialog
+          count={selected.length}
+          isPending={deleteRecords.isPending}
+          portalContainer={portalContainer}
+          onConfirm={() => void confirmBulkDelete()}
+          onDownload={downloadSelected}
+          onCancel={() => setConfirmingBulk(false)}
+        />
+      )}
+
+      {doNotStoreDialog}
     </section>
   );
 };

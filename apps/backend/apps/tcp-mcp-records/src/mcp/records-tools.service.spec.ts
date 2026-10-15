@@ -29,6 +29,8 @@ function makeRecords(): jest.Mocked<RecordsService> {
     query: jest.fn(),
     aggregate: jest.fn(),
     deleteCompany: jest.fn(),
+    doNotStoreMatches: jest.fn().mockResolvedValue([]),
+    addDoNotStore: jest.fn(),
   } as unknown as jest.Mocked<RecordsService>;
 }
 
@@ -250,6 +252,7 @@ describe('RecordsToolsService', () => {
       },
       primaryKey: ['order_id'],
       uniqueKeys: [],
+      retention: null,
     };
     records.createTable.mockResolvedValue(definition);
     await callTool(service, 'create_table', {
@@ -282,6 +285,116 @@ describe('RecordsToolsService', () => {
     const { text } = await callTool(service, 'query', { table: 'x' });
     expect(text).toBe("Error: there is no table named 'x'");
     expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  describe('the do-not-store list', () => {
+    it('refuses an insert that matches, stores nothing, and audits field names only', async () => {
+      records.doNotStoreMatches.mockResolvedValue(['customer']);
+
+      const { text, isError } = await callTool(service, 'insert', {
+        table: 'orders',
+        record: { order_id: 'A1', customer: 'Ann Lee' },
+      });
+
+      expect(isError).toBe(false);
+      expect(JSON.parse(text)).toMatchObject({
+        status: 'not_stored',
+        fields: ['customer'],
+      });
+      expect(text).toContain('fail_assignment');
+      expect(records.insert).not.toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(
+        companyId,
+        'agent',
+        agentId,
+        AuditEventType.ToolCall,
+        {
+          source: 'records',
+          tool: 'insert',
+          table: 'orders',
+          outcome: 'do_not_store',
+          fields: ['customer'],
+        },
+      );
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain('Ann Lee');
+    });
+
+    it('refuses an update whose changes match, and changes nothing', async () => {
+      records.doNotStoreMatches.mockResolvedValue(['email']);
+
+      const { text } = await callTool(service, 'update', {
+        table: 'orders',
+        id: stored.id,
+        changes: { email: 'ann@example.com' },
+      });
+
+      expect(records.doNotStoreMatches).toHaveBeenCalledWith(companyId, [
+        { email: 'ann@example.com' },
+      ]);
+      expect(text).toContain('not_stored');
+      expect(records.update).not.toHaveBeenCalled();
+    });
+
+    it('adds an entry, auditing its id but not its text', async () => {
+      records.addDoNotStore.mockResolvedValue({
+        id: 'entry-1',
+        value: 'Ann Lee',
+        note: 'Asked in chat',
+        addedByRole: 'agent',
+        addedById: agentId,
+        createdAt: '',
+        updatedAt: '',
+      });
+
+      const { text } = await callTool(service, 'do_not_store', {
+        action: 'add',
+        value: 'Ann Lee',
+        reason: 'Asked in chat',
+      });
+
+      expect(text).toMatch(/^Added/);
+      expect(records.addDoNotStore).toHaveBeenCalledWith(
+        companyId,
+        { value: 'Ann Lee', note: 'Asked in chat' },
+        { role: 'agent', id: agentId },
+      );
+      expect(JSON.stringify(audit.record.mock.calls)).toContain('entry-1');
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain('Ann Lee');
+    });
+
+    it('treats an entry already on the list as done', async () => {
+      records.addDoNotStore.mockRejectedValue(
+        new RecordsError('already there', 'conflict'),
+      );
+
+      const { text, isError } = await callTool(service, 'do_not_store', {
+        action: 'add',
+        value: 'Ann Lee',
+        reason: 'Asked again',
+      });
+
+      expect(isError).toBe(false);
+      expect(text).toMatch(/already on the do-not-store list/);
+    });
+
+    it.each([
+      ['remove', 'removed'],
+      ['change', 'changed'],
+    ])(
+      'does nothing for %s, and advises asking a user',
+      async (action, word) => {
+        const { text } = await callTool(service, 'do_not_store', {
+          action,
+          value: 'Ann Lee',
+          reason: 'Customer withdrew the request',
+        });
+
+        expect(text).toContain(`can only be ${word} by a person`);
+        expect(text).toContain('request_user_input');
+        expect(records.addDoNotStore).not.toHaveBeenCalled();
+        expect(audit.record).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it('rejects an unknown filter op before reaching the service', async () => {

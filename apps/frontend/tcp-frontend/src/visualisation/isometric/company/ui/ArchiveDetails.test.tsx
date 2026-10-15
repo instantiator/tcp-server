@@ -35,6 +35,7 @@ const taskFixture = (overrides: Record<string, unknown> = {}) => ({
   expected: [],
   completed: null,
   failureReason: null,
+  failureCode: null,
   createdAt: EARLIER,
   updatedAt: EARLIER,
   ...overrides,

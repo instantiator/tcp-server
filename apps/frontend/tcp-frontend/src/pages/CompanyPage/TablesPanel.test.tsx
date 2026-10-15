@@ -28,6 +28,7 @@ const ORDERS: RecordTableRows = {
     primaryKey: ['order_id'],
     uniqueKeys: [],
     schema: { properties: { order_id: { type: 'string' } } },
+    retention: null,
   },
   rows: [],
   total: 0,

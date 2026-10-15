@@ -8,6 +8,7 @@ import { t, type StringKey } from '../../strings';
 import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { Dialog } from '../Dialog/Dialog';
 import { TextField } from '../Field/TextField';
+import { useDoNotStoreGuard } from './useDoNotStoreGuard';
 import { focusFirstInvalid } from '../Field/focusFirstInvalid';
 import { parseFieldInput } from './fieldInput';
 
@@ -33,6 +34,7 @@ export const AddRowDialog = ({
   portalContainer,
 }: AddRowDialogProps) => {
   const add = useAddRecord(companyId, definition.name);
+  const { guard, dialog } = useDoNotStoreGuard(portalContainer);
   const fields = useMemo(() => fieldOrder(definition), [definition]);
   const refs = useMemo(
     () => new Map(fields.map((f) => [f, createRef<HTMLElement>()])),
@@ -72,7 +74,12 @@ export const AddRowDialog = ({
       return;
     }
     try {
-      onAdded(await add.mutateAsync(data));
+      const row = await guard((confirmDoNotStore) =>
+        add.mutateAsync({ data, confirmDoNotStore }),
+      );
+      // Kept open when the person chose not to store it, so they can change it.
+      if (row === undefined) return;
+      onAdded(row);
       onClose();
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
@@ -143,6 +150,7 @@ export const AddRowDialog = ({
           </Button>
         </ButtonRow>
       </form>
+      {dialog}
     </Dialog>
   );
 };

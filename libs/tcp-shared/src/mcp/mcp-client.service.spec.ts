@@ -1,7 +1,11 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { z } from 'zod';
-import { McpClientService } from './mcp-client.service';
+import {
+  MAX_MCP_CONNECT_FAILURES,
+  McpClientService,
+  McpServerUnavailableError,
+} from './mcp-client.service';
 
 jest.mock('@modelcontextprotocol/sdk/client/index.js');
 jest.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
@@ -416,6 +420,67 @@ describe('McpClientService', () => {
       });
       const output: unknown = await mcpTool.tool.invoke({});
       expect(output).toBe('');
+    });
+
+    describe('a server that goes down mid-run', () => {
+      /** Loads one tool, then makes every later connection fail or succeed as told. */
+      async function loadWithConnections(
+        onServerDown: (err: McpServerUnavailableError) => void,
+      ) {
+        const clientInstance = makeClientInstance([
+          {
+            name: 'insert',
+            description: '',
+            inputSchema: { type: 'object', properties: {} },
+          },
+        ]);
+        MockClient.mockImplementation(
+          () => clientInstance as unknown as Client,
+        );
+        const [mcpTool] = await service.loadTools(
+          ['records'],
+          { records: 'http://localhost:3030' },
+          {},
+          { onServerDown },
+        );
+        const call = async (connects: boolean) => {
+          clientInstance.connect.mockImplementationOnce(() =>
+            connects
+              ? Promise.resolve(undefined)
+              : Promise.reject(new Error('fetch failed')),
+          );
+          await mcpTool.tool.invoke({}).catch(() => undefined);
+        };
+        return call;
+      }
+
+      it(`reports the server down after ${MAX_MCP_CONNECT_FAILURES} failed connections in a row`, async () => {
+        const onServerDown = jest.fn();
+        const call = await loadWithConnections(onServerDown);
+
+        await call(false);
+        await call(false);
+        expect(onServerDown).not.toHaveBeenCalled();
+        await call(false);
+
+        expect(onServerDown).toHaveBeenCalledTimes(1);
+        const [err] = onServerDown.mock.calls[0] as [McpServerUnavailableError];
+        expect(err).toBeInstanceOf(McpServerUnavailableError);
+        expect(err.serverName).toBe('records');
+      });
+
+      it('starts counting again after a call gets through', async () => {
+        const onServerDown = jest.fn();
+        const call = await loadWithConnections(onServerDown);
+
+        await call(false);
+        await call(false);
+        await call(true);
+        await call(false);
+        await call(false);
+
+        expect(onServerDown).not.toHaveBeenCalled();
+      });
     });
 
     describe('identity context (agentId / companyId)', () => {

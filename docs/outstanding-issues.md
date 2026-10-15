@@ -367,11 +367,11 @@ When a supporting service is down, a run that notices fails with `service_unavai
 - An MCP or MinIO error, reached through a tool call, goes back to the model as an ordinary tool result. It never reaches the classifier.
 - The LangGraph checkpointer throws raw `pg` errors, which classify as `unexpected`.
 - A database outage can't write a pause at all. Startup recovery (000.05) is the safety net for that one.
-- Only the failure's message, not its code, reaches tcp-server (`FailDto` has `reason` only).
+- Since 001.04, the failure's code reaches tcp-server too, and is stored as `failureCode` on the step and task.
 
 What 000.05 did do: a run whose MCP server is down when its tools load now fails, naming the service, instead of carrying on without those tools.
 
-**Act when:** a real outage fails a task that would have carried on cleanly once the service was back. Then pass the failure code to tcp-server, pause on `service_unavailable`, and resume when `GET /api/system/health` reports that service up.
+**Act when:** a real outage fails a task that would have carried on cleanly once the service was back. Then pause on `service_unavailable` (the code now reaches tcp-server), and resume when `GET /api/system/health` reports that service up.
 
 ## No retry for a failed task
 
@@ -781,3 +781,33 @@ announcements, and entering and leaving edit mode.
 
 **Act when:** before the phase 04 release, or at the next ADR-026 manual matrix
 run, whichever comes first. Record the findings in the 001.03 plan's outcome.
+
+## Data protection reaches record tables only
+
+001.04's search, export and delete cover record tables. The audit log (including LLM requests and responses), task transcripts, knowledge, company resources, files, agents' memory and backups can still hold a person's details, and the do-not-store list doesn't stop agents writing them there. The Data protection page says so.
+
+**Act when:** a real erasure or subject access request needs one of these stores, or agents are seen putting customer details outside record tables. Start with the audit log, which holds LLM traffic.
+
+## Do-not-store check can miss a write made as an entry is added
+
+The check runs just before an agent's write, outside its transaction (`RecordsService.doNotStoreMatches`).
+
+**Act when:** a record is found that matches an entry added before it was stored. Then lock the list for the duration of the write.
+
+## Retention deletes whole rows only
+
+A table's retention deletes rows; it can't blank one field (the address) and keep the rest (the order). Agents can't set retention, and templates don't carry it.
+
+**Act when:** someone needs an order kept after its customer's address is due to go, or 002.03 (templates) lands, which should carry retention and the ICO note.
+
+## Data protection has no CLI verbs or office entry
+
+Search, the do-not-store list and retention are in the web Data protection tab and the REST API only.
+
+**Act when:** someone asks to manage them from the CLI or the office view.
+
+## Rate-limit pauses and enquiries have no limit
+
+A run paused for rate limits resumes forever (000.03, by design), and an agent waiting on `request_user_input` waits forever. 001.04 gave agents `fail_assignment` with `information_unavailable`, but nothing makes them use it after a wait.
+
+**Act when:** a task is found stuck for days on either.

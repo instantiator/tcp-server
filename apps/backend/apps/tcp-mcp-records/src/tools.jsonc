@@ -9,5 +9,6 @@
   "update": "Change fields of one record, found by `id` or `key` (primary key values). null removes a field.",
   "delete": "Delete one record, found by `id` or `key` (primary key values).",
   "query": "Find records. `filters` are ANDed {field, op, value}; op is eq, ne, lt, lte, gt, gte, contains or in (value a list).",
-  "aggregate": "Count, sum, avg, min or max a field over matching records, optionally grouped. Use it for every total; results are exact."
+  "aggregate": "Count, sum, avg, min or max a field over matching records, optionally grouped. Use it for every total; results are exact.",
+  "do_not_store": "When someone asks not to have their data kept, add their name or email (`value`) to the company's do-not-store list. Records containing it can't be stored. remove and change only advise you to ask a user."
 }

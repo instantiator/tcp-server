@@ -68,6 +68,7 @@ export class SystemController {
       shutdown: {
         state: this.shutdown.currentState,
         restart: this.shutdown.isRestarting,
+        haltedOnError: this.drain.isHaltedOnError,
       },
     };
   }

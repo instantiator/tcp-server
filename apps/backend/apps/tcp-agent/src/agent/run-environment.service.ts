@@ -121,8 +121,12 @@ export class AgentRunEnvironmentService {
         mcpServerUrls,
         { agentId: agent.id, companyId: agent.companyId },
         // A run without a server it needs can't finish its step, so it fails
-        // naming the service rather than carrying on without those tools.
-        { required: true },
+        // naming the service rather than carrying on without those tools —
+        // whether the server is down at the start or goes down mid-run.
+        {
+          required: true,
+          onServerDown: (err) => abortController.abort(err),
+        },
       ),
       mode,
     );

@@ -1,3 +1,4 @@
+import type { RunFailureCode } from '../llm/run-failure';
 import type { UUID } from '../uuid';
 import {
   Column,
@@ -136,6 +137,10 @@ export class TcpAssignment extends VersionedEntity {
   /** Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`. */
   @Column({ type: 'text', nullable: true })
   failureReason!: string | null;
+
+  /** The {@link RunFailureCode} behind `failureReason`, when one is known. */
+  @Column({ type: 'varchar', nullable: true })
+  failureCode!: RunFailureCode | null;
 
   /** The agent currently (or last) working this assignment. */
   @ManyToOne(() => TcpAgent, { nullable: true, onDelete: 'SET NULL' })

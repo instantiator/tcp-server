@@ -9,11 +9,14 @@ export interface TaskPrompts {
   plan_created: string;
   assignment_completed: string;
   assignment_assured: string;
+  assignment_failed: string;
+  error_cannot_fail: string;
   error_wrong_mode: string;
   error_no_assignment: string;
   error_create_plan: string;
   error_complete_assignment: string;
   error_assure_assignment: string;
+  error_fail_assignment: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */
