@@ -693,27 +693,30 @@ moved to 003.01 (action approval), which has a section for it:
 **Act when:** the core of 003.01 lands. Then let a folder's `README.md` mark it
 sensitive, and pause apply until a user approves.
 
-## Record tables are not live
+## Live record tables re-read whole tables
 
-Record tables are not on the company SSE stream. A table loads when it opens;
-the summaries refetch when the window regains focus; **Reload** in the sheet's
-More menu fetches a table again. If an agent changes a row while a person has
-the sheet open, the person sees the old value until they reload. The version
-check stops their edit overwriting the agent's (409 `stale`), and the table
-reloads.
+When a table changes elsewhere (001.05), each person with it open reads the
+whole table again (up to 10,000 rows), at most once a second, to see what
+changed. The company stream carries only `{entity, action, table}`, so the
+browser can't tell which rows changed without reading them. A `ponytail:`
+comment on `RECORD_CHANGE_WINDOW_MS` names the ceiling.
 
-When this is done, the sheet should also:
+**Act when:** a table over 5,000 rows is open while an agent writes to it
+steadily, and the reads show up as slow (in the browser or tcp-server). Then
+add the changed row's id and version to the signal for single-row changes, and
+read only those rows. Keep the whole-table read for bulk changes, which name no
+rows.
 
-- **Say when it is out of date.** When a row or the table changes elsewhere,
-  show that the sheet needs an update (a notice with **Reload**, and one polite
-  announcement), rather than silently replacing what the person is reading.
-- **Stop edits to rows that are out of date.** A row known to have changed
-  elsewhere becomes read-only, and is marked as changed elsewhere (not by colour
-  alone), until the sheet is reloaded. The version check stays as the backstop.
+## A slow save can briefly read as a change elsewhere
 
-**Act when:** a user reports a stale view, or records join the company stream.
-Then publish record changes as audit events, and use them to mark the sheet and
-its rows out of date. Planned in [001.05](prompts/phase%2004%20-%20utility/001.05.00.prompt%20-%20live%20record%20updates%20%28draft%29.md).
+The sheet tells a person's own change apart by version: their save patches both
+the screen and the fresher copy. If that save's response takes longer than the
+1s gathering window plus a table read, the fresher copy arrives first. The
+row is then marked "changed elsewhere", and the one announcement is made, until
+the response lands and the mark clears.
+
+**Act when:** someone reports a "changed elsewhere" notice for their own edit.
+Then hold the announcement until no save is in flight for that table.
 
 ## Clear and delete are open to every company member
 

@@ -196,3 +196,16 @@ before trusting it on the generated schema.
 - [ADR-025](ADR-025-browser-event-stream-consumption.md) — the stream, the
   cache patching, and the priming the client depends on
 - [web-client.md](../web-client.md) — how to use these hooks
+
+## Amendment as implemented (001.05, phase 04) <a id="amendment-as-implemented-p04-001-05"></a>
+
+[001.05](../prompts/phase%2004%20-%20utility/001.05.01.plan%20-%20live%20record%20updates.md) moved `record` from `STATIC_ENTITIES` to `EVENT_ENTITIES`. The names now follow the rule:
+
+| Hook                                | Live? | Why                                                                      |
+| ----------------------------------- | ----- | ------------------------------------------------------------------------ |
+| `useLiveRecordTables`               | Yes   | Summaries refetch on any change (was `useRecordTables`)                  |
+| `useLiveRecordTableChanges`         | Yes   | How an open table differs from the stored one, from a fresher copy       |
+| `useLiveRecordSearchChanges`        | Yes   | The same for a search's results                                          |
+| `useRecordTable`, `useRecordSearch` | No    | Deliberately a snapshot: replaced only when the person reloads (ADR-027) |
+
+The fresher copies live under a new `latest` scope (`['record', 'latest', …]`). They are filled by `recordChanged`, never by the hooks that read them, and only for tables and searches someone has open. So no hook fetches because of an event, and no hook opens a stream. An edit made here patches both copies, so a person's own changes never read as made elsewhere.

@@ -274,3 +274,12 @@ amendment described — an agent waiting for a model slot, not stalled. See
 ## Amendment as implemented (000.06, phase 04) <a id="amendment-as-implemented-p04-000-06"></a>
 
 [000.06](../prompts/phase%2004%20-%20utility/000.06.01.plan%20-%20dialog%20improvements.md) applied the [008.02](#amendment-as-implemented-00802) policy rather than changing it. The chat dialog now mounts only the selected view's `<Transcript/>`, so it holds one stream however many chats are listed, where it used to hold one per open panel. Switching views releases one stream and opens the next, which re-primes from history. The list's statuses come from the company stream through the query cache, so the list opens no stream of its own.
+
+## Amendment as implemented (001.05, phase 04) <a id="amendment-as-implemented-p04-001-05"></a>
+
+[001.05](../prompts/phase%2004%20-%20utility/001.05.01.plan%20-%20live%20record%20updates.md) put record tables on the company stream. The stream did not change shape, and no new stream was opened.
+
+- **A records change goes on the company channel cut down to `{entity: 'record', action, table}`.** `AuditEventPublisher` adds it beside the existing routes. The audit row keeps the before and after values, which are customer data; the browser only needs to know which table to look at again, so they never go on the wire. A do-not-store change has no `table`.
+- **Volume.** That is one small event per records change. The client gathers them for 1s per company, then refetches the table summaries once and reads each _open_ table or search once. A table nobody has open costs one summary refetch.
+- **Recovery is still primed.** `CompanyPrimingService.prime` ends with `{entity: 'record', reason: 'replay'}`, which names no table, so a reconnect re-checks every open table and search. The client still holds no state across a reconnect.
+- **A `record` event never patches the cache.** `applyEvent` sends it to `recordChanged` before the generic path. What is on screen is compared with the fresh copy and is replaced only on Reload ([ADR-027](ADR-027-screen-reader-strategy.md#amendment-as-implemented-p04-001-05)).
