@@ -31,6 +31,7 @@ function makeRecords(): jest.Mocked<RecordsService> {
     deleteCompany: jest.fn(),
     doNotStoreMatches: jest.fn().mockResolvedValue([]),
     addDoNotStore: jest.fn(),
+    alterTable: jest.fn(),
   } as unknown as jest.Mocked<RecordsService>;
 }
 
@@ -395,6 +396,188 @@ describe('RecordsToolsService', () => {
         expect(audit.record).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('alter_table', () => {
+    /** A feedings table keyed on date and time, before and after a column change. */
+    const tableId = randomUUID();
+    const feedings = (extra: object = {}) => ({
+      id: tableId,
+      name: 'feedings',
+      purpose: 'When the animals were fed',
+      schema: {
+        type: 'object' as const,
+        properties: {
+          feeding_date: { type: 'string' as const },
+          feeding_time: { type: 'string' as const },
+        },
+        required: ['feeding_date', 'feeding_time'],
+        additionalProperties: false as const,
+      },
+      primaryKey: ['feeding_date', 'feeding_time'],
+      uniqueKeys: [],
+      retention: null,
+      ...extra,
+    });
+
+    it('adds a column with a default, and audits both definitions but not the default', async () => {
+      const after = feedings({ purpose: 'changed' });
+      records.alterTable.mockResolvedValue({
+        definition: after,
+        before: feedings(),
+        rewritten: 2,
+      });
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'add_column',
+        column: 'animal',
+        type: 'string',
+        default: 'chicken',
+      });
+      expect(text).not.toMatch(/^Error/);
+      expect(records.alterTable).toHaveBeenCalledWith(
+        companyId,
+        'feedings',
+        {
+          op: 'add_column',
+          column: 'animal',
+          type: 'string',
+          format: undefined,
+          description: undefined,
+          default: 'chicken',
+          required: undefined,
+        },
+        { allowNarrow: false },
+      );
+      expect(JSON.parse(text)).toEqual({ table: after, rewritten: 2 });
+      expect(audit.record).toHaveBeenCalledWith(
+        companyId,
+        'agent',
+        agentId,
+        AuditEventType.StateChange,
+        {
+          source: 'records',
+          action: 'alter_table',
+          op: 'add_column',
+          table: 'feedings',
+          before: feedings(),
+          after,
+          rewritten: 2,
+        },
+      );
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain('chicken');
+    });
+
+    it('maps rename and set-key arguments to their changes', async () => {
+      records.alterTable.mockResolvedValue({
+        definition: feedings(),
+        before: feedings(),
+        rewritten: 0,
+      });
+      await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'rename_column',
+        column: 'feeding_date',
+        new_name: 'fed_on',
+      });
+      await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'set_primary_key',
+        fields: ['feeding_date', 'feeding_time', 'animal'],
+      });
+      expect(records.alterTable.mock.calls.map((c) => c[2])).toEqual([
+        { op: 'rename_column', column: 'feeding_date', newName: 'fed_on' },
+        {
+          op: 'set_primary_key',
+          fields: ['feeding_date', 'feeding_time', 'animal'],
+        },
+      ]);
+    });
+
+    it('says which argument an action is missing, and changes nothing', async () => {
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'rename_column',
+        column: 'feeding_date',
+      });
+      expect(text).toMatch(/^Error: rename_column needs `new_name`/);
+      expect(records.alterTable).not.toHaveBeenCalled();
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('deletes nothing: it advises asking a user, naming the column, with no audit', async () => {
+      records.describeTable.mockResolvedValue({
+        ...feedings(),
+        schema: {
+          ...feedings().schema,
+          properties: {
+            ...feedings().schema.properties,
+            note: { type: 'string' as const },
+          },
+        },
+      });
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'delete_column',
+        column: 'note',
+      });
+      expect(text).toMatch(/^Nothing was deleted/);
+      expect(text).toMatch(/request_user_input/);
+      expect(text).toContain("'note' from 'feedings'");
+      expect(records.alterTable).not.toHaveBeenCalled();
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('refuses to advise deleting a key column, saying why', async () => {
+      records.describeTable.mockResolvedValue(feedings());
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'delete_column',
+        column: 'feeding_time',
+      });
+      expect(text).toMatch(/^Error: .*take it out of the key first/);
+    });
+
+    it('passes a narrowing refusal back as a correctable error', async () => {
+      records.alterTable.mockRejectedValue(
+        new RecordsError(
+          'taking feeding_time out of the key ... ask a user with request_user_input',
+        ),
+      );
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'set_primary_key',
+        fields: ['feeding_date'],
+      });
+      expect(text).toMatch(/^Error: .*request_user_input/);
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('refuses a default on the do-not-store list, auditing the field name only', async () => {
+      records.doNotStoreMatches.mockResolvedValue(['keeper']);
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'add_column',
+        column: 'keeper',
+        type: 'string',
+        default: 'Jane Doe',
+      });
+      expect(JSON.parse(text)).toMatchObject({ status: 'not_stored' });
+      expect(records.alterTable).not.toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(
+        companyId,
+        'agent',
+        agentId,
+        AuditEventType.ToolCall,
+        {
+          source: 'records',
+          tool: 'alter_table',
+          table: 'feedings',
+          outcome: 'do_not_store',
+          fields: ['keeper'],
+        },
+      );
+    });
   });
 
   it('rejects an unknown filter op before reaching the service', async () => {

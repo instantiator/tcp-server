@@ -13,6 +13,7 @@ export interface RecordsToolDescriptions {
   delete: string;
   query: string;
   aggregate: string;
+  alter_table: string;
   do_not_store: string;
 }
 

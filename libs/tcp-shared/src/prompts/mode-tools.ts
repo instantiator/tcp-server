@@ -29,6 +29,7 @@ export const RECORDS_WRITE_TOOLS: readonly string[] = [
   'create_table',
   'insert',
   'update',
+  'alter_table',
   'delete',
 ];
 

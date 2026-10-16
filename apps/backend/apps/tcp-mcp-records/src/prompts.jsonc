@@ -1,6 +1,6 @@
 {
   // Returned by describe_server — gives the agent an overview of the records tools.
-  "describe_server": "## Records Service\n\nTyped tables of business records for your company — orders, customers, products, stock, income, expenses. Keep anything tabular here rather than in files, so it is checked against the table's schema and can be totalled exactly.\n\n1. `list_tables` to see what exists, `describe_table` for a table's fields and keys.\n2. `create_table` if nothing fits — give it a primary key such as the order number, so the same order can never be recorded twice.\n3. `insert`, `update` and `delete` records. Inserting a record whose key already exists adds nothing and tells you so — safe to retry.\n4. `query` to find records and `aggregate` for counts and totals. Never add figures up yourself.\n5. If someone asks not to have their details kept, add them with `do_not_store`. A record matching that list is refused, and you're told why.\n\nChanges are saved straight away, even inside a task. Every read and change is audited. Its tools are now available to call directly.",
+  "describe_server": "## Records Service\n\nTyped tables of business records for your company — orders, customers, products, stock, income, expenses. Keep anything tabular here rather than in files, so it is checked against the table's schema and can be totalled exactly.\n\n1. `list_tables` to see what exists, `describe_table` for a table's fields and keys.\n2. `create_table` if nothing fits — give it a primary key such as the order number, so the same order can never be recorded twice.\n3. `insert`, `update` and `delete` records. Inserting a record whose key already exists adds nothing and tells you so — safe to retry.\n4. `query` to find records and `aggregate` for counts and totals. Never add figures up yourself.\n5. If someone asks not to have their details kept, add them with `do_not_store`. A record matching that list is refused, and you're told why.\n6. If a table is missing a column, or its key can't tell records apart, fix it with `alter_table` rather than making another table.\n\nChanges are saved straight away, even inside a task. Every read and change is audited. Its tools are now available to call directly.",
 
   // Returned by list_tables when the company has no tables yet.
   "no_tables": "There are no tables yet. Use create_table to make one.",
@@ -16,5 +16,10 @@
   "do_not_store_already": "That is already on the do-not-store list.",
 
   // do_not_store remove or change: deliberately does nothing. {{action}} is 'removed' or 'changed'.
-  "do_not_store_ask_user": "Nothing was changed. An entry can only be {{action}} by a person. Use request_user_input to ask a user to do it, saying which entry and why."
+  "do_not_store_ask_user": "Nothing was changed. An entry can only be {{action}} by a person. Use request_user_input to ask a user to do it, saying which entry and why.",
+
+  // alter_table delete_column: deliberately does nothing, since deleting a column deletes a value from every record.
+  // When action approval (003.01) lands, this becomes an approval request carrying the exact change.
+  // {{column}} and {{table}} name what the agent asked to delete.
+  "delete_column_ask_user": "Nothing was deleted. Only a person can delete a column, because it removes that value from every record. Use request_user_input to ask a user to delete '{{column}}' from '{{table}}' (Columns in the table's menu), saying why it is no longer needed."
 }
