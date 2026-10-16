@@ -10,6 +10,7 @@ import { applyEvent } from '../../events/cache';
 import { t, tCount } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
+  fetchMock,
   installFetchMock,
   requestedUrls,
   respondByRoute,
@@ -200,9 +201,85 @@ describe('DataPanel', () => {
     );
   });
 
+  it('goes back to the menu after the open table is deleted here', async () => {
+    const user = userEvent.setup();
+    renderPanel(tables('orders'));
+    await screen.findByRole('heading', { level: 2, name: /^orders/ });
+
+    await user.click(
+      screen.getByRole('button', {
+        name: t('records.more', { table: 'orders' }),
+      }),
+    );
+    await user.click(
+      screen.getByRole('menuitem', { name: t('records.action.drop') }),
+    );
+    respondByRoute([
+      [new RegExp(`${BASE}/tables/orders$`), { body: { dropped: true } }],
+      [new RegExp(`${BASE}/tables$`), { body: [] }],
+    ]);
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: t('records.drop.confirm'),
+      }),
+    );
+
+    expect(await screen.findByText(t('tables.empty'))).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 2, name: /^orders/ }),
+    ).toBeNull();
+  });
+
   describe('when tables change elsewhere (001.05)', () => {
     beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
     afterEach(() => vi.useRealTimers());
+
+    it('goes back to the menu when the delete is heard on the stream before its answer', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const client = newClient();
+      renderPanel(tables('orders'), client);
+      await screen.findByRole('heading', { level: 2, name: /^orders/ });
+
+      await user.click(
+        screen.getByRole('button', {
+          name: t('records.more', { table: 'orders' }),
+        }),
+      );
+      await user.click(
+        screen.getByRole('menuitem', { name: t('records.action.drop') }),
+      );
+      // The DELETE waits until the stream has told the page.
+      let answer: (response: Response) => void = () => undefined;
+      fetchMock.mockImplementation((input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const method = input instanceof Request ? input.method : 'GET';
+        if (method === 'DELETE') {
+          return new Promise<Response>((resolve) => {
+            answer = resolve;
+          });
+        }
+        if (/\/tables$/.test(url)) {
+          return Promise.resolve(new Response('[]', { status: 200 }));
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ message: 'gone' }), { status: 404 }),
+        );
+      });
+      await user.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: t('records.drop.confirm'),
+        }),
+      );
+      await hear(client, recordEvent('c1', 'orders'));
+      await act(async () => {
+        answer(
+          new Response(JSON.stringify({ dropped: true }), { status: 200 }),
+        );
+        await vi.advanceTimersByTimeAsync(10);
+      });
+
+      expect(await screen.findByText(t('tables.empty'))).toBeInTheDocument();
+    });
 
     it('keeps the counts current, and lists new tables and drops deleted ones', async () => {
       const client = newClient();

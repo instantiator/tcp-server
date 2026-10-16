@@ -22,6 +22,7 @@ const baseURL = process.env.TCP_WEB_URL ?? 'https://localhost:5173';
  */
 const SIGNED_IN_SPECS = [
   /add-new\.spec\.ts/,
+  /admin\.spec\.ts/,
   /companies\.spec\.ts/,
   /company-activity\.spec\.ts/,
   /company-visualisation\.spec\.ts/,

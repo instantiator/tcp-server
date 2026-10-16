@@ -1056,9 +1056,33 @@ export const useAppendRecordsCsv = (companyId: string, table: string) =>
 export const useClearRecordTable = (companyId: string, table: string) =>
   useBulkRecordMutation(companyId, table, useClearRecordTableMutation);
 
+/**
+ * The drop request, which then forgets the dropped table's own queries.
+ * Without that, the reload every bulk change does would wait for the gone
+ * table to be fetched again: a 404 that TanStack retries with back-off, so
+ * the delete seemed to take several seconds to finish, and whatever ran after
+ * it (going back to the menu) ran that much later.
+ */
+const useDropAndForget = (companyId: string, table: string) => {
+  const queryClient = useQueryClient();
+  const drop = useDropRecordTableMutation(companyId, table);
+  return {
+    mutateAsync: async () => {
+      const result = await drop.mutateAsync();
+      queryClient.removeQueries({
+        queryKey: queryKeys.recordTable(companyId, table),
+      });
+      queryClient.removeQueries({
+        queryKey: queryKeys.recordTableLatest(companyId, table),
+      });
+      return result;
+    },
+  };
+};
+
 /** Removes the table and its rows. */
 export const useDropRecordTable = (companyId: string, table: string) =>
-  useBulkRecordMutation(companyId, table, useDropRecordTableMutation);
+  useBulkRecordMutation(companyId, table, useDropAndForget);
 
 // Column changes rewrite every row, so each reloads every record view (001.06).
 
