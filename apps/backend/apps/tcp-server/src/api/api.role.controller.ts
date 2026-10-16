@@ -10,6 +10,7 @@ import {
   Param,
   Post,
   Put,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -21,12 +22,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 import { DbService } from '../db/db.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
+import { KnowledgeService } from './knowledge.service';
 import { RoleResponseDto } from './dto/entity-response.dto';
 import { computeRoleWarnings, setWarningsHeader } from './validation-warnings';
 
@@ -44,7 +47,10 @@ import { computeRoleWarnings, setWarningsHeader } from './validation-warnings';
 @UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/role' })
 export class RoleController {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly knowledge: KnowledgeService,
+  ) {}
 
   /**
    * Creates a new role for the given company. Soft data-quality warnings
@@ -97,15 +103,20 @@ export class RoleController {
   }
 
   /**
-   * Deletes a role by UUID. Cascades to the role's agents, knowledge
-   * chunks, episodic memory, and conversations.
+   * Deletes a role by UUID, with its knowledge files (see
+   * {@link KnowledgeService.deleteRole}). Cascades to the role's agents,
+   * knowledge chunks, episodic memory, and conversations.
    */
   @ApiOperation({ summary: 'Delete a role by ID' })
   @CompanyScope({ from: 'param', key: 'id', via: 'role' })
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteRole(@Param('id') id: UUID): Promise<void> {
-    const deleted = await this.db.deleteRole(id);
+  async deleteRole(@Param('id') id: UUID, @Req() req: Request): Promise<void> {
+    const deleted = await this.knowledge.deleteRole(id, {
+      user: getCurrentUserId(req),
+      agent: null,
+      task: null,
+    });
     if (!deleted) throw new NotFoundException(`Role ${id} not found`);
   }
 }

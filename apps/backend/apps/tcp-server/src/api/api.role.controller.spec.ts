@@ -1,12 +1,16 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { TcpRole } from '@tcp/shared';
 import { RoleController } from './api.role.controller';
 import { DbService } from '../db/db.service';
+import { KnowledgeService } from './knowledge.service';
 
 const fakeRes = (): Response =>
   ({ setHeader: jest.fn() }) as unknown as Response;
+
+const fakeReq = (): Request =>
+  ({ user: { sub: 'alice' } }) as unknown as Request;
 
 function makeRole(overrides: Partial<TcpRole> = {}): TcpRole {
   return {
@@ -26,16 +30,20 @@ function makeRole(overrides: Partial<TcpRole> = {}): TcpRole {
 }
 
 describe('RoleController', () => {
-  let db: jest.Mocked<Pick<DbService, 'setRole' | 'getRole' | 'deleteRole'>>;
+  let db: jest.Mocked<Pick<DbService, 'setRole' | 'getRole'>>;
+  let knowledge: jest.Mocked<Pick<KnowledgeService, 'deleteRole'>>;
   let controller: RoleController;
 
   beforeEach(() => {
     db = {
       setRole: jest.fn(),
       getRole: jest.fn(),
-      deleteRole: jest.fn().mockResolvedValue(true),
     };
-    controller = new RoleController(db as unknown as DbService);
+    knowledge = { deleteRole: jest.fn().mockResolvedValue(true) };
+    controller = new RoleController(
+      db as unknown as DbService,
+      knowledge as unknown as KnowledgeService,
+    );
   });
 
   describe('createRole', () => {
@@ -135,19 +143,24 @@ describe('RoleController', () => {
   });
 
   describe('deleteRole', () => {
-    it('delegates to db.deleteRole and resolves when deleted', async () => {
+    it('deletes the role with its knowledge, as the calling user', async () => {
       const id = randomUUID();
-      db.deleteRole.mockResolvedValue(true);
 
-      await expect(controller.deleteRole(id)).resolves.toBeUndefined();
-      expect(db.deleteRole).toHaveBeenCalledWith(id);
+      await expect(
+        controller.deleteRole(id, fakeReq()),
+      ).resolves.toBeUndefined();
+      expect(knowledge.deleteRole).toHaveBeenCalledWith(id, {
+        user: 'alice',
+        agent: null,
+        task: null,
+      });
     });
 
     it('throws NotFoundException when nothing was deleted', async () => {
-      db.deleteRole.mockResolvedValue(false);
-      await expect(controller.deleteRole(randomUUID())).rejects.toThrow(
-        NotFoundException,
-      );
+      knowledge.deleteRole.mockResolvedValue(false);
+      await expect(
+        controller.deleteRole(randomUUID(), fakeReq()),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

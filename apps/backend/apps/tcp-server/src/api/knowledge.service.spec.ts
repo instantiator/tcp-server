@@ -53,10 +53,10 @@ describe('KnowledgeService', () => {
   let reindex: { bumpCompany: jest.Mock; isRebuilding: jest.Mock };
   let ragRetrieval: { retrieve: jest.Mock };
   let config: { get: jest.Mock };
-  let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock };
+  let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock; delete: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
   let chunkRepo: { count: jest.Mock };
-  let stateRepo: { findOne: jest.Mock };
+  let stateRepo: { findOne: jest.Mock; delete: jest.Mock };
 
   const role = makeRole();
   const company = makeCompany({ id: role.companyId });
@@ -79,10 +79,14 @@ describe('KnowledgeService', () => {
     roleRepo = {
       findOneBy: jest.fn().mockResolvedValue(role),
       findBy: jest.fn().mockResolvedValue([role]),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     companyRepo = { findOneBy: jest.fn().mockResolvedValue(company) };
     chunkRepo = { count: jest.fn().mockResolvedValue(0) };
-    stateRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    stateRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
 
     service = new KnowledgeService(
       storage as unknown as StorageService,
@@ -286,7 +290,12 @@ describe('KnowledgeService', () => {
       ];
       ragRetrieval.retrieve.mockResolvedValue(chunks);
 
-      const result = await service.queryRag(role.id, 'query text', 3, 0.5);
+      const result = await service.queryRag(
+        { kind: 'role', roleId: role.id },
+        'query text',
+        3,
+        0.5,
+      );
 
       expect(result).toBe(chunks);
       expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
@@ -300,7 +309,7 @@ describe('KnowledgeService', () => {
     });
 
     it('resolves the role/company threshold when the caller gives none, so the route reports what the role would really retrieve', async () => {
-      await service.queryRag(role.id, 'query text');
+      await service.queryRag({ kind: 'role', roleId: role.id }, 'query text');
       expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
         role.id,
         company.id,
@@ -312,7 +321,12 @@ describe('KnowledgeService', () => {
     });
 
     it('lets an explicit threshold win over the resolved one, so operators can probe raw scores', async () => {
-      await service.queryRag(role.id, 'query text', undefined, 0);
+      await service.queryRag(
+        { kind: 'role', roleId: role.id },
+        'query text',
+        undefined,
+        0,
+      );
       expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
         role.id,
         company.id,
@@ -326,9 +340,91 @@ describe('KnowledgeService', () => {
     it('throws NotFoundException when the role does not exist', async () => {
       roleRepo.findOneBy.mockResolvedValue(null);
       await expect(
-        service.queryRag(randomUUID(), 'query text'),
+        service.queryRag({ kind: 'role', roleId: randomUUID() }, 'query text'),
       ).rejects.toThrow(NotFoundException);
       expect(ragRetrieval.retrieve).not.toHaveBeenCalled();
+    });
+
+    it('searches the shared chunks alone for a company scope', async () => {
+      await service.queryRag(
+        { kind: 'company', companyId: company.id },
+        'query text',
+      );
+      expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
+        null,
+        company.id,
+        'query text',
+        company.embeddingConfig,
+        undefined,
+        DEFAULT_RAG_THRESHOLD,
+      );
+    });
+  });
+
+  describe('deleteRole', () => {
+    const originators = { user: 'alice', agent: null, task: null };
+
+    it('deletes every knowledge file, then the role, then its index state', async () => {
+      const calls: string[] = [];
+      storage.listKnowledgeFiles.mockResolvedValue([
+        makeStorageObject('report.md'),
+        makeStorageObject('handbook.md'),
+      ]);
+      storage.deleteKnowledgeFile.mockImplementation((_scope, name: string) => {
+        calls.push(`file ${name}`);
+        return Promise.resolve();
+      });
+      roleRepo.delete.mockImplementation(() => {
+        calls.push('role');
+        return Promise.resolve({ affected: 1 });
+      });
+      stateRepo.delete.mockImplementation(() => {
+        calls.push('state');
+        return Promise.resolve({ affected: 1 });
+      });
+
+      await expect(service.deleteRole(role.id, originators)).resolves.toBe(
+        true,
+      );
+
+      expect(calls).toEqual([
+        'file report.md',
+        'file handbook.md',
+        'role',
+        'state',
+      ]);
+      expect(storage.deleteKnowledgeFile).toHaveBeenCalledWith(
+        { companySlug: 'acme', roleSlug: 'analyst' },
+        'report.md',
+        originators,
+      );
+      expect(stateRepo.delete).toHaveBeenCalledWith({
+        companyId: company.id,
+        roleId: role.id,
+      });
+    });
+
+    it('leaves the role in place when a file cannot be deleted, so it can be retried', async () => {
+      storage.listKnowledgeFiles.mockResolvedValue([
+        makeStorageObject('report.md'),
+      ]);
+      storage.deleteKnowledgeFile.mockRejectedValue(new Error('storage down'));
+
+      await expect(service.deleteRole(role.id, originators)).rejects.toThrow(
+        'storage down',
+      );
+      expect(roleRepo.delete).not.toHaveBeenCalled();
+      expect(stateRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('returns false and touches nothing for an unknown role', async () => {
+      roleRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.deleteRole(randomUUID(), originators)).resolves.toBe(
+        false,
+      );
+      expect(storage.listKnowledgeFiles).not.toHaveBeenCalled();
+      expect(roleRepo.delete).not.toHaveBeenCalled();
     });
   });
 

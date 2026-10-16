@@ -54,6 +54,7 @@ import {
   KnowledgeService,
   KnowledgeStatus,
 } from './knowledge.service';
+import { MAX_UPLOAD_BYTES } from './upload-limit';
 import { setWarningsHeader } from './validation-warnings';
 
 /** Subset of the multer file object relevant to document upload. */
@@ -61,6 +62,13 @@ interface UploadedFileBuffer {
   originalname: string;
   buffer: Buffer;
 }
+
+/**
+ * Multer options for both upload routes. `limits.fileSize` makes multer stop
+ * reading at the limit and answer 413, so an oversized file is never held in
+ * memory whole.
+ */
+const UPLOAD_OPTIONS = { limits: { fileSize: MAX_UPLOAD_BYTES } };
 
 /** Multipart body fields alongside `file` — an optional filename override. */
 interface StoreKnowledgeBody {
@@ -119,9 +127,8 @@ export class KnowledgeController {
    * Runs a RAG similarity search for the role and returns the raw chunks —
    * the same data prompt assembly would inject, without invoking any
    * chat/LLM call. Searches the role's own chunks plus its company's shared
-   * chunks (see {@link KnowledgeRetrievalService.retrieve}), so this one route
-   * covers both "what would this role see" and "what's in the shared pool";
-   * a separate company-shared-only route would be redundant.
+   * chunks (see {@link KnowledgeRetrievalService.retrieve}): "what would this
+   * role see". {@link queryCompanyKnowledge} searches the shared ones alone.
    *
    * Registered before the `:filename` route below so `query` is never
    * mistaken for a filename.
@@ -141,13 +148,14 @@ export class KnowledgeController {
     @Query('threshold') threshold?: string,
   ): Promise<RagChunk[]> {
     if (!q) throw new BadRequestException('Query parameter `q` is required');
+    const ref: KnowledgeScopeRef = { kind: 'role', roleId };
     const result = await this.knowledge.queryRag(
-      roleId,
+      ref,
       q,
       topK !== undefined ? Number(topK) : undefined,
       threshold !== undefined ? Number(threshold) : undefined,
     );
-    await this.reportEmbeddingWarnings({ kind: 'role', roleId }, res);
+    await this.reportEmbeddingWarnings(ref, res);
     return result;
   }
 
@@ -195,7 +203,7 @@ export class KnowledgeController {
   @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Post('role/:roleId/knowledge')
   @ApiCreatedResponse({ type: KnowledgeDocumentResponseDto })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', UPLOAD_OPTIONS))
   async storeRoleKnowledgeFile(
     @Param('roleId') roleId: UUID,
     @UploadedFile() file: UploadedFileBuffer,
@@ -267,6 +275,40 @@ export class KnowledgeController {
     return result;
   }
 
+  /**
+   * Runs a RAG similarity search over the company's shared chunks alone, so
+   * a person can test what the shared knowledge holds without any one
+   * role's knowledge mixed in. No chat/LLM call is made. Registered before
+   * the `:filename` route below so `query` is never mistaken for a filename.
+   *
+   * @throws {@link BadRequestException} when `q` is missing.
+   * @throws {@link NotFoundException} when the company does not exist.
+   */
+  @ApiOperation({
+    summary: "Query the RAG index for a company's shared knowledge",
+  })
+  @ApiOkResponse({ type: KnowledgeChunkResponseDto, isArray: true })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
+  @Get('company/:companyId/knowledge/query')
+  async queryCompanyKnowledge(
+    @Param('companyId') companyId: string,
+    @Res({ passthrough: true }) res: Response,
+    @Query('q') q?: string,
+    @Query('topK') topK?: string,
+    @Query('threshold') threshold?: string,
+  ): Promise<RagChunk[]> {
+    if (!q) throw new BadRequestException('Query parameter `q` is required');
+    const ref: KnowledgeScopeRef = { kind: 'company', companyId };
+    const result = await this.knowledge.queryRag(
+      ref,
+      q,
+      topK !== undefined ? Number(topK) : undefined,
+      threshold !== undefined ? Number(threshold) : undefined,
+    );
+    await this.reportEmbeddingWarnings(ref, res);
+    return result;
+  }
+
   /** Returns a company-shared knowledge document's content. */
   @ApiOperation({ summary: 'Get a company-shared OKF document' })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
@@ -308,7 +350,7 @@ export class KnowledgeController {
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post('company/:companyId/knowledge')
   @ApiCreatedResponse({ type: KnowledgeDocumentResponseDto })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', UPLOAD_OPTIONS))
   async storeCompanyKnowledgeFile(
     @Param('companyId') companyId: string,
     @UploadedFile() file: UploadedFileBuffer,

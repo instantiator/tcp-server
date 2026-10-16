@@ -105,7 +105,11 @@ export class DbService {
     return this.roles.list(companyId);
   }
 
-  /** Deletes a role and its dependants — {@link RoleDbService.delete}. */
+  /**
+   * Deletes a role and its dependants — {@link RoleDbService.delete}. Leaves
+   * its knowledge files in storage; the API deletes roles through
+   * `KnowledgeService.deleteRole`, which removes them first.
+   */
   deleteRole(id: UUID): Promise<boolean> {
     return this.roles.delete(id);
   }

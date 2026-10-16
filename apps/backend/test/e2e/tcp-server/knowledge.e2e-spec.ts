@@ -1,6 +1,7 @@
 import {
   AuditEvent,
   CompanyUser,
+  KnowledgeIndexState,
   TcpAgent,
   TcpCompany,
   TcpRole,
@@ -13,6 +14,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
+import { MAX_UPLOAD_BYTES } from '../../../apps/tcp-server/src/api/upload-limit';
 import { RagIndexService } from '../../../apps/tcp-server/src/rag/rag-index.service';
 import { makeTestJwt } from '../helpers/test-jwt';
 import { seedMembership } from '../helpers/seed-membership';
@@ -27,6 +29,7 @@ describe('KnowledgeController (e2e)', () => {
   let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
+  let indexStateRepo: Repository<KnowledgeIndexState>;
   let ragIndex: RagIndexService;
   let roleId: UUID;
   let companyId: UUID;
@@ -43,6 +46,7 @@ describe('KnowledgeController (e2e)', () => {
     agentRepo = module.get(getRepositoryToken(TcpAgent));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     companyUserRepo = module.get(getRepositoryToken(CompanyUser));
+    indexStateRepo = module.get(getRepositoryToken(KnowledgeIndexState));
     ragIndex = module.get(RagIndexService);
     const company = await companyRepo.save(
       companyRepo.create({
@@ -195,6 +199,66 @@ describe('KnowledgeController (e2e)', () => {
         .get(`/api/role/${unknownRoleId}/knowledge`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(404);
+    });
+  });
+
+  describe('upload size limit', () => {
+    it('refuses an upload over the limit with 413', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .attach('file', Buffer.alloc(MAX_UPLOAD_BYTES + 1, 'a'), 'big.txt')
+        .expect(413);
+    }, 30_000);
+  });
+
+  describe('deleting a role', () => {
+    it('deletes its knowledge files and index state, so a new role with the same slug starts empty', async () => {
+      const jwt = makeTestJwt();
+      const company = await companyRepo.findOneByOrFail({ id: companyId });
+      const createRole = () =>
+        roleRepo.save(
+          roleRepo.create({
+            slug: 'short-lived',
+            name: 'Short-lived',
+            description: 'Test role',
+            systemPromptTemplate: 'Write.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+            company,
+            companyId,
+          }),
+        );
+      const doomed = await createRole();
+      for (const name of ['one.md', 'two.md']) {
+        await request(app.getHttpServer())
+          .post(`/api/role/${doomed.id}/knowledge`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .attach(
+            'file',
+            Buffer.from(`---\ntitle: ${name}\n---\n\nBody.`),
+            name,
+          )
+          .expect(201);
+      }
+
+      await request(app.getHttpServer())
+        .delete(`/api/role/${doomed.id}`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(204);
+
+      expect(
+        await indexStateRepo.countBy({ companyId, roleId: doomed.id }),
+      ).toBe(0);
+      const reborn = await createRole();
+      await request(app.getHttpServer())
+        .get(`/api/role/${reborn.id}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toEqual([]);
+        });
+      await roleRepo.delete(reborn.id);
     });
   });
 
@@ -410,6 +474,7 @@ describe('KnowledgeController (e2e)', () => {
       apiKey: 'test',
     };
     let queryRoleId: UUID;
+    let queryCompanyId: UUID;
 
     beforeAll(async () => {
       const company = await companyRepo.save(
@@ -420,6 +485,7 @@ describe('KnowledgeController (e2e)', () => {
           embeddingConfig,
         }),
       );
+      queryCompanyId = company.id;
       await seedMembership(companyUserRepo, company.id);
       const role = await roleRepo.save(
         roleRepo.create({
@@ -467,6 +533,26 @@ describe('KnowledgeController (e2e)', () => {
           expect(paths.some((p) => p.endsWith('remote-work.md'))).toBe(true);
           expect(paths.some((p) => p.endsWith('handbook.md'))).toBe(true);
         }));
+
+    it("GET /api/company/:companyId/knowledge/query returns the shared chunk and not the role's", () =>
+      request(app.getHttpServer())
+        .get(`/api/company/${queryCompanyId}/knowledge/query`)
+        .query({ q: 'remote work policy', threshold: -1 })
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(200)
+        .expect((res) => {
+          const paths = (res.body as { documentPath: string }[]).map(
+            (c) => c.documentPath,
+          );
+          expect(paths.some((p) => p.endsWith('handbook.md'))).toBe(true);
+          expect(paths.some((p) => p.endsWith('remote-work.md'))).toBe(false);
+        }));
+
+    it('GET /api/company/:companyId/knowledge/query returns 400 when q is missing', () =>
+      request(app.getHttpServer())
+        .get(`/api/company/${queryCompanyId}/knowledge/query`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(400));
 
     it('returns 400 when q is missing', () =>
       request(app.getHttpServer())

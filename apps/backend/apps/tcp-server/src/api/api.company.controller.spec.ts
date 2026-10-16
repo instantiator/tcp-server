@@ -19,6 +19,7 @@ import { CompanyController } from './api.company.controller';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { ApiService } from './api.service';
+import { KnowledgeService } from './knowledge.service';
 
 const fakeReq = (user: Record<string, unknown> = { sub: 'alice' }): Request =>
   ({ user }) as unknown as Request;
@@ -52,7 +53,6 @@ const makeDbService = (): jest.Mocked<
     | 'findRoleByIdOrSlug'
     | 'setRole'
     | 'deleteCompany'
-    | 'deleteRole'
   >
 > => ({
   listRoles: jest.fn().mockResolvedValue([]),
@@ -61,7 +61,6 @@ const makeDbService = (): jest.Mocked<
   findRoleByIdOrSlug: jest.fn().mockResolvedValue(null),
   setRole: jest.fn(),
   deleteCompany: jest.fn().mockResolvedValue(true),
-  deleteRole: jest.fn().mockResolvedValue(true),
 });
 
 const makeStatsService = (): jest.Mocked<
@@ -101,9 +100,11 @@ describe('CompanyController', () => {
   let recordsCleanup: jest.Mocked<
     Pick<RecordsCleanupService, 'companyDeleted'>
   >;
+  let knowledge: jest.Mocked<Pick<KnowledgeService, 'deleteRole'>>;
   let controller: CompanyController;
 
   beforeEach(() => {
+    knowledge = { deleteRole: jest.fn().mockResolvedValue(true) };
     recordsCleanup = { companyDeleted: jest.fn().mockResolvedValue(undefined) };
     api = makeApiService();
     db = makeDbService();
@@ -121,6 +122,7 @@ describe('CompanyController', () => {
       {} as SpendResumeService,
       {} as SpendReportService,
       recordsCleanup as unknown as RecordsCleanupService,
+      knowledge as unknown as KnowledgeService,
     );
   });
 
@@ -467,22 +469,26 @@ describe('CompanyController', () => {
   });
 
   describe('deleteRoleBySlug', () => {
-    it('resolves the company and role, then delegates to dbService.deleteRole', async () => {
+    it('resolves the company and role, then deletes it with its knowledge', async () => {
       const companyId = randomUUID();
       const roleId = randomUUID();
       db.getCompany.mockResolvedValue({ id: companyId } as never);
       db.findRoleByIdOrSlug.mockResolvedValue({ id: roleId } as never);
 
-      await controller.deleteRoleBySlug('acme-slug', 'analyst');
+      await controller.deleteRoleBySlug('acme-slug', 'analyst', fakeReq());
       expect(db.findRoleByIdOrSlug).toHaveBeenCalledWith(companyId, 'analyst');
-      expect(db.deleteRole).toHaveBeenCalledWith(roleId);
+      expect(knowledge.deleteRole).toHaveBeenCalledWith(roleId, {
+        user: 'alice',
+        agent: null,
+        task: null,
+      });
     });
 
     it('throws NotFoundException when the role does not resolve', async () => {
       db.getCompany.mockResolvedValue({ id: randomUUID() } as never);
       db.findRoleByIdOrSlug.mockResolvedValue(null);
       await expect(
-        controller.deleteRoleBySlug('acme', 'no-such-role'),
+        controller.deleteRoleBySlug('acme', 'no-such-role', fakeReq()),
       ).rejects.toThrow(NotFoundException);
     });
   });

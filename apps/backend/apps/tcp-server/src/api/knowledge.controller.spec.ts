@@ -172,6 +172,34 @@ describe('KnowledgeController', () => {
     });
   });
 
+  describe('queryCompanyKnowledge', () => {
+    it("delegates to knowledge.queryRag with the company's shared scope", async () => {
+      await controller.queryCompanyKnowledge(
+        'acme',
+        fakeRes() as unknown as Response,
+        'remote work policy',
+        '3',
+      );
+      expect(knowledge.queryRag).toHaveBeenCalledWith(
+        { kind: 'company', companyId: 'acme' },
+        'remote work policy',
+        3,
+        undefined,
+      );
+    });
+
+    it('rejects a missing q with a 400', async () => {
+      await expect(
+        controller.queryCompanyKnowledge(
+          'acme',
+          fakeRes() as unknown as Response,
+          undefined,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(knowledge.queryRag).not.toHaveBeenCalled();
+    });
+  });
+
   describe('queryRoleKnowledge', () => {
     it('delegates to knowledge.queryRag with parsed topK/threshold', async () => {
       const chunks = [
@@ -195,7 +223,7 @@ describe('KnowledgeController', () => {
 
       expect(result).toBe(chunks);
       expect(knowledge.queryRag).toHaveBeenCalledWith(
-        roleId,
+        { kind: 'role', roleId },
         'remote work policy',
         3,
         0.5,
@@ -209,7 +237,7 @@ describe('KnowledgeController', () => {
         'remote work policy',
       );
       expect(knowledge.queryRag).toHaveBeenCalledWith(
-        roleId,
+        { kind: 'role', roleId },
         'remote work policy',
         undefined,
         undefined,
