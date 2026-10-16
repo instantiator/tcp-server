@@ -37,6 +37,7 @@ import { CompanyScope } from '../auth/company-scope.decorator';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
+  AddColumnDto,
   AddDoNotStoreDto,
   AddRecordDto,
   AppendRecordsCsvResultDto,
@@ -50,7 +51,9 @@ import {
   RecordTableRowsDto,
   RecordTableSummaryDto,
   RemovedRecordsDto,
+  RenameColumnDto,
   SearchRecordsDto,
+  SetPrimaryKeyDto,
   SetRetentionDto,
   TimedRecordDto,
   UpdateDoNotStoreDto,
@@ -399,6 +402,91 @@ export class RecordsController {
       company,
       table,
       body.retention ?? null,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Adds a column; every existing record gets the default, if one is given. */
+  @ApiOperation({ summary: 'Add a column to a record table' })
+  @ApiCreatedResponse({ type: RecordTableDefinitionDto })
+  @ApiQuery(CONFIRM_QUERY)
+  @CompanyScope(SCOPE)
+  @Post('tables/:table/columns')
+  async addColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: AddColumnDto,
+    @Req() req: Request,
+    @Query('confirmDoNotStore', CONFIRM) confirm?: boolean,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.addColumn(
+      company,
+      table,
+      body,
+      getCurrentUserId(req),
+      confirm,
+    );
+  }
+
+  /** Renames a column in the table and in every record. */
+  @ApiOperation({ summary: 'Rename a column of a record table' })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Patch('tables/:table/columns/:column')
+  async renameColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Param('column') column: string,
+    @Body() body: RenameColumnDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.renameColumn(
+      company,
+      table,
+      column,
+      body.newName,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Deletes a column and its values. A key field must leave the key first. */
+  @ApiOperation({ summary: 'Delete a column of a record table' })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Delete('tables/:table/columns/:column')
+  async deleteColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Param('column') column: string,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.deleteColumn(
+      company,
+      table,
+      column,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Replaces the fields that identify a record. */
+  @ApiOperation({ summary: "Set a record table's primary key" })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Put('tables/:table/primary-key')
+  async setPrimaryKey(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: SetPrimaryKeyDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.setPrimaryKey(
+      company,
+      table,
+      body.fields,
       getCurrentUserId(req),
     );
   }

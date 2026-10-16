@@ -58,6 +58,7 @@ describe('RecordsApiService', () => {
     deleteRows: jest.fn(),
     readRowsById: jest.fn(),
     setRetention: jest.fn(),
+    alterTable: jest.fn(),
     addDoNotStore: jest.fn(),
   };
   const audit = {
@@ -458,6 +459,97 @@ describe('RecordsApiService', () => {
           ),
         ).rejects.toBeInstanceOf(BadRequestException);
       });
+    });
+  });
+
+  describe('column changes (001.06)', () => {
+    const alterResult = {
+      definition: DEFINITION,
+      before: DEFINITION,
+      rewritten: 3,
+    };
+    beforeEach(() => {
+      records.alterTable.mockResolvedValue(alterResult);
+    });
+
+    it.each([
+      [
+        'addColumn',
+        () =>
+          service.addColumn(
+            acme,
+            'orders',
+            { column: 'note', type: 'string' },
+            'u1',
+          ),
+        { op: 'add_column', column: 'note', type: 'string' },
+      ],
+      [
+        'renameColumn',
+        () => service.renameColumn(acme, 'orders', 'qty', 'count', 'u1'),
+        { op: 'rename_column', column: 'qty', newName: 'count' },
+      ],
+      [
+        'deleteColumn',
+        () => service.deleteColumn(acme, 'orders', 'qty', 'u1'),
+        { op: 'delete_column', column: 'qty' },
+      ],
+      [
+        'setPrimaryKey',
+        () => service.setPrimaryKey(acme, 'orders', ['order_id', 'qty'], 'u1'),
+        { op: 'set_primary_key', fields: ['order_id', 'qty'] },
+      ],
+    ])(
+      '%s applies its change as a person and audits it',
+      async (_name, run, change) => {
+        await expect(run()).resolves.toBe(DEFINITION);
+        expect(records.alterTable).toHaveBeenCalledWith(
+          company.id,
+          'orders',
+          change,
+          { allowNarrow: true },
+        );
+        expect(audited()).toMatchObject({
+          action: 'alter_table',
+          op: change.op,
+          table: 'orders',
+          before: DEFINITION,
+          after: DEFINITION,
+          rewritten: 3,
+          userId: 'u1',
+        });
+      },
+    );
+
+    it('keeps a default out of the audit trail', async () => {
+      await service.addColumn(
+        acme,
+        'orders',
+        { column: 'note', type: 'string', default: 'secret-default' },
+        'u1',
+      );
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain(
+        'secret-default',
+      );
+    });
+
+    it('refuses a default on the do-not-store list until confirmed', async () => {
+      records.doNotStoreMatches.mockResolvedValue(['note']);
+      const column = {
+        column: 'note',
+        type: 'string',
+        default: 'Ann Lee',
+      } as const;
+
+      await expect(
+        service.addColumn(acme, 'orders', column, 'u1'),
+      ).rejects.toMatchObject({
+        response: { code: 'do_not_store', fields: ['note'] },
+      });
+      expect(records.alterTable).not.toHaveBeenCalled();
+
+      await service.addColumn(acme, 'orders', column, 'u1', true);
+      expect(audited()).toMatchObject({ doNotStoreOverride: ['note'] });
     });
   });
 });

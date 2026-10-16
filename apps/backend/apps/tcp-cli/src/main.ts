@@ -15,6 +15,7 @@ import { registerDownloadSharedDocument } from './commands/download-shared-docum
 import { registerEavesdrop } from './commands/eavesdrop';
 import { registerEstimateContextWindow } from './commands/estimate-context-window';
 import { registerExportTable } from './commands/export-table';
+import { registerAlterTable } from './commands/alter-table';
 import { registerGetKnowledge } from './commands/get-knowledge';
 import { registerGetKnowledgeIndexStatus } from './commands/get-knowledge-index-status';
 import { registerGetTask } from './commands/get-task';
@@ -128,6 +129,7 @@ registerRestoreCap(program);
 registerPauseTask(program);
 registerListTables(program);
 registerExportTable(program);
+registerAlterTable(program);
 registerDbUrl(program);
 registerResumeTask(program);
 registerResumeCompany(program);

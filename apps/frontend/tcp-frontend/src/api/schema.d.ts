@@ -817,6 +817,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/records/tables/{table}/columns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a column to a record table */
+        post: operations["RecordsController_addColumn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/columns/{column}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a column of a record table */
+        delete: operations["RecordsController_deleteColumn"];
+        options?: never;
+        head?: never;
+        /** Rename a column of a record table */
+        patch: operations["RecordsController_renameColumn"];
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/primary-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set a record table's primary key */
+        put: operations["RecordsController_setPrimaryKey"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company/{companyId}/records/do-not-store": {
         parameters: {
             query?: never;
@@ -2255,6 +2307,23 @@ export interface components {
         };
         SetRetentionDto: {
             retention: components["schemas"]["RecordTableRetentionDto"] | null;
+        };
+        AddColumnDto: {
+            /** @enum {string} */
+            type: "string" | "number" | "integer" | "boolean";
+            /** @enum {string} */
+            format?: "date";
+            /** @description Given to every existing record */
+            default?: string | number | boolean;
+            column: string;
+            description?: string;
+            required?: boolean;
+        };
+        RenameColumnDto: {
+            newName: string;
+        };
+        SetPrimaryKeyDto: {
+            fields: string[];
         };
         DoNotStoreEntryDto: {
             /** @enum {string} */
@@ -4148,6 +4217,111 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetRetentionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_addColumn: {
+        parameters: {
+            query?: {
+                /** @description Store data that matches the do-not-store list; without it a match is refused with 409 `do_not_store`. */
+                confirmDoNotStore?: boolean;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddColumnDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_deleteColumn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+                column: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_renameColumn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+                column: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameColumnDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_setPrimaryKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPrimaryKeyDto"];
             };
         };
         responses: {

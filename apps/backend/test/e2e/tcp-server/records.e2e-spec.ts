@@ -499,6 +499,10 @@ describe('Records API (e2e)', () => {
     ['post', '/export'],
     ['post', '/tables/orders/rows/delete'],
     ['put', '/tables/orders/retention'],
+    ['post', '/tables/orders/columns'],
+    ['patch', '/tables/orders/columns/qty'],
+    ['delete', '/tables/orders/columns/qty'],
+    ['put', '/tables/orders/primary-key'],
     ['get', '/do-not-store'],
     ['post', '/do-not-store'],
     ['patch', '/do-not-store/x'],
@@ -531,6 +535,109 @@ describe('Records API (e2e)', () => {
         expect.objectContaining({ entity: 'company' }),
         { entity: 'record', reason: 'replay' },
         { entity: 'record', action: 'add_row', table: 'live' },
+      ]);
+    });
+  });
+
+  describe('column changes (001.06)', () => {
+    // One table per test: each starts from its own fixture.
+    const tables = ['cols_add', 'cols_key', 'cols_drop', 'cols_live'];
+    const rowsOf = async (table: string) =>
+      (await alice().get(`/tables/${table}`).expect(200)).body as {
+        definition: { schema: { properties: Record<string, unknown> } };
+        rows: Row[];
+      };
+
+    beforeAll(async () => {
+      for (const name of tables) {
+        await records.createTable(companyId, { ...ORDERS, name }, null);
+        await alice()
+          .post(`/tables/${name}/rows`)
+          .send({ data: { order_id: 'A1', qty: 1, note: 'x' } })
+          .expect(201);
+      }
+    });
+
+    it('adds a column with a default, then renames it, in the table and every row', async () => {
+      const added = await alice()
+        .post('/tables/cols_add/columns')
+        .send({ column: 'tier', type: 'string', default: 'basic' })
+        .expect(201);
+      expect(added.body).toMatchObject({
+        schema: { properties: { tier: { type: 'string' } } },
+      });
+      expect((await rowsOf('cols_add')).rows[0].data.tier).toBe('basic');
+
+      await alice()
+        .patch('/tables/cols_add/columns/tier')
+        .send({ newName: 'level' })
+        .expect(200);
+      const renamed = await rowsOf('cols_add');
+      expect(Object.keys(renamed.definition.schema.properties)).toContain(
+        'level',
+      );
+      expect(renamed.rows[0].data).toMatchObject({ level: 'basic' });
+      expect(renamed.rows[0].data).not.toHaveProperty('tier');
+    });
+
+    it('sets a key including the new column, and will not delete a key field', async () => {
+      await alice()
+        .post('/tables/cols_key/columns')
+        .send({ column: 'site', type: 'string', default: 'north' })
+        .expect(201);
+      const set = await alice()
+        .put('/tables/cols_key/primary-key')
+        .send({ fields: ['order_id', 'site'] })
+        .expect(200);
+      expect(set.body).toMatchObject({ primaryKey: ['order_id', 'site'] });
+
+      const refused = await alice()
+        .delete('/tables/cols_key/columns/site')
+        .expect(400);
+      expect(JSON.stringify(refused.body)).toContain(
+        'take it out of the key first',
+      );
+    });
+
+    it('deletes a column that is not in the key', async () => {
+      const res = await alice()
+        .delete('/tables/cols_drop/columns/note')
+        .expect(200);
+      expect(res.body).toMatchObject({ primaryKey: ['order_id'] });
+      expect(
+        (res.body as { schema: { properties: object } }).schema.properties,
+      ).not.toHaveProperty('note');
+      expect((await rowsOf('cols_drop')).rows[0].data).not.toHaveProperty(
+        'note',
+      );
+    });
+
+    it('audits a change as the user and tells the stream only the table and action', async () => {
+      const events$ = consumeSse<WireEvent>(
+        app,
+        `/api/company/${companyId}/events`,
+        { Authorization: `Bearer ${aliceJwt}` },
+        3,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await alice()
+        .post('/tables/cols_live/columns')
+        .send({ column: 'secret_col', type: 'string' })
+        .expect(201);
+
+      const payloads = (await events$).map((e) =>
+        e.type === 'audit' ? e.event.payload : {},
+      );
+      expect(payloads[2]).toEqual({
+        entity: 'record',
+        action: 'alter_table',
+        table: 'cols_live',
+      });
+      const audited = (await userChanges()).filter(
+        (c) => c.action === 'alter_table' && c.table === 'cols_live',
+      );
+      expect(audited).toEqual([
+        expect.objectContaining({ op: 'add_column', userId: 'alice' }),
       ]);
     });
   });
