@@ -1124,6 +1124,12 @@ The lazy chunk is about 971 kB (272 kB gzipped).
   first, with the row count and **Download a copy first**, focus on No. A
   change closes the dialog, reloads the table (clearing undo, whose entries
   name old columns) and is announced; focus returns to the More menu.
+  **Type** on each column changes its type; when some values won't convert,
+  an alertdialog quotes the server's count and examples, offers **Download a
+  copy first**, and blanks them only on **Blank them and change type** (focus
+  on No). Unique keys are listed under the columns, each with **Drop** (asks
+  first); **Add unique key** uses the same checkbox form as Change key. A
+  column in a unique key can't be deleted until that key is dropped.
 
 Components import hooks from `src/api/hooks.ts` as usual
 (`useLiveRecordTables`, `useRecordTable`, `useLiveRecordTableChanges`,

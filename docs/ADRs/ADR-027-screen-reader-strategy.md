@@ -367,5 +367,5 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **Every action in the Columns dialog names its column** ("Rename note", "Delete note"), so a list of buttons reads unambiguously out of context.
 - **A disabled button says why in visible text,** linked as its description: a key column's Delete reads "In a key, so it cannot be deleted…". Disabled alone would leave a screen reader user guessing.
 - **A change closes the dialog and is announced.** Focus returns to the More menu that opened it, the one stable place, rather than into a list that has just changed under it.
-- **Delete asks first** in an `alertdialog` with the row count and a download, focus on No, as Clear and Delete table do.
+- **Delete asks first** in an `alertdialog` with the row count and a download, focus on No, as Clear and Delete table do. So do dropping a unique key and a retype that would blank values; the latter quotes the server's count and examples, so the reader hears exactly what would go.
 - **A refused key change is linked to its checkbox group** with `aria-describedby`, not `isInvalid`: native validation would block the next submit until the ticks changed, though the fix may lie in the rows.
