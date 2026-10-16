@@ -447,3 +447,233 @@ test.describe('a record table changed elsewhere (001.05)', () => {
     ).toHaveCount(0);
   });
 });
+
+/* Literals copied from `strings.ts` (001.06). */
+const FEEDINGS_SHEET = 'feedings records';
+const COLUMNS_MENU_ITEM = 'Columns…';
+const COLUMNS_OUT_OF_DATE =
+  "This table's columns were changed elsewhere. It cannot be edited until you reload.";
+const KEY_NO_DELETE =
+  'In a key, so it cannot be deleted. Take it out of the key first.';
+
+/** The grid cell in `column` (0-based) of the `feedings` row dated `date`. */
+const feedingCell = (page: Page, date: string, column: number) =>
+  page
+    .getByRole('grid', { name: FEEDINGS_SHEET })
+    .getByRole('row')
+    .filter({
+      has: page.getByRole('gridcell', { name: new RegExp(`^${date}( |$)`) }),
+    })
+    .locator('[role="gridcell"]:not([col-id="ag-Grid-SelectionColumn"])')
+    .nth(column);
+
+const feedingHeader = (page: Page, name: string) =>
+  page
+    .getByRole('grid', { name: FEEDINGS_SHEET })
+    .getByRole('columnheader', { name: new RegExp(`^${name}`) });
+
+/** A `feedings` table with a two-field key and two rows, through the API only. */
+const makeFeedings = async (
+  request: APIRequestContext,
+  fixture: Fixture,
+  extraColumn?: string,
+) => {
+  const headers = { Authorization: `Bearer ${fixture.token}` };
+  const base = `/api/company/${fixture.companyId}/records/tables`;
+  const created = await request.post(base, {
+    headers,
+    data: {
+      name: 'feedings',
+      purpose: 'One row per feeding.',
+      schema: {
+        type: 'object',
+        properties: {
+          feeding_date: { type: 'string', format: 'date' },
+          feeding_time: { type: 'string' },
+          note: { type: 'string' },
+        },
+        required: ['feeding_date', 'feeding_time'],
+      },
+      primaryKey: ['feeding_date', 'feeding_time'],
+    },
+  });
+  expect(created.status()).toBe(201);
+  for (const data of [
+    { feeding_date: '2026-10-01', feeding_time: '08:00', note: 'first' },
+    { feeding_date: '2026-10-02', feeding_time: '08:00', note: 'second' },
+  ]) {
+    const added = await request.post(`${base}/feedings/rows`, {
+      headers,
+      data: { data },
+    });
+    expect(added.status()).toBe(201);
+  }
+  if (extraColumn !== undefined) {
+    await addColumnElsewhere(request, fixture, extraColumn);
+  }
+};
+
+/** Someone else adds a text column, with `chicken` for the rows already there. */
+const addColumnElsewhere = async (
+  request: APIRequestContext,
+  fixture: Fixture,
+  column: string,
+) => {
+  const res = await request.post(
+    `/api/company/${fixture.companyId}/records/tables/feedings/columns`,
+    {
+      headers: { Authorization: `Bearer ${fixture.token}` },
+      data: { column, type: 'string', default: 'chicken' },
+    },
+  );
+  expect(res.status()).toBe(201);
+};
+
+const openFeedings = async (page: Page, companyId: string) => {
+  await gotoSignedIn(page, `/company/${companyId}#tables`);
+  await page
+    .getByRole('listbox', { name: TABLES_LIST })
+    .getByRole('option', { name: /^feedings/ })
+    .click();
+  await expect(page.getByRole('grid', { name: FEEDINGS_SHEET })).toBeVisible();
+};
+
+/** More, then Columns…: the dialog that changes the table's columns. */
+const openColumns = async (page: Page) => {
+  await page.getByRole('button', { name: 'More actions for feedings' }).click();
+  await page.getByRole('menuitem', { name: COLUMNS_MENU_ITEM }).click();
+  const dialog = page.getByRole('dialog', { name: 'Columns of feedings' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+};
+
+test.describe('column changes (001.06)', () => {
+  let fixture: Fixture;
+
+  test.beforeEach(async ({ request }) => {
+    fixture = await makeFixture(request);
+  });
+
+  test.afterEach(async ({ request }) => {
+    await dropFixture(request, fixture);
+  });
+
+  test('a column is added from the dialog, with a value for existing rows', async ({
+    page,
+    request,
+  }) => {
+    await makeFeedings(request, fixture);
+    await openFeedings(page, fixture.companyId);
+    const dialog = await openColumns(page);
+    await dialog.getByRole('button', { name: 'Add column' }).click();
+    await dialog.getByLabel('Column name').fill('animal');
+    await dialog.getByRole('radio', { name: 'Text' }).check();
+    await dialog
+      .getByLabel('Value for rows already in the table (optional)')
+      .fill('chicken');
+    await dialog.getByRole('button', { name: 'Add column' }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(feedingHeader(page, 'animal')).toBeVisible();
+    for (const date of ['2026-10-01', '2026-10-02']) {
+      await expect(
+        feedingCell(page, date, 0)
+          .locator('xpath=..')
+          .locator('[col-id="animal"]'),
+      ).toHaveText('chicken');
+    }
+  });
+
+  test('a column is renamed', async ({ page, request }) => {
+    await makeFeedings(request, fixture, 'animal');
+    await openFeedings(page, fixture.companyId);
+    const dialog = await openColumns(page);
+    await dialog.getByRole('button', { name: 'Rename animal' }).click();
+    await dialog.getByLabel('New name for animal').fill('species');
+    await dialog.getByRole('button', { name: 'Rename', exact: true }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(feedingHeader(page, 'species')).toBeVisible();
+    await expect(feedingHeader(page, 'animal')).toHaveCount(0);
+  });
+
+  test('the key is changed to include a column', async ({ page, request }) => {
+    await makeFeedings(request, fixture, 'species');
+    await openFeedings(page, fixture.companyId);
+    let dialog = await openColumns(page);
+    await dialog.getByRole('button', { name: 'Change key' }).click();
+    // The checkbox input sits under its styled label, which takes the click.
+    await dialog.getByText('species', { exact: true }).click();
+    await dialog.getByRole('button', { name: 'Save key' }).click();
+    await expect(dialog).toBeHidden();
+
+    dialog = await openColumns(page);
+    await expect(dialog).toContainText(
+      'Key: feeding_date, feeding_time, species.',
+    );
+
+    // The same date and time now differ by species, so this is not a clash.
+    const third = await request.post(
+      `/api/company/${fixture.companyId}/records/tables/feedings/rows`,
+      {
+        headers: { Authorization: `Bearer ${fixture.token}` },
+        data: {
+          data: {
+            feeding_date: '2026-10-01',
+            feeding_time: '08:00',
+            species: 'duck',
+          },
+        },
+      },
+    );
+    expect(third.status()).toBe(201);
+  });
+
+  test('a column is deleted after asking, and a key column cannot be', async ({
+    page,
+    request,
+  }) => {
+    await makeFeedings(request, fixture);
+    await openFeedings(page, fixture.companyId);
+    const dialog = await openColumns(page);
+    await expect(
+      dialog.getByRole('button', { name: 'Delete feeding_time' }),
+    ).toBeDisabled();
+    await expect(dialog.getByText(KEY_NO_DELETE).first()).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Delete note' }).click();
+    const confirm = page.getByRole('alertdialog', {
+      name: 'Delete note from feedings?',
+    });
+    await expect(
+      confirm.getByRole('button', { name: 'Download a copy first' }),
+    ).toBeVisible();
+    await expect(confirm.getByRole('button', { name: 'No' })).toBeFocused();
+    await confirm.getByRole('button', { name: 'Delete column' }).click();
+
+    await expect(confirm).toBeHidden();
+    await expect(feedingHeader(page, 'feeding_date')).toBeVisible();
+    await expect(feedingHeader(page, 'note')).toHaveCount(0);
+  });
+
+  test('a column added elsewhere says so, locks the sheet, and shows on Reload', async ({
+    page,
+    request,
+  }) => {
+    await makeFeedings(request, fixture);
+    await openFeedings(page, fixture.companyId);
+    await addColumnElsewhere(request, fixture, 'animal');
+
+    const notice = page.getByRole('group', { name: OUT_OF_DATE });
+    await expect(notice).toContainText(COLUMNS_OUT_OF_DATE);
+    await expect(feedingHeader(page, 'animal')).toHaveCount(0);
+    await feedingCell(page, '2026-10-01', 2).click();
+    await expect(
+      feedingCell(page, '2026-10-01', 2).locator('input'),
+    ).toHaveCount(0);
+
+    await notice.getByRole('button', { name: RELOAD }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(feedingHeader(page, 'animal')).toBeVisible();
+  });
+});
