@@ -1,8 +1,17 @@
-import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render as rtlRender, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { UserProfile } from 'oidc-client-ts';
+import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
+import {
+  installFetchMock,
+  requestedUrls,
+  respondByRoute,
+} from '../../test-support/fetch-mock';
 import { ProfileDialog } from './ProfileDialog';
 
 // `useAuth()` is the one seam this dialog reads through — see the component's
@@ -33,9 +42,55 @@ const SUB_ONLY_PROFILE: UserProfile = {
   iat: 0,
 };
 
+const COMPANIES_ROUTE = /\/api\/company$/;
+
+/** Answers the company list with the given status and body. */
+const respondCompanies = (body: unknown, status = 200): void =>
+  respondByRoute([[COMPANIES_ROUTE, { status, body }]]);
+
+/** The dialog reads the company list, so it needs a query client and a router. */
+const render = (ui: ReactElement) =>
+  rtlRender(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+/** A `CompanyListItemDto`, filled in with the fields this dialog never reads. */
+const company = (
+  id: string,
+  name: string,
+  memberType: 'creator' | 'owner' | 'member' | null,
+) => ({
+  id,
+  slug: id,
+  name,
+  description: '',
+  memberType,
+  stats: {
+    activeAgents: 0,
+    tasksByStatus: {
+      ready: 0,
+      planning: 0,
+      'in-progress': 0,
+      finalising: 0,
+      succeeded: 0,
+      failed: 0,
+      cancelled: 0,
+    },
+    openEnquiries: 0,
+  },
+});
+
 describe('ProfileDialog', () => {
   beforeEach(() => {
     profile = FULL_PROFILE;
+    installFetchMock();
+    respondByRoute([[COMPANIES_ROUTE, { body: [] }]]);
   });
 
   it("renders the signed-in user's name, email and subject", () => {
@@ -111,5 +166,70 @@ describe('ProfileDialog', () => {
     // document.body, not container: React Aria's `Modal` portals the dialog
     // out of the render container.
     await expectNoA11yViolations(document.body);
+  });
+
+  describe('the companies section', () => {
+    it('lists the reachable companies as links, with the member type when known', async () => {
+      respondCompanies([
+        company('c1', 'Acme Corporation', 'creator'),
+        company('c2', 'Globex', null),
+      ]);
+      render(<ProfileDialog onClose={() => {}} />);
+
+      expect(
+        screen.getByRole('heading', { name: t('profile.companies.heading') }),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByRole('link', { name: 'Acme Corporation' }),
+      ).toHaveAttribute('href', '/company/c1');
+      expect(screen.getByRole('link', { name: 'Globex' })).toHaveAttribute(
+        'href',
+        '/company/c2',
+      );
+      const items = screen.getAllByRole('listitem');
+      expect(items[0]).toHaveTextContent(
+        `Acme Corporation — ${t('memberType.creator')}`,
+      );
+      expect(items[1]).toHaveTextContent(/^Globex$/);
+      await expectNoA11yViolations(document.body);
+    });
+
+    it('sends no ?all parameter: this is the membership scope, not the administrator one', async () => {
+      respondCompanies([company('c1', 'Acme Corporation', 'member')]);
+      render(<ProfileDialog onClose={() => {}} />);
+      await screen.findByRole('link', { name: 'Acme Corporation' });
+
+      expect(requestedUrls()[0]).not.toContain('all');
+    });
+
+    it('says what it means to reach nothing when there are no companies', async () => {
+      render(<ProfileDialog onClose={() => {}} />);
+
+      expect(
+        await screen.findByText(t('memberships.empty.body')),
+      ).toBeInTheDocument();
+    });
+
+    it('shows a failure message when the companies fail to load', async () => {
+      respondCompanies({ statusCode: 500, message: 'boom' }, 500);
+      render(<ProfileDialog onClose={() => {}} />);
+
+      expect(
+        await screen.findByText(t('memberships.error')),
+      ).toBeInTheDocument();
+    });
+
+    it('closes the dialog when a company is chosen', async () => {
+      respondCompanies([company('c1', 'Acme Corporation', 'owner')]);
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      render(<ProfileDialog onClose={onClose} />);
+
+      await user.click(
+        await screen.findByRole('link', { name: 'Acme Corporation' }),
+      );
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
   });
 });

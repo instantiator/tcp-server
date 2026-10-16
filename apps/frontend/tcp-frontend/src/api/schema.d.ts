@@ -570,6 +570,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/role/{roleId}/knowledge/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reindex one role's knowledge */
+        post: operations["KnowledgeController_reindexRoleKnowledge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/role/{roleId}/knowledge/{filename}": {
         parameters: {
             query?: never;
@@ -623,6 +640,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/knowledge/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Query the RAG index for a company's shared knowledge */
+        get: operations["KnowledgeController_queryCompanyKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company/{companyId}/knowledge/{filename}": {
         parameters: {
             query?: never;
@@ -652,6 +686,23 @@ export interface paths {
         put?: never;
         /** Reindex all knowledge for a company */
         post: operations["KnowledgeController_reindexCompanyKnowledge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the MCP servers a role can use */
+        get: operations["McpServersController_list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1898,6 +1949,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             stats: components["schemas"]["CompanyStatsDto"];
+            /**
+             * @description The caller's own membership; null on an administrator's ?all row for a company they don't belong to.
+             * @enum {string|null}
+             */
+            memberType: "creator" | "owner" | "member" | null;
             slug: string;
             name: string;
             description: string;
@@ -1936,7 +1992,7 @@ export interface components {
             slug: string;
             name: string;
             description: string;
-            llmConfig?: Record<string, never> | null;
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             systemPromptTemplate?: string | null;
             mcpServerList: string[];
             mcpServerToggles?: {
@@ -1972,7 +2028,7 @@ export interface components {
             slug: string;
             name: string;
             description: string;
-            llmConfig?: Record<string, never> | null;
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             systemPromptTemplate?: string | null;
             rolePrompt?: string | null;
             knowledgeDomains: string[];
@@ -1984,6 +2040,7 @@ export interface components {
             queryIndex: number;
         };
         UpdateRoleDto: {
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             slug?: string;
             name?: string;
             description?: string;
@@ -1993,7 +2050,6 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
-            llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
         ResumeResultDto: {
@@ -2245,6 +2301,10 @@ export interface components {
             content: string;
             similarity: number;
         };
+        KnowledgeReindexResponseDto: {
+            /** @enum {boolean} */
+            reindexing: true;
+        };
         RoleKnowledgeStatusResponseDto: {
             roleId: string;
             roleSlug: string;
@@ -2254,9 +2314,13 @@ export interface components {
             roles: components["schemas"]["RoleKnowledgeStatusResponseDto"][];
             shared: components["schemas"]["KnowledgeStatusResponseDto"];
         };
-        KnowledgeReindexResponseDto: {
-            /** @enum {boolean} */
-            reindexing: true;
+        McpServerResponseDto: {
+            /** @description The registry name, e.g. `storage`. */
+            name: string;
+            /** @description When a role would reach for this server. */
+            usage: string;
+            /** @description Whether this deployment has the server configured (its URL is set). */
+            available: boolean;
         };
         RecordFieldSchemaDto: {
             /** @enum {string} */
@@ -3741,6 +3805,27 @@ export interface operations {
             };
         };
     };
+    KnowledgeController_reindexRoleKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeReindexResponseDto"];
+                };
+            };
+        };
+    };
     KnowledgeController_getRoleKnowledgeFile: {
         parameters: {
             query?: never;
@@ -3855,6 +3940,31 @@ export interface operations {
             };
         };
     };
+    KnowledgeController_queryCompanyKnowledge: {
+        parameters: {
+            query?: {
+                q?: string;
+                topK?: string;
+                threshold?: string;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeChunkResponseDto"][];
+                };
+            };
+        };
+    };
     KnowledgeController_getCompanyKnowledgeFile: {
         parameters: {
             query?: never;
@@ -3914,6 +4024,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeReindexResponseDto"];
+                };
+            };
+        };
+    };
+    McpServersController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpServerResponseDto"][];
                 };
             };
         };

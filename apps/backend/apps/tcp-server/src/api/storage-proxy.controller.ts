@@ -29,10 +29,7 @@ import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 import { StorageService } from '../storage/storage.service';
 import { StoredObjectResponseDto } from './dto/storage-response.dto';
-
-/** Maximum upload size accepted by {@link StorageProxyController.upload}. */
-// eslint-disable-next-line no-useless-assignment -- read inside a parameter decorator's argument, which this rule's flow analysis doesn't see as a use.
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+import { MAX_UPLOAD_BYTES } from './upload-limit';
 
 /**
  * Validates that a storage path is safe: non-empty, no leading slash,

@@ -1032,20 +1032,62 @@ describe('CompanyTabs', () => {
       );
     });
 
-    it('opens the Tables tab from a hash that names a table, and keeps the table in it', async () => {
+    it('opens the Data tab from a hash that names a table', () => {
       respondActivity();
-      const user = userEvent.setup();
+      renderActivity('/#data/tables/orders');
+
+      expect(
+        screen.getByRole('tab', { name: t('company.tab.data') }),
+      ).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTestId('hash')).toHaveTextContent(
+        '#data/tables/orders',
+      );
+    });
+
+    it('rewrites a pre-002.00 tables hash to its place under Data', async () => {
+      respondActivity();
       renderActivity('/#tables/orders');
 
       expect(
-        screen.getByRole('tab', { name: t('company.tab.tables') }),
+        screen.getByRole('tab', { name: t('company.tab.data') }),
+      ).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() =>
+        expect(screen.getByTestId('hash')).toHaveTextContent(
+          '#data/tables/orders',
+        ),
+      );
+    });
+
+    it('rewrites the pre-002.00 data protection hash to Admin → Data protection', async () => {
+      respondActivity();
+      renderActivity('/#data-protection');
+
+      expect(
+        screen.getByRole('tab', { name: t('company.tab.admin') }),
+      ).toHaveAttribute('aria-selected', 'true');
+      expect(
+        screen.getByRole('option', { name: t('admin.menu.dataProtection') }),
+      ).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() =>
+        expect(screen.getByTestId('hash')).toHaveTextContent(
+          '#admin/data-protection',
+        ),
+      );
+    });
+
+    it('opens Admin on Roles for an unknown section, and writes a chosen section into the hash', async () => {
+      respondActivity();
+      const user = userEvent.setup();
+      renderActivity('/#admin/nonsense');
+
+      expect(
+        screen.getByRole('option', { name: t('admin.menu.roles') }),
       ).toHaveAttribute('aria-selected', 'true');
 
-      await user.click(tabNamed('activity.chats.heading'));
       await user.click(
-        screen.getByRole('tab', { name: t('company.tab.tables') }),
+        screen.getByRole('option', { name: t('admin.menu.users') }),
       );
-      expect(screen.getByTestId('hash')).toHaveTextContent('#tables');
+      expect(screen.getByTestId('hash')).toHaveTextContent('#admin/users');
     });
 
     it('falls back to the office view for no hash or an unknown one', () => {

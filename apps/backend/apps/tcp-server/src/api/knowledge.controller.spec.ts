@@ -31,7 +31,10 @@ function makeSummary(
 
 describe('KnowledgeController', () => {
   let knowledge: jest.Mocked<
-    Pick<KnowledgeService, 'store' | 'list' | 'queryRag' | 'embeddingWarnings'>
+    Pick<
+      KnowledgeService,
+      'store' | 'list' | 'queryRag' | 'embeddingWarnings' | 'reindexRole'
+    >
   >;
   let controller: KnowledgeController;
   const roleId = randomUUID();
@@ -42,6 +45,7 @@ describe('KnowledgeController', () => {
       list: jest.fn().mockResolvedValue([]),
       queryRag: jest.fn().mockResolvedValue([]),
       embeddingWarnings: jest.fn().mockResolvedValue([]),
+      reindexRole: jest.fn().mockResolvedValue(undefined),
     };
     controller = new KnowledgeController(
       knowledge as unknown as KnowledgeService,
@@ -172,6 +176,34 @@ describe('KnowledgeController', () => {
     });
   });
 
+  describe('queryCompanyKnowledge', () => {
+    it("delegates to knowledge.queryRag with the company's shared scope", async () => {
+      await controller.queryCompanyKnowledge(
+        'acme',
+        fakeRes() as unknown as Response,
+        'remote work policy',
+        '3',
+      );
+      expect(knowledge.queryRag).toHaveBeenCalledWith(
+        { kind: 'company', companyId: 'acme' },
+        'remote work policy',
+        3,
+        undefined,
+      );
+    });
+
+    it('rejects a missing q with a 400', async () => {
+      await expect(
+        controller.queryCompanyKnowledge(
+          'acme',
+          fakeRes() as unknown as Response,
+          undefined,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(knowledge.queryRag).not.toHaveBeenCalled();
+    });
+  });
+
   describe('queryRoleKnowledge', () => {
     it('delegates to knowledge.queryRag with parsed topK/threshold', async () => {
       const chunks = [
@@ -195,7 +227,7 @@ describe('KnowledgeController', () => {
 
       expect(result).toBe(chunks);
       expect(knowledge.queryRag).toHaveBeenCalledWith(
-        roleId,
+        { kind: 'role', roleId },
         'remote work policy',
         3,
         0.5,
@@ -209,7 +241,7 @@ describe('KnowledgeController', () => {
         'remote work policy',
       );
       expect(knowledge.queryRag).toHaveBeenCalledWith(
-        roleId,
+        { kind: 'role', roleId },
         'remote work policy',
         undefined,
         undefined,
@@ -279,6 +311,18 @@ describe('KnowledgeController', () => {
         'X-Tcp-Warnings',
         JSON.stringify([encodeURIComponent('No embedding config.')]),
       );
+    });
+  });
+
+  describe('reindexRoleKnowledge', () => {
+    it('delegates to the service and reports the reindex as started', async () => {
+      const result = await controller.reindexRoleKnowledge(
+        roleId,
+        fakeRes() as unknown as Response,
+      );
+
+      expect(knowledge.reindexRole).toHaveBeenCalledWith(roleId);
+      expect(result).toEqual({ reindexing: true });
     });
   });
 

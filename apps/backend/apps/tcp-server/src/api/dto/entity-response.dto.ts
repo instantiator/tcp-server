@@ -17,6 +17,7 @@ import {
   type TcpAssignmentStatus,
   type TcpTaskStatus,
 } from '@tcp/shared';
+import { LlmConfigDto } from './llm-config.dto';
 
 /**
  * The entities as they appear **on the wire**, rather than as they are
@@ -180,10 +181,23 @@ void _memberTypesExhaustive;
 /** {@link TcpCompany} minus its unloaded `plannerRole` relation. */
 export class CompanyResponseDto extends OmitType(TcpCompany, [
   'plannerRole',
-] as const) {}
+] as const) {
+  /** Its model, with `apiKey` masked as `***`; see {@link RoleResponseDto.llmConfig}. */
+  @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
+  declare llmConfig?: LlmConfigDto | null;
+}
 
 /** {@link TcpRole} minus its unloaded `company` relation. */
-export class RoleResponseDto extends OmitType(TcpRole, ['company'] as const) {}
+export class RoleResponseDto extends OmitType(TcpRole, ['company'] as const) {
+  /**
+   * The role's own model, or `null` to use the company's. Typed here because
+   * the model declares it as the `LlmConfig` interface, which the Swagger
+   * plugin can't describe, so the web client received `Record<string, never>`.
+   * `apiKey` arrives masked as `***` (`MaskSecretsInterceptor`).
+   */
+  @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
+  declare llmConfig?: LlmConfigDto | null;
+}
 
 /** {@link TcpTask} minus its unloaded relations. */
 export class TaskResponseDto extends OmitType(TcpTask, [

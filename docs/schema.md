@@ -58,6 +58,8 @@ All fields optional. Non-null strings must be non-empty. Omitted fields are not 
 | `llmConfig`            | `LlmConfigDto` | No       | Nested object                                                        |
 | `rolePrompt`           | `string`       | No       |                                                                      |
 
+`PUT /api/role/:id` (`UpdateRoleDto`) works the same way: omitted fields are not changed, and `llmConfig: null` clears the role's own model so it uses the company's again. Role and company responses type `llmConfig` as `LlmConfigDto | null`.
+
 #### `LlmConfigDto` — nested in company and role DTOs
 
 | Field           | Type     | Required | Constraints                      |
@@ -197,10 +199,11 @@ stat, not one request per company (see [ADR-023](ADRs/ADR-023-backend-api-surfac
 One row of the `GET /api/company` response: the company record plus its
 stats. The company fields are those of `CreateCompanyDto`.
 
-| Field   | Type              | Required | Notes                    |
-| ------- | ----------------- | -------- | ------------------------ |
-| `id`    | UUID string       | Yes      | The company's identifier |
-| `stats` | `CompanyStatsDto` | Yes      | See above                |
+| Field        | Type                                       | Required | Notes                                                                                                   |
+| ------------ | ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------- |
+| `id`         | UUID string                                | Yes      | The company's identifier                                                                                |
+| `stats`      | `CompanyStatsDto`                          | Yes      | See above                                                                                               |
+| `memberType` | `"creator" \| "owner" \| "member" \| null` | Yes      | The caller's own membership. `null` on an administrator's `?all` row for a company they don't belong to |
 
 ---
 

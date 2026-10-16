@@ -43,6 +43,7 @@ import { ConversationService } from './conversation.service';
 import { InternalController } from './internal.controller';
 import { InternalTaskController } from './internal-task.controller';
 import { KnowledgeController } from './knowledge.controller';
+import { McpServersController } from './mcp-servers.controller';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
 import { StorageActionsController } from './storage-actions.controller';
@@ -123,6 +124,7 @@ import { TaskService } from './task.service';
     InternalController,
     InternalTaskController,
     KnowledgeController,
+    McpServersController,
     RecordsController,
     RoleController,
     StorageActionsController,

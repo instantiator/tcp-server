@@ -13,7 +13,6 @@ import { useLiveCompanyState, useSystemStatus } from '../api/hooks';
 import { startSignOut } from '../auth/sign-out';
 import { useSession } from '../auth/useSession';
 import { Icon, WithTooltip } from '../components/Icon/Icon';
-import { MembershipsDialog } from '../components/MembershipsDialog/MembershipsDialog';
 import { ShutdownDialog } from '../components/ShutdownDialog/ShutdownDialog';
 import { SystemHealthDialog } from '../components/SystemHealthDialog/SystemHealthDialog';
 import { ProfileDialog } from '../components/ProfileDialog/ProfileDialog';
@@ -76,7 +75,7 @@ export const Header = () => {
   const session = useSession();
   const companyId = useMatch('/company/:companyId/*')?.params.companyId;
   const [openDialog, setOpenDialog] = useState<
-    'profile' | 'memberships' | 'health' | 'shutdown' | null
+    'profile' | 'health' | 'shutdown' | null
   >(null);
   // A failed or pending status call leaves the System menu out.
   const isAdmin = useSystemStatus().data?.admin === true;
@@ -86,8 +85,6 @@ export const Header = () => {
       void startSignOut();
     } else if (key === 'profile') {
       setOpenDialog('profile');
-    } else if (key === 'memberships') {
-      setOpenDialog('memberships');
     }
   };
 
@@ -146,9 +143,6 @@ export const Header = () => {
             <Popover>
               <Menu onAction={onAccountAction}>
                 <MenuItem id="profile">{t('header.account.profile')}</MenuItem>
-                <MenuItem id="memberships">
-                  {t('header.account.memberships')}
-                </MenuItem>
                 <MenuItem id="signOut">{t('header.account.signOut')}</MenuItem>
               </Menu>
             </Popover>
@@ -158,13 +152,6 @@ export const Header = () => {
 
       {openDialog === 'profile' && (
         <ProfileDialog
-          onClose={() => {
-            setOpenDialog(null);
-          }}
-        />
-      )}
-      {openDialog === 'memberships' && (
-        <MembershipsDialog
           onClose={() => {
             setOpenDialog(null);
           }}

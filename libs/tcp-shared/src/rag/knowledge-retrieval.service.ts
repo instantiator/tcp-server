@@ -46,8 +46,10 @@ export class KnowledgeRetrievalService {
   /**
    * Returns the top-K most relevant chunks for `query`, searching the role's
    * own knowledge base **plus** its company's shared (`roleId IS NULL`) chunks.
+   * With no role, only the shared chunks are searched.
    *
-   * @param roleId - The querying role, whose chunks are searched.
+   * @param roleId - The querying role, whose chunks are searched, or `null`
+   *   for the company's shared chunks alone.
    * @param companyId - The role's company, whose shared chunks are also searched.
    * @param query - Natural-language query string (e.g. the task prompt).
    * @param embeddingConfig - Company embedding config. Returns empty when null.
@@ -57,7 +59,7 @@ export class KnowledgeRetrievalService {
    *   the value resolved through their `runConfig` cascade instead.
    */
   async retrieve(
-    roleId: UUID,
+    roleId: UUID | null,
     companyId: UUID,
     query: string,
     embeddingConfig: LlmConfig | null | undefined,
@@ -81,7 +83,7 @@ export class KnowledgeRetrievalService {
     );
 
     this.logger.debug(
-      `RAG: ${rows.length} chunk(s) above threshold ${threshold} for role ${roleId} + shared`,
+      `RAG: ${rows.length} chunk(s) above threshold ${threshold} for ${roleId ? `role ${roleId} + shared` : `company ${companyId} shared`}`,
     );
     return rows;
   }

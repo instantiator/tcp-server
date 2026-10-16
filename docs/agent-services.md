@@ -47,7 +47,7 @@ Add an `embeddingConfig` to the company:
 
 ### CLI commands
 
-Knowledge is managed entirely through `tcp-cli` — `store-knowledge`,
+Knowledge is managed through `tcp-cli` or the web client (company page, **Admin** tab: upload, delete, rebuild the index and test search, for a role and for the company's shared knowledge). The CLI verbs are `store-knowledge`,
 `list-knowledge`, `get-knowledge`, `delete-knowledge`, `reindex-knowledge`,
 `get-knowledge-index-status`, and `query-knowledge` (which shows exactly what a
 role's next prompt would retrieve, without spending an LLM call). See

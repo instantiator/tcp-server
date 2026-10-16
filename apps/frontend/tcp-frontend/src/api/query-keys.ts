@@ -155,6 +155,8 @@ export const queryKeys = {
     ['knowledge', 'list', { scope: 'company', companyId }] as const,
   companyKnowledgeStatus: (companyId: string) =>
     ['knowledge', 'status', { scope: 'company', companyId }] as const,
+  companyKnowledgeSearch: (companyId: string, query: string) =>
+    ['knowledge', 'search', { scope: 'company', companyId, query }] as const,
 
   /** One company's active notifications, with the application-wide ones. A dismissal patches the row in place, so there is no separate detail key. */
   notifications: (companyId: string) =>
@@ -191,6 +193,7 @@ export const queryKeys = {
   companySpend: (companyId: string) => ['spend', 'detail', companyId] as const,
   /** Who the caller is to the system (admin or not) and the shutdown state. */
   systemStatus: () => ['system', 'detail'] as const,
+  mcpServers: () => ['system', 'list'] as const,
   /** Whether a shutdown or restart is under way, and whether restart is available. */
   shutdownStatus: () => ['system', 'history'] as const,
   /** The combined health of the server, agent runner and MCP servers. */

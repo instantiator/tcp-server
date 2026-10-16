@@ -730,7 +730,7 @@ Report the RAG-indexing status of a role's knowledge scope, or of a company's sh
 
 ### `query-knowledge`
 
-Runs a RAG similarity search for a role and prints the raw chunks that would be injected into a prompt — the same data RAG injection would provide, without invoking any chat/LLM call. Searches the role's own chunks plus its company's shared chunks in one call, so there's no separate company-only variant.
+Runs a RAG similarity search for a role and prints the raw chunks that would be injected into a prompt — the same data RAG injection would provide, without invoking any chat/LLM call. Searches the role's own chunks plus its company's shared chunks in one call. The API also has a company-only search (`GET /api/company/:companyId/knowledge/query`, shared chunks alone, used by the web client's Admin → Knowledge); this command doesn't offer it.
 
 - **stdout**: JSON `{ id, documentPath, chunkIndex, content, similarity }[]`, ranked by similarity descending
 

@@ -13,6 +13,7 @@ import { makeTestJwt } from '../helpers/test-jwt';
 interface CompanyRow {
   id: string;
   slug: string;
+  memberType: string | null;
   stats: {
     activeAgents: number;
     tasksByStatus: Record<string, number>;
@@ -149,5 +150,18 @@ describe('GET /api/company scoping (e2e)', () => {
         ]);
       }
     }
+  });
+
+  it("carries the caller's own member type, and null where they are not a member", async () => {
+    const mine = await list(aliceJwt);
+    expect(mine.find((r) => r.id === aliceCompanyId)?.memberType).toBe(
+      'creator',
+    );
+    expect(mine.find((r) => r.id === emailOnlyCompanyId)?.memberType).toBe(
+      'member',
+    );
+    // An administrator's ?all row for a company they don't belong to.
+    const all = await list(adminJwt, true);
+    expect(all.find((r) => r.id === bobCompanyId)?.memberType).toBeNull();
   });
 });

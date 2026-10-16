@@ -27,11 +27,22 @@ export function taskOutputsUrl(
   companySlug: string,
   taskId: string,
 ): string | null {
+  return storageFolderUrl(config, `${companySlug}/tasks/${taskId}/completed/`);
+}
+
+/**
+ * Builds the object-store console's URL for any folder (`prefix`, with its
+ * trailing slash), or `null` without the console configured — the format
+ * {@link taskOutputsUrl} documents.
+ */
+export function storageFolderUrl(
+  config: Pick<RuntimeConfig, 'storageConsoleUrl' | 'storageBucket'>,
+  prefix: string,
+): string | null {
   const { storageConsoleUrl, storageBucket } = config;
   if (storageConsoleUrl === undefined || storageBucket === undefined) {
     return null;
   }
-  const prefix = `${companySlug}/tasks/${taskId}/completed/`;
   const base = storageConsoleUrl.replace(/\/+$/, '');
   return `${base}/browser/${encodeURIComponent(storageBucket)}/${encodeURIComponent(prefix)}`;
 }

@@ -1,0 +1,14 @@
+/* The Data tab's own parts; its layout is the shared `.tcp-side-menu`. Theme tokens only (ADR-026). */
+.data-panel__item {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Smaller, not muted: it inherits the item's colour, so it stays readable on a selected row. */
+.data-panel__count {
+  font-size: 0.875em;
+}
+
+.data-panel__hint {
+  color: var(--tcp-color-text-muted);
+}

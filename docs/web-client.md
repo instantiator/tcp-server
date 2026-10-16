@@ -236,7 +236,7 @@ on one page.
 
 **The company page's tabs follow the URL hash** (005.01): `#agents`, `#tasks`,
 `#consultations`, `#enquiries`, `#chats`, `#notifications` (000.02) and
-`#tables` or `#tables/<name>` (001.03) select the activity tabs, and no hash (or an unknown one) selects the office view.
+`#data` (with `#data/tables/<name>` or `#data/documents`) and `#admin/<section>` (002.00) select the activity tabs, and no hash (or an unknown one) selects the office view. The old `#tables/<name>` and `#data-protection` are read as their new hashes and rewritten in the address bar.
 Choosing a tab replaces the history entry rather than pushing one.
 `useRouteChange` watches only the pathname, so a hash change moves no focus.
 This is what lets the new-enquiry notification's link to `#enquiries` open
@@ -246,7 +246,7 @@ dialog: `?notification=<id>#notifications` and `?enquiry=<id>#enquiries` focus
 that row (below), and `?task=<id>#tasks` opens that task's dialog. The activity panels stay mounted while hidden
 (`shouldForceMount`, then `inert` and `display: none`), so a list keeps its
 filters across a tab switch, and each tab's count badge stays current. The
-Tables tab is the exception (see [Record tables](#record-tables)).
+Data tab is the exception (see [Record tables](#record-tables)).
 
 **Breadcrumb spend meters** (000.02): each crumb in `Breadcrumbs` can carry a
 `bar`, rendered under its label in the same `li` — `SpendBar`, under the
@@ -550,35 +550,37 @@ this is how to use what it decided.
 
 ### The hooks
 
-| Hook                                              | What it gives you                                             | Live?                                  |
-| ------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------- |
-| `useCompanies(params?)`                           | Every company the caller can see                              | No — no company-list stream, see below |
-| `useLiveCompanyState(companyId)`                  | One company                                                   | Yes                                    |
-| `useLiveCompanyAgentsList(companyId)`             | A company's agents                                            | Yes                                    |
-| `useLiveCompanyTasksList(companyId)`              | A company's tasks                                             | Yes                                    |
-| `useLiveCompanyChatsList(companyId)`              | A company's chats (assignments in `chat` mode)                | Yes                                    |
-| `useLiveCompanyConsultationsList(companyId)`      | Open consultations (assignments in `consultee` mode, no task) | Yes                                    |
-| `useLiveCompanyEnquiriesList(companyId, status?)` | A company's enquiries                                         | Yes                                    |
-| `useCompanyRolesList(companyId)`                  | A company's roles                                             | No                                     |
-| `useCompanyKnowledgeList(companyId)`              | A company's knowledge index                                   | No                                     |
-| `useLiveAssignmentsList(filter)`                  | Assignments, filtered by any of company/task/role id          | Yes                                    |
-| `useLiveTaskState(taskId)`                        | One task                                                      | Yes, but unreadable — see below        |
-| `useLiveChatState(assignmentId)`                  | One chat, as an assignment (not its messages)                 | Yes                                    |
-| `useLiveConsultationState(assignmentId)`          | One consultation, as an assignment                            | Yes                                    |
-| `useLiveEnquiryState(slug)`                       | One enquiry, by slug                                          | Yes, but unreadable — see below        |
-| `useRoleState(roleId)`                            | One role                                                      | No                                     |
-| `useLiveAgentState({ agentId, assignmentId })`    | One agent, found by either id it can be reached through       | Yes                                    |
-| `useAgentHistory(id)`                             | An agent's audit history                                      | No                                     |
-| `useCompanyKnowledgeStatus(companyId)`            | A company's knowledge indexing status                         | No                                     |
-| `useCompanyUsers(companyId)`                      | A company's members                                           | No                                     |
-| `useRoleBySlug(companyId, slug)`                  | One role, by slug                                             | No                                     |
-| `useRoleKnowledge(roleId)`                        | A role's knowledge index                                      | No                                     |
-| `useRoleKnowledgeSearch(roleId, query)`           | A role's knowledge index, searched                            | No                                     |
-| `useRoleKnowledgeStatus(roleId)`                  | A role's knowledge indexing status                            | No                                     |
-| `useTaskHistory(id)`                              | A task's audit history                                        | No                                     |
-| `useTranscriptSearch(companyId, q)`               | Agents whose transcripts contain `q` (from 2 characters)      | No                                     |
+| Hook                                                                                   | What it gives you                                                | Live?                                  |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
+| `useCompanies(params?)`                                                                | Every company the caller can see                                 | No — no company-list stream, see below |
+| `useLiveCompanyState(companyId)`                                                       | One company                                                      | Yes                                    |
+| `useLiveCompanyAgentsList(companyId)`                                                  | A company's agents                                               | Yes                                    |
+| `useLiveCompanyTasksList(companyId)`                                                   | A company's tasks                                                | Yes                                    |
+| `useLiveCompanyChatsList(companyId)`                                                   | A company's chats (assignments in `chat` mode)                   | Yes                                    |
+| `useLiveCompanyConsultationsList(companyId)`                                           | Open consultations (assignments in `consultee` mode, no task)    | Yes                                    |
+| `useLiveCompanyEnquiriesList(companyId, status?)`                                      | A company's enquiries                                            | Yes                                    |
+| `useCompanyRolesList(companyId)`                                                       | A company's roles                                                | No                                     |
+| `useCompanyKnowledgeList(companyId)`                                                   | A company's knowledge index                                      | No                                     |
+| `useLiveAssignmentsList(filter)`                                                       | Assignments, filtered by any of company/task/role id             | Yes                                    |
+| `useLiveTaskState(taskId)`                                                             | One task                                                         | Yes, but unreadable — see below        |
+| `useLiveChatState(assignmentId)`                                                       | One chat, as an assignment (not its messages)                    | Yes                                    |
+| `useLiveConsultationState(assignmentId)`                                               | One consultation, as an assignment                               | Yes                                    |
+| `useLiveEnquiryState(slug)`                                                            | One enquiry, by slug                                             | Yes, but unreadable — see below        |
+| `useRoleState(roleId)`                                                                 | One role                                                         | No                                     |
+| `useLiveAgentState({ agentId, assignmentId })`                                         | One agent, found by either id it can be reached through          | Yes                                    |
+| `useAgentHistory(id)`                                                                  | An agent's audit history                                         | No                                     |
+| `useCompanyUsers(companyId)`                                                           | A company's members                                              | No                                     |
+| `useKnowledgeList(scope)`                                                              | Documents in a role's or the company's knowledge                 | No                                     |
+| `useKnowledgeStatus(scope)`                                                            | Indexing status; polled every 3 s while indexing                 | No — polled                            |
+| `useKnowledgeSearch(scope, query)`                                                     | Test search of the index, no LLM call                            | No                                     |
+| `useCreateRole()`, `useUpdateRole()`, `useDeleteRole()`                                | Role writes                                                      | No                                     |
+| `useUploadKnowledge(scope)`, `useDeleteKnowledge(scope)`, `useReindexKnowledge(scope)` | Knowledge writes                                                 | No                                     |
+| `useRoleBySlug(companyId, slug)`                                                       | One role, by slug                                                | No                                     |
+| `useMcpServers()`                                                                      | The MCP servers a role's tools can name (`GET /api/mcp-servers`) | No                                     |
+| `useTaskHistory(id)`                                                                   | A task's audit history                                           | No                                     |
+| `useTranscriptSearch(companyId, q)`                                                    | Agents whose transcripts contain `q` (from 2 characters)         | No                                     |
 
-The last nine have no facade of their own — `hooks.ts` re-exports them from
+Six hooks have no facade of their own (`useAgentHistory`, `useCompanyUsers`, `useMcpServers`, `useRoleBySlug`, `useTaskHistory`, `useTranscriptSearch`) — `hooks.ts` re-exports them from
 `endpoints.ts` so the door stays complete, and nothing has a reason to reach
 past it.
 
@@ -589,7 +591,9 @@ every `useLive*` hook reading that cache re-renders. Its absence is a fact
 about the system, not an oversight: `query-keys.ts` names `role`,
 `company-user`, `knowledge` and `system` as `STATIC_ENTITIES` — nothing streams them, so
 `useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
-prefix and answer once, refetching only when asked.
+prefix and answer once, refetching only when asked. Knowledge status is the one
+exception: it has no stream, so `useKnowledgeStatus` polls every 3 s while an
+index is building and stops when it is done.
 
 `record` is live with one difference: its events never patch what is on
 screen. `applyEvent` hands them to `recordChanged`, which refetches the table
@@ -1024,10 +1028,11 @@ lets people read and correct the tables agents keep (see
 [tcp-mcp-records.md](tcp-mcp-records.md#peoples-access-00103) for the API and
 the CSV format). There are two ways in, and both show the same view.
 
-- **The Tables tab** is the last activity tab. It is a menu and a main area, as
-  in the chat dialog: a single-select list of tables (name and record count)
-  with **Download all** above it, and the table view beside it. Below 40rem the
-  two stack. `#tables/<name>` in the URL keeps the open table across a reload.
+- **The Data tab** (it was Tables until 002.00) is the second-last activity tab. It is a menu and a main area, as
+  in the chat dialog: a single-select list with a **Tables** section (name and record count)
+  and **Download all** above it, then a **Documents** item, and the table view beside it. Below 40rem the
+  two stack. `#data/tables/<name>` in the URL keeps the open table across a reload.
+  `#data` alone shows a "choose a table" hint, not the first table.
   The tab has no badge: a change elsewhere shows in the open sheet instead
   (see **Live updates** below). It is not force-mounted, so AG Grid loads only
   when the tab opens.
@@ -1051,7 +1056,7 @@ the CSV format). There are two ways in, and both show the same view.
   do-not-store list goes through `useDoNotStoreGuard`: a confirmation naming
   the fields, then the save again with `confirmDoNotStore`. Saying no keeps an
   Add row dialog open.
-- **The Data protection tab** (`#data-protection`, after Tables, not
+- **Data protection** (`#admin/data-protection`, a section of the Admin tab, not
   force-mounted) has a note on data protection duties with a link to the
   ICO's page, a search across every table (one sheet per table; every match,
   or ticked rows across tables, can be downloaded or deleted), and the
@@ -1087,6 +1092,9 @@ The lazy chunk is about 971 kB (272 kB gzipped).
   The stack clears when the table changes.
 - **Saving** sends the row's `version`. A 400 reverts the cell and announces the
   messages. A 409 reloads the table and announces that it changed elsewhere.
+- **Dropping a table** (`useDropRecordTable`) forgets that table's own queries
+  before the bulk reload. Without this the reload refetched the dropped table,
+  got a 404, and TanStack's retries (about 7 s) held the dialog open.
 - **Focus.** Choosing a table keeps focus on the list; Tab goes on into the
   sheet. Deleting a table moves focus back to the list (in the tab) or to the
   tray heading (in the cabinet). Delete row acts on the focused cell's row and
@@ -1137,6 +1145,40 @@ Components import hooks from `src/api/hooks.ts` as usual
 delete patch the cached table in place and invalidate only the summaries.
 Downloads go through `getBlob` in `client.ts`, so they carry the token and the
 401 policy, and are named by `recordsDownloadName` from `@tcp/shared`.
+
+## The Admin tab (002.00)
+
+The Admin tab is the last tab on the company page. It uses the same menu and
+main-area layout as Data, with the shared `.tcp-side-menu` and `.tcp-table`
+classes in `styles/base.css`. The menu holds four sections, and the hash names
+the open one: `#admin/roles`, `#admin/users`, `#admin/knowledge` and
+`#admin/data-protection` ([Data protection](#data-protection-00104) lives
+here now). The section list is in `admin-sections.ts`.
+
+- **Roles** is a React Aria `Table` with sorting, a name filter and multi-select
+  delete. Delete asks first, and warns when the planner role is selected.
+  **Add role** and each role's name open `RoleDialog`.
+- **The role dialog** has two tabs. **Details** is the form: name,
+  description, prompt, and the tools, shown as Company default, On or Off for
+  each MCP server (`useMcpServers`). The model is read-only, with "Use the
+  company's model" to clear it (`llmConfig: null`). **Knowledge** holds the
+  role's documents. It is disabled until the role exists, and says why in text
+  under the tab list.
+- **Users** is a read-only table of the company's members, sortable by name
+  and member type. The name filter falls back to the sign-in identifier when a
+  member has no name.
+- **Knowledge** is the company's shared documents.
+- **`KnowledgePanel`** serves both the role dialog and Admin → Knowledge. The
+  upload control is a labelled file input that states the accepted types and
+  the 50 MB limit before a file is picked, and an upload can be cancelled
+  (`postFile` takes an `AbortSignal`). Documents can be deleted. **Rebuild
+  index** queues a rebuild. While indexing, status is polled every 3 s
+  (`useKnowledgeStatus`). **Test search** shows the chunks a prompt would
+  retrieve, with no LLM call.
+
+The **Profile** dialog lists your companies with your member type. The
+Memberships dialog and its Account menu item are gone, so the Account menu has
+two items: My profile and Sign out.
 
 ## The office view (company visualisation)
 

@@ -1,20 +1,28 @@
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from './errors';
+import type { components } from './schema';
 import { queryKeys } from './query-keys';
 import {
   useAgents,
   useAssignments,
   useCompanies,
   useCompany,
+  useCompanyKnowledgeSearch,
   useCompanyRoles,
   useCompanyUsers,
   useConversations,
+  useCreateRoleMutation,
+  useDeleteKnowledgeMutation,
+  useDeleteRoleMutation,
+  useMcpServers,
+  useReindexKnowledgeMutation,
   useRoleKnowledge,
   useTasks,
+  useUpdateRoleMutation,
 } from './endpoints';
 
 // One representative hook per entity, not all 21 — the point of this file is
@@ -227,6 +235,31 @@ describe('the read hooks', () => {
     );
   });
 
+  it('useCompanyKnowledgeSearch requests GET /api/company/{companyId}/knowledge/query with ?q=', async () => {
+    respondWith([]);
+
+    const { result } = renderHook(
+      () => useCompanyKnowledgeSearch('company-1', 'refund policy'),
+      { wrapper: wrapper(queryClient) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const url = new URL(requestMade().url);
+    expect(url.pathname).toBe('/api/company/company-1/knowledge/query');
+    expect(url.search).toBe('?q=refund%20policy');
+  });
+
+  it('useMcpServers requests GET /api/mcp-servers', async () => {
+    respondWith([{ name: 'storage', usage: 'files', available: true }]);
+
+    const { result } = renderHook(() => useMcpServers(), {
+      wrapper: wrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(new URL(requestMade().url).pathname).toBe('/api/mcp-servers');
+  });
+
   it('surfaces a failed request as an ApiError, not a hang or a silent success', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ statusCode: 500, message: 'boom' }), {
@@ -248,4 +281,148 @@ describe('the read hooks', () => {
     }
     expect(error.status).toBe(500);
   });
+});
+
+describe('the role and knowledge mutations', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+    queryClient = new QueryClient();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fetchMock.mockReset();
+  });
+
+  it('useCreateRoleMutation POSTs /api/role and returns the decoded warnings', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'r1', name: 'Clerk' }), {
+        status: 201,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tcp-Warnings': JSON.stringify([encodeURIComponent('no café')]),
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useCreateRoleMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    const body: components['schemas']['CreateRoleDto'] = {
+      companyId: '6f1d3c1e-0000-4000-8000-000000000000',
+      slug: 'clerk',
+      name: 'Clerk',
+      description: 'Files things',
+      knowledgeDomains: [],
+      mcpServerList: [],
+    };
+    let created;
+    await act(async () => {
+      created = await result.current.mutateAsync(body);
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe('/api/role');
+    expect(await request.json()).toEqual(body);
+    expect(created).toEqual({
+      role: { id: 'r1', name: 'Clerk' },
+      warnings: ['no café'],
+    });
+  });
+
+  it('useUpdateRoleMutation PUTs /api/role/{id}', async () => {
+    respondWith({ id: 'r1', name: 'Clerk' });
+
+    const { result } = renderHook(() => useUpdateRoleMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ id: 'r1', body: { name: 'Clerk' } });
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('PUT');
+    expect(new URL(request.url).pathname).toBe('/api/role/r1');
+  });
+
+  it('useDeleteRoleMutation DELETEs /api/role/{id}', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const { result } = renderHook(() => useDeleteRoleMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync('r1');
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('DELETE');
+    expect(new URL(request.url).pathname).toBe('/api/role/r1');
+  });
+
+  it.each([
+    [
+      'role',
+      { kind: 'role', roleId: 'r1' } as const,
+      '/api/role/r1/knowledge/a.md',
+    ],
+    [
+      'company',
+      { kind: 'company', companyId: 'c1' } as const,
+      '/api/company/c1/knowledge/a.md',
+    ],
+  ])(
+    'useDeleteKnowledgeMutation hits the %s route',
+    async (_name, scope, path) => {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const { result } = renderHook(() => useDeleteKnowledgeMutation(scope), {
+        wrapper: wrapper(queryClient),
+      });
+      await act(async () => {
+        await result.current.mutateAsync('a.md');
+      });
+
+      const request = requestMade();
+      expect(request.method).toBe('DELETE');
+      expect(new URL(request.url).pathname).toBe(path);
+    },
+  );
+
+  it.each([
+    [
+      'role',
+      { kind: 'role', roleId: 'r1' } as const,
+      '/api/role/r1/knowledge/reindex',
+    ],
+    [
+      'company',
+      { kind: 'company', companyId: 'c1' } as const,
+      '/api/company/c1/knowledge/reindex',
+    ],
+  ])(
+    'useReindexKnowledgeMutation hits the %s route',
+    async (_name, scope, path) => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ reindexing: true }), {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const { result } = renderHook(() => useReindexKnowledgeMutation(scope), {
+        wrapper: wrapper(queryClient),
+      });
+      await act(async () => {
+        await result.current.mutateAsync();
+      });
+
+      const request = requestMade();
+      expect(request.method).toBe('POST');
+      expect(new URL(request.url).pathname).toBe(path);
+    },
+  );
 });

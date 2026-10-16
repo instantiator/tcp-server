@@ -242,10 +242,9 @@ describe('CompanyPage', () => {
     const tasksTab = screen.getByRole('tab', {
       name: new RegExp(`^${t('activity.tasks.heading')}`),
     });
-    // 001.04: Data protection joined after Tables as the last tab, so
-    // `{End}` now lands there.
+    // 002.00: Admin follows Data as the last tab, so `{End}` lands there.
     const lastTab = screen.getByRole('tab', {
-      name: t('company.tab.dataProtection'),
+      name: t('company.tab.admin'),
     });
 
     visualisationTab.focus();

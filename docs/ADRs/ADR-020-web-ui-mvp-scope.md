@@ -175,3 +175,15 @@ answer to "how does a panel leave the screen." See
 
 - **The task dialog can now be parked.** Every dialog minimises to the dock, so 008.03's "a plain modal rather than a parkable one" no longer holds. See [ADR-026's amendment](ADR-026-web-ui-accessibility-and-component-library.md#amendment-as-implemented-p04-000-06).
 - **The chat dialog's per-panel Close is gone.** The dialog is a list of views beside one selected view, with one Close for the whole dialog. A view leaves the list by being archived (a role chat is completed; listening in is only hidden) or deleted (role chats only, after a confirmation).
+
+## Amendment as implemented (002.00, phase 04) <a id="amendment-as-implemented-p04-002-00"></a>
+
+**Most of the deferred company configuration has landed.** [002.00](../prompts/phase%2004%20-%20utility/002.00.01.plan%20-%20web%20ui%20roles,%20knowledge%20and%20company%20users.md) added an Admin tab: roles (create, edit, delete), knowledge for each role and for the company (upload, delete, rebuild the index, test search), and a read-only list of the company's users. Data protection moved there too. The Tables tab became Data, which also links to the company's folders in the storage browser. The separate memberships dialog is gone; the profile dialog lists your companies with your member type.
+
+What is still deferred:
+
+- choosing a role's model in the browser (the dialog shows it read-only; [002.01](<../prompts/phase%2004%20-%20utility/002.01.00.prompt%20-%20web%20ui%20llm%20provider%20picker%20(draft).md>));
+- creating and editing a company, including its default planner (002.02);
+- adding, editing and removing users, and the permission flags ([phase 06 002.01](<../prompts/phase%2006%20-%20web%20ui%20quality/002.01.00.prompt%20-%20company%20configuration%20view%20(draft).md>)).
+
+So onboarding a company still needs `tcp-cli` to create it; after that, its roles and knowledge can be set up in the browser.

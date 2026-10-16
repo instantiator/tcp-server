@@ -25,8 +25,8 @@ const CLOSE_DETAILS_LABEL = 'Close details';
 const CABINET_PICKER_LABEL = 'Filing cabinet (record tables)';
 const TRAY_HEADING = 'Record tables';
 const CABINET_TITLE = 'Filing cabinet';
-const TABLES_TAB = 'Tables';
-const TABLES_LIST = 'Record tables';
+const DATA_TAB = 'Data';
+const DATA_LIST = 'Data';
 const SHEET = 'orders records';
 const DOWNLOAD_ALL = 'Download all tables as a zip';
 const NO_TABLES =
@@ -155,15 +155,15 @@ const focusCell = async (page: Page, key: string, column: number) => {
   await expect(target).toBeFocused();
 };
 
-/** Opens the Tables tab on `orders`. */
+/** Opens the Data tab on `orders`. */
 const openOrders = async (page: Page, companyId: string) => {
-  await gotoSignedIn(page, `/company/${companyId}#tables`);
-  await expect(page.getByRole('tab', { name: TABLES_TAB })).toHaveAttribute(
+  await gotoSignedIn(page, `/company/${companyId}#data`);
+  await expect(page.getByRole('tab', { name: DATA_TAB })).toHaveAttribute(
     'aria-selected',
     'true',
   );
   await page
-    .getByRole('listbox', { name: TABLES_LIST })
+    .getByRole('listbox', { name: DATA_LIST })
     .getByRole('option', { name: /^orders/ })
     .click();
   await expect(page.getByRole('grid', { name: SHEET })).toBeVisible();
@@ -414,10 +414,10 @@ test.describe('a record table changed elsewhere (001.05)', () => {
     await expect(cell(page, 'A1', 0)).not.toContainText(CHANGED_ELSEWHERE);
   });
 
-  test('keeps the Tables tab counts current', async ({ page, request }) => {
+  test('keeps the Data tab counts current', async ({ page, request }) => {
     await openOrders(page, fixture.companyId);
     const option = page
-      .getByRole('listbox', { name: TABLES_LIST })
+      .getByRole('listbox', { name: DATA_LIST })
       .getByRole('option', { name: /^orders/ });
     await expect(option).toContainText('2 records');
 
@@ -426,6 +426,18 @@ test.describe('a record table changed elsewhere (001.05)', () => {
     await expect(page.getByRole('group', { name: OUT_OF_DATE })).toContainText(
       '1 row added',
     );
+  });
+
+  test('an old #tables/<name> link still opens that table under Data', async ({
+    page,
+  }) => {
+    await gotoSignedIn(page, `/company/${fixture.companyId}#tables/orders`);
+    await expect(page.getByRole('tab', { name: DATA_TAB })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('grid', { name: SHEET })).toBeVisible();
+    await expect(page).toHaveURL(/#data\/tables\/orders$/);
   });
 
   test('keeps a table deleted elsewhere open, read-only', async ({
@@ -442,7 +454,7 @@ test.describe('a record table changed elsewhere (001.05)', () => {
     await expect(cell(page, 'A1', 1)).toHaveText('2');
     await expect(
       page
-        .getByRole('listbox', { name: TABLES_LIST })
+        .getByRole('listbox', { name: DATA_LIST })
         .getByRole('option', { name: /^orders/ }),
     ).toHaveCount(0);
   });
@@ -542,9 +554,9 @@ const addColumnElsewhere = async (
 };
 
 const openFeedings = async (page: Page, companyId: string) => {
-  await gotoSignedIn(page, `/company/${companyId}#tables`);
+  await gotoSignedIn(page, `/company/${companyId}#data`);
   await page
-    .getByRole('listbox', { name: TABLES_LIST })
+    .getByRole('listbox', { name: DATA_LIST })
     .getByRole('option', { name: /^feedings/ })
     .click();
   await expect(page.getByRole('grid', { name: FEEDINGS_SHEET })).toBeVisible();

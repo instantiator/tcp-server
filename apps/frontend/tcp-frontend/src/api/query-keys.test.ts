@@ -86,10 +86,15 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   roleKnowledgeSearch: queryKeys.roleKnowledgeSearch('role-1', 'a question'),
   companyKnowledge: queryKeys.companyKnowledge('company-1'),
   companyKnowledgeStatus: queryKeys.companyKnowledgeStatus('company-1'),
+  companyKnowledgeSearch: queryKeys.companyKnowledgeSearch(
+    'company-1',
+    'a question',
+  ),
   notifications: queryKeys.notifications('company-1'),
   spendOverview: queryKeys.spendOverview(),
   companySpend: queryKeys.companySpend('company-1'),
   systemStatus: queryKeys.systemStatus(),
+  mcpServers: queryKeys.mcpServers(),
   systemHealth: queryKeys.systemHealth(),
   shutdownStatus: queryKeys.shutdownStatus(),
 };

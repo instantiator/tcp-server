@@ -813,7 +813,7 @@ A table's retention deletes rows; it can't blank one field (the address) and kee
 
 ## Data protection has no CLI verbs or office entry
 
-Search, the do-not-store list and retention are in the web Data protection tab and the REST API only.
+Search, the do-not-store list and retention are in the web Admin tab (Data protection) and the REST API only.
 
 **Act when:** someone asks to manage them from the CLI or the office view.
 
@@ -822,3 +822,39 @@ Search, the do-not-store list and retention are in the web Data protection tab a
 A run paused for rate limits resumes forever (000.03, by design), and an agent waiting on `request_user_input` waits forever. 001.04 gave agents `fail_assignment` with `information_unavailable`, but nothing makes them use it after a wait.
 
 **Act when:** a task is found stuck for days on either.
+
+## Knowledge index status is polled, not pushed
+
+Nothing streams a knowledge index. The knowledge panel (002.00) asks for the status every 3 seconds while a rebuild runs, and not otherwise (`useKnowledgeStatus`). A rebuild started elsewhere shows only on Refresh or reopening the panel.
+
+**Act when:** knowledge changes join the company event stream, or a rebuild started by an agent or the CLI needs to show without a refresh.
+
+## Any member can delete roles and knowledge
+
+Admin → Roles and the knowledge panel let every member of a company delete roles, their knowledge and the company's shared knowledge. Membership is still the only access control (ADR-011); the permission flags aren't built.
+
+**Act when:** the permission flags land (phase 06 002.01). Gate role and knowledge changes on `define_agent_roles` / `modify_company`.
+
+## Knowledge uploads show no progress
+
+`fetch` reports no upload progress, so the panel says what is uploading and offers Cancel, but not how far along it is.
+
+**Act when:** people upload files big enough that the wait is confusing (tens of MB on a slow link). Switch the upload to `XMLHttpRequest`, which reports progress.
+
+## Storage uploads are read whole before their size is checked
+
+`POST /api/storage` checks its 50 MB limit with a `ParseFilePipe`, which runs after the whole file is in memory. Knowledge uploads (002.00) use multer's `limits.fileSize` instead, which stops reading at the limit.
+
+**Act when:** the storage proxy is reachable by anyone untrusted, or memory pressure is seen on tcp-server. Give its `FileInterceptor` the same `limits` (`MAX_UPLOAD_BYTES` in `api/upload-limit.ts`).
+
+## The web client retries 4xx answers
+
+The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with back-off, for every error. A 404 for something just deleted is retried for about 7 seconds. In 002.00 that made "Delete table" seem slow; `useDropRecordTable` now forgets the dropped table's queries, which fixed that case only.
+
+**Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy%20%28draft%29.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
+
+## A deleted default planner can't be replaced in the browser
+
+Deleting the company's default planner role (Admin → Roles warns about it) clears `plannerRoleId`. Tasks without their own planner then won't start, and only `tcp-cli` can set a new one.
+
+**Act when:** 002.02 (create and edit a company) lands; it should let a person choose the planner.

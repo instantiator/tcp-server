@@ -14,7 +14,9 @@ const hasMachineCredentials = Boolean(TEST_CLIENT_ID && TEST_CLIENT_SECRET);
  * Literals copied from `strings.ts`, as the other specs do, so a wording
  * change fails here rather than silently testing the wrong control.
  */
-const TAB = 'Data protection';
+const ADMIN_TAB = 'Admin';
+const ADMIN_MENU = 'Company administration';
+const SECTION = 'Data protection';
 const SEARCH_FIELD = 'Name, email or other details';
 const SEARCH = 'Search';
 const RESULTS = 'Rows in customers matching the search';
@@ -25,7 +27,7 @@ const DELETE_CONFIRM = 'Delete rows';
 const LIST = 'Do-not-store list';
 const LIST_FIELD = 'Name, email or other details not to store';
 const LIST_ADD = 'Add to the list';
-const TABLES_TAB = 'Tables';
+const DATA_TAB = 'Data';
 const ADD_ROW = 'Add a row to customers';
 const ADD_ROW_SUBMIT = 'Add row';
 const WARN_HEADING = 'Store something on the do-not-store list?';
@@ -132,11 +134,19 @@ test.describe('data protection', () => {
   test('a person is found, their rows downloaded, then deleted after asking', async ({
     page,
   }) => {
-    await gotoSignedIn(page, `/company/${fixture.companyId}#data-protection`);
-    await expect(page.getByRole('tab', { name: TAB })).toHaveAttribute(
+    await gotoSignedIn(
+      page,
+      `/company/${fixture.companyId}#admin/data-protection`,
+    );
+    await expect(page.getByRole('tab', { name: ADMIN_TAB })).toHaveAttribute(
       'aria-selected',
       'true',
     );
+    await expect(
+      page
+        .getByRole('listbox', { name: ADMIN_MENU })
+        .getByRole('option', { name: SECTION }),
+    ).toHaveAttribute('aria-selected', 'true');
     await page
       .getByRole('textbox', { name: SEARCH_FIELD, exact: true })
       .fill('ann');
@@ -168,7 +178,10 @@ test.describe('data protection', () => {
   test('a person on the do-not-store list is not stored without asking', async ({
     page,
   }) => {
-    await gotoSignedIn(page, `/company/${fixture.companyId}#data-protection`);
+    await gotoSignedIn(
+      page,
+      `/company/${fixture.companyId}#admin/data-protection`,
+    );
     await page.getByRole('textbox', { name: LIST_FIELD }).fill('Cara Diaz');
     await page.getByRole('button', { name: LIST_ADD }).click();
     await expect(
@@ -177,7 +190,7 @@ test.describe('data protection', () => {
         .getByRole('row', { name: /Cara Diaz/ }),
     ).toBeVisible();
 
-    await page.getByRole('tab', { name: TABLES_TAB }).click();
+    await page.getByRole('tab', { name: DATA_TAB }).click();
     await page.getByRole('option', { name: /^customers/ }).click();
     await page.getByRole('button', { name: ADD_ROW }).click();
     const add = page.getByRole('dialog', { name: ADD_ROW });
@@ -196,7 +209,10 @@ test.describe('data protection', () => {
     page,
     request,
   }) => {
-    await gotoSignedIn(page, `/company/${fixture.companyId}#data-protection`);
+    await gotoSignedIn(
+      page,
+      `/company/${fixture.companyId}#admin/data-protection`,
+    );
     await page
       .getByRole('textbox', { name: SEARCH_FIELD, exact: true })
       .fill('ann');

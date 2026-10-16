@@ -32,7 +32,6 @@ const strings = {
 
   'header.account.label': 'Account',
   'header.account.profile': 'My profile',
-  'header.account.memberships': 'My company memberships',
   'header.account.signOut': 'Sign out',
   'header.system.label': 'System',
   'header.system.health': 'System health',
@@ -262,7 +261,6 @@ const strings = {
   'profile.claims.none':
     'Your sign-in provider did not send your name or email. An administrator can set OIDC_LOAD_USER_INFO to true to fetch them.',
   'profile.readOnly': 'Your details are managed by your sign-in provider.',
-  'memberships.heading': 'My company memberships',
   // Authoritative, not informational (002.05): membership is the access
   // control, and a company absent from this list refuses the user with a 403.
   'memberships.intro': 'The companies you have access to.',
@@ -734,9 +732,189 @@ const strings = {
   'session.expiring.announcement':
     'Your session is about to expire. Choose "Stay signed in" to continue.',
 
+  // The Data and Admin tabs (002.00): each a menu down the side and the
+  // chosen section beside it. Data holds the record tables and links into
+  // the document store; Admin holds roles, users, knowledge and data
+  // protection.
+  'company.tab.data': 'Data',
+  'company.tab.admin': 'Admin',
+  'data.menu.label': 'Data',
+  'data.menu.tables': 'Tables',
+  'data.menu.documents': 'Documents',
+  'admin.menu.label': 'Company administration',
+  'admin.menu.roles': 'Roles',
+  'admin.menu.users': 'Users',
+  'admin.menu.knowledge': 'Knowledge',
+  'admin.menu.dataProtection': 'Data protection',
+  // Admin → Roles (002.00): a sortable, filterable table of the company's
+  // roles, with add, open and delete. Deleting confirms first, and says when
+  // the company's default planner is among the roles going.
+  'admin.roles.heading': 'Roles',
+  'admin.roles.add': 'Add role',
+  'admin.roles.filter': 'Filter roles by name',
+  'admin.roles.column.name': 'Name',
+  'admin.roles.column.slug': 'Slug',
+  'admin.roles.column.description': 'Description',
+  'admin.roles.column.planner': 'Planner',
+  'admin.roles.column.actions': 'Actions',
+  'admin.roles.planner': 'Default planner',
+  'admin.roles.open': 'Open {name}',
+  'admin.roles.loading': 'Loading the roles',
+  'admin.roles.error': 'The roles could not be loaded.',
+  'admin.roles.empty':
+    'No roles yet. Add one to give the company someone to do its work.',
+  'admin.roles.noMatch': 'No roles match "{filter}".',
+  'admin.roles.deleteNone': 'Delete the selected roles',
+  'admin.roles.delete.one': 'Delete {count} selected role',
+  'admin.roles.delete.other': 'Delete {count} selected roles',
+  'admin.roles.deleteHeading.one': 'Delete {count} role?',
+  'admin.roles.deleteHeading.other': 'Delete {count} roles?',
+  'admin.roles.deleteMessage':
+    'Delete {names}? Their knowledge, agents and conversations are deleted too.',
+  'admin.roles.deletePlanner':
+    "{name} is the company's default planner. Tasks without their own planner won't start until another is chosen.",
+  'admin.roles.deleteConfirm': 'Delete',
+  'admin.roles.announce.deleted': 'Roles deleted: {count}',
+  'admin.roles.deleteFailed': 'Some roles were not deleted: {message}',
+  // Admin → Users (002.00): the company's members, read-only for now.
+  'admin.users.heading': 'Users',
+  'admin.users.note':
+    'For now, every member can do everything in this company. Adding and removing members comes in a later release.',
+  'admin.users.filter': 'Filter users by name',
+  'admin.users.column.name': 'Name',
+  'admin.users.column.identifier': 'Sign-in identifier',
+  'admin.users.column.memberType': 'Member type',
+  'admin.users.column.roles': 'Roles',
+  'admin.users.noName': 'No name given',
+  'admin.users.loading': 'Loading the users',
+  'admin.users.error': 'The users could not be loaded.',
+  'admin.users.empty': 'This company has no members.',
+  'admin.users.noMatch': 'No users match "{filter}".',
+  'memberType.creator': 'Creator',
+  'memberType.owner': 'Owner',
+  'memberType.member': 'Member',
+  'profile.companies.heading': 'Your companies',
+  // The knowledge panel (002.00): one role's knowledge, or the company's
+  // shared knowledge. Uploads index themselves; "Rebuild index" is a retry.
+  // The search finds passages by meaning, with no language model involved.
+  'knowledge.heading': 'Knowledge',
+  'knowledge.headingShared': 'Shared knowledge',
+  'knowledge.introShared':
+    'Every role can draw on these documents. A role’s own knowledge is in its dialog, on the Knowledge tab.',
+  'knowledge.upload': 'Upload a document',
+  'knowledge.uploadHint':
+    'Markdown, text, HTML, PDF, Word, CSV, JSON or YAML, up to 50 MB. Each one is turned into Markdown and indexed.',
+  'knowledge.uploading': 'Uploading {name}',
+  'knowledge.cancelUpload': 'Cancel the upload',
+  'knowledge.tooLarge': 'That file is over the 50 MB limit.',
+  'knowledge.uploadFailed': 'The document could not be uploaded: {message}',
+  'knowledge.refresh': 'Refresh the index status',
+  'knowledge.rebuild': 'Rebuild the index',
+  'knowledge.status.documents.one': '{count} document',
+  'knowledge.status.documents.other': '{count} documents',
+  'knowledge.status.chunks.one': '{count} indexed passage',
+  'knowledge.status.chunks.other': '{count} indexed passages',
+  'knowledge.status.lastIndexed': 'Last indexed {when}.',
+  'knowledge.status.never': 'Not indexed yet.',
+  'knowledge.status.indexing': 'Indexing now…',
+  'knowledge.status.error': 'The last indexing failed: {message}',
+  'knowledge.status.loading': 'Loading the index status',
+  'knowledge.list.loading': 'Loading the documents',
+  'knowledge.list.error': 'The documents could not be loaded.',
+  'knowledge.list.empty': 'No documents yet.',
+  'knowledge.column.name': 'Document',
+  'knowledge.column.size': 'Size',
+  'knowledge.column.modified': 'Changed',
+  'knowledge.column.actions': 'Actions',
+  'knowledge.delete': 'Delete {name}',
+  'knowledge.deleteHeading': 'Delete {name}?',
+  'knowledge.deleteMessage':
+    'Agents will no longer find what it says. The file can’t be recovered here.',
+  'knowledge.deleteConfirm': 'Delete',
+  'knowledge.deleteFailed': '{name} could not be deleted: {message}',
+  'knowledge.query.heading': 'Test the knowledge',
+  'knowledge.query.label': 'Ask about something',
+  'knowledge.query.hint':
+    'Finds the passages an agent would be given for this. No language model is used.',
+  'knowledge.query.submit': 'Search',
+  'knowledge.query.loading': 'Searching the knowledge',
+  'knowledge.query.error': 'The search could not be run.',
+  'knowledge.query.none': 'No passages match "{q}".',
+  'knowledge.query.results': 'Passages matching "{q}"',
+  'knowledge.query.column.source': 'From',
+  'knowledge.query.column.match': 'Match',
+  'knowledge.query.column.text': 'Passage',
+  'knowledge.query.match': '{percent}%',
+  'knowledge.announce.uploaded': 'Uploaded: {name}',
+  'knowledge.announce.cancelled': 'Upload cancelled',
+  'knowledge.announce.deleted': 'Deleted: {name}',
+  'knowledge.announce.ready': 'Knowledge index ready',
+  'knowledge.announce.failed': 'Knowledge indexing failed',
+  'knowledge.announce.rebuilding': 'Rebuilding the knowledge index',
+  // The role dialog (002.00): Details and Knowledge tabs. Knowledge waits
+  // for the role to exist. The language model is shown, not chosen: the
+  // provider picker is 002.01.
+  'admin.role.newHeading': 'Add role',
+  'admin.role.tabs': 'Role sections',
+  'admin.role.tab.details': 'Details',
+  'admin.role.tab.knowledge': 'Knowledge',
+  'admin.role.knowledgeDisabled':
+    'Save the role first, then add its knowledge.',
+  'admin.role.loading': 'Loading the role',
+  'admin.role.loadError': 'The role could not be loaded.',
+  'admin.role.name': 'Name',
+  'admin.role.nameRequired': 'Enter a name.',
+  'admin.role.slug': 'Slug',
+  'admin.role.slugHint':
+    'A short name used in links and by agents. It can’t be changed later.',
+  'admin.role.slugRequired': 'Enter a slug.',
+  'admin.role.slugReserved': '"shared" is reserved. Choose another slug.',
+  'admin.role.description': 'Description',
+  'admin.role.descriptionRequired': 'Enter a description.',
+  'admin.role.prompt': 'Role prompt',
+  'admin.role.promptHint':
+    'What this role does and how. Agents in this role read it first.',
+  'admin.role.domains': 'Knowledge domains',
+  'admin.role.domainsHint':
+    'Separate them with commas, for example "accounts, payroll".',
+  'admin.role.mcp.heading': 'Tools',
+  'admin.role.mcp.intro':
+    'Which tool servers agents in this role can use. "Company default" follows the company’s setting.',
+  'admin.role.mcp.defaultOn': 'Company default (on)',
+  'admin.role.mcp.defaultOff': 'Company default (off)',
+  'admin.role.mcp.on': 'On',
+  'admin.role.mcp.off': 'Off',
+  'admin.role.mcp.unavailable': '{name} (not set up here)',
+  'admin.role.llm.heading': 'Language model',
+  'admin.role.llm.role': 'This role has its own model: {provider}, {model}.',
+  'admin.role.llm.company':
+    'This role uses the company’s model: {provider}, {model}.',
+  'admin.role.llm.app': 'This role uses the app’s default model.',
+  'admin.role.llm.useCompany': 'Use the company’s model',
+  'admin.role.llm.later': 'Choosing a model here comes in a later release.',
+  'admin.role.save': 'Save',
+  'admin.role.create': 'Add role',
+  'admin.role.cancel': 'Close',
+  'admin.role.warnings': 'Saved. Worth checking:',
+  'admin.role.error': 'The role could not be saved: {message}',
+  'admin.role.announce.created': 'Role added: {name}',
+  'admin.role.announce.saved': 'Role saved: {name}',
+  'documents.heading': 'Documents',
+  'documents.intro':
+    'Folders in the document store. Each link opens the storage browser in a new tab.',
+  'documents.refresh': 'Refresh the document links',
+  'documents.column.folder': 'Folder',
+  'documents.column.location': 'Location',
+  'documents.root': 'Everything the company stores',
+  'documents.resources': 'Company resources',
+  'documents.taskOutputs': 'Outputs of {shortcode} — {request}',
+  'documents.linkSuffix': '(opens the storage browser in a new tab)',
+  'documents.unconfigured':
+    'The storage browser is not configured, so there are no links to show.',
+  'documents.loading': 'Loading the tasks',
+  'documents.error': "The tasks' outputs could not be loaded.",
+
   // Record tables (001.03): the spreadsheet view, its actions and dialogs.
-  'company.tab.tables': 'Tables',
-  'company.tab.dataProtection': 'Data protection',
   'dataProtection.duties.heading': 'Your data protection duties',
   'dataProtection.duties.body':
     "If this company keeps the names, addresses or emails of customers or other people, you may have data protection duties. In the UK, you may need to pay a fee to the Information Commissioner's Office (ICO). This page doesn't give advice: check the official guidance.",
@@ -786,7 +964,6 @@ const strings = {
   'dataProtection.list.remove.confirm': 'Remove',
   'dataProtection.announce.listChanged': 'Do-not-store list updated',
   'dataProtection.announce.listNotChanged': 'Not changed: {message}',
-  'tables.list.label': 'Record tables',
   'tables.loading': 'Loading the tables',
   'tables.error': 'The tables could not be loaded.',
   'tables.empty':

@@ -44,13 +44,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope, NoCompanyScope } from '../auth/company-scope.decorator';
 import { MembershipService } from '../auth/membership.service';
-import { getCurrentUserIdentifiers } from '../auth/current-user';
+import {
+  getCurrentUserId,
+  getCurrentUserIdentifiers,
+} from '../auth/current-user';
 import { CompanyEventService } from '../events/company-event.service';
 import { SpendReportService } from '../spend/spend-report.service';
 import { RecordsCleanupService } from './records-cleanup.service';
 import { ApiService } from './api.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
+import { KnowledgeService } from './knowledge.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CompanyListItemDto } from './dto/company-stats.dto';
 import { CompanySpendDto, ResumeResultDto } from './dto/spend.dto';
@@ -80,6 +84,7 @@ export class CompanyController {
     private readonly spend: SpendResumeService,
     private readonly spendReport: SpendReportService,
     private readonly recordsCleanup: RecordsCleanupService,
+    private readonly knowledge: KnowledgeService,
   ) {}
 
   /**
@@ -124,9 +129,11 @@ export class CompanyController {
     );
     // Stats accompany both modes — the administrative view wants them too.
     const stats = await this.stats.listStats(companies.map((c) => c.id));
+    const memberTypes = await this.db.companyMemberTypes(identifiers);
     return companies.map((company) => ({
       ...company,
       stats: stats.get(company.id) ?? emptyCompanyStats(),
+      memberType: memberTypes.get(company.id) ?? null,
     }));
   }
 
@@ -281,8 +288,10 @@ export class CompanyController {
 
   /**
    * Deletes a role within this company, identified by UUID or slug. See
-   * {@link getRoleBySlug} for why the company must be known. Cascades to
-   * the role's agents, knowledge chunks, episodic memory, and conversations.
+   * {@link getRoleBySlug} for why the company must be known. Deletes the
+   * role's knowledge files too (see {@link KnowledgeService.deleteRole}), and
+   * cascades to its agents, knowledge chunks, episodic memory, and
+   * conversations.
    */
   @ApiOperation({ summary: 'Delete a role by slug (or ID) within a company' })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
@@ -291,6 +300,7 @@ export class CompanyController {
   async deleteRoleBySlug(
     @Param('companyId') companyId: string,
     @Param('slug') slug: string,
+    @Req() req: Request,
   ): Promise<void> {
     const company = await this.resolveCompanyOrThrow(companyId);
     const role = await this.db.findRoleByIdOrSlug(company.id, slug);
@@ -299,7 +309,11 @@ export class CompanyController {
         `Role ${slug} not found in company ${company.id}`,
       );
     }
-    await this.db.deleteRole(role.id);
+    await this.knowledge.deleteRole(role.id, {
+      user: getCurrentUserId(req),
+      agent: null,
+      task: null,
+    });
   }
 
   /**

@@ -198,21 +198,35 @@ export class KnowledgeService {
   }
 
   /**
-   * Runs a RAG similarity search for a role, exactly as prompt assembly
-   * would, without invoking any chat/LLM call — see
-   * {@link KnowledgeRetrievalService.retrieve} for the scoping and threshold rules.
+   * Bumps one role's knowledge scope, enqueuing a rebuild — rebuilds only that
+   * role's index, leaving the company's shared scope alone.
    *
    * @throws {@link NotFoundException} when the role does not exist.
    */
+  async reindexRole(roleId: UUID): Promise<void> {
+    const { company, role } = await this.resolveScope({ kind: 'role', roleId });
+    if (!role) throw new NotFoundException(`Role ${roleId} not found`);
+    await this.reindex.bump(company.id, role.id);
+  }
+
+  /**
+   * Runs a RAG similarity search, exactly as prompt assembly would, without
+   * invoking any chat/LLM call. A role scope searches the role's chunks plus
+   * the company's shared ones; a company scope searches the shared ones
+   * alone. See {@link KnowledgeRetrievalService.retrieve} for the threshold
+   * rules.
+   *
+   * @throws {@link NotFoundException} when the role/company does not exist.
+   */
   async queryRag(
-    roleId: UUID,
+    ref: KnowledgeScopeRef,
     query: string,
     topK?: number,
     threshold?: number,
   ): Promise<RagChunk[]> {
-    const { company, role } = await this.resolveScope({ kind: 'role', roleId });
+    const { company, role } = await this.resolveScope(ref);
     return this.ragRetrieval.retrieve(
-      roleId,
+      role?.id ?? null,
       company.id,
       query,
       resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
@@ -223,12 +237,35 @@ export class KnowledgeService {
       threshold ??
         resolveRunConfig(
           'ragThreshold',
-          role ?? null,
+          role,
           company,
           this.config.get<number>('RAG_THRESHOLD'),
           DEFAULT_RAG_THRESHOLD,
         ),
     );
+  }
+
+  /**
+   * Deletes a role together with its knowledge. The files go first: they are
+   * stored under the role's slug, so if they outlived the role, a new role
+   * given the same slug would inherit them. If deleting a file fails, the
+   * role is left in place and the delete can be retried. The role row's
+   * delete then cascades to its chunks, and its index state goes last, so a
+   * rebuild already queued finds no role and stops.
+   *
+   * @returns `false` if no role with that id exists.
+   */
+  async deleteRole(roleId: UUID, originators?: Originators): Promise<boolean> {
+    const role = await this.roleRepo.findOneBy({ id: roleId });
+    if (!role) return false;
+    const { company } = await this.resolveScope({ kind: 'role', roleId });
+    const scope = toStorageScope(company, role);
+    for (const file of await this.storage.listKnowledgeFiles(scope)) {
+      await this.storage.deleteKnowledgeFile(scope, file.name, originators);
+    }
+    const result = await this.roleRepo.delete(roleId);
+    await this.stateRepo.delete({ companyId: company.id, roleId });
+    return (result.affected ?? 0) > 0;
   }
 
   /**

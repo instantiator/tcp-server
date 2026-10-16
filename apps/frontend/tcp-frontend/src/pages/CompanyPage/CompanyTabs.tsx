@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Tab, TabList, TabPanel, Tabs, type Key } from 'react-aria-components';
 import { useLocation, useNavigate } from 'react-router';
 import { useCompanyRolesList } from '../../api/hooks';
@@ -12,8 +12,9 @@ import { NewEnquiryNotifications } from './activity/NewEnquiryNotifications';
 import { NewNotificationToasts } from './activity/NewNotificationToasts';
 import { NotificationsList } from './activity/NotificationsList';
 import { TasksList } from './activity/TasksList';
-import { DataProtectionPanel } from './DataProtectionPanel';
-import { TablesPanel } from './TablesPanel';
+import { AdminPanel } from './AdminPanel';
+import { isAdminSection } from './admin-sections';
+import { DataPanel, type DataSelection } from './DataPanel';
 import './activity/activity.css';
 
 /** The activity lists, one tab each, in tab order. Each id is also its URL hash. */
@@ -31,11 +32,32 @@ type ActivityTab = (typeof ACTIVITY_TABS)[number]['id'];
 /** The tab shown with no hash, or an unknown one. */
 const DEFAULT_TAB = 'visualisation';
 
-/** The record tables' tab. Its hash may name a table too: `#tables/orders`. */
-const TABLES_TAB = 'tables';
+/** Record tables and document links (002.00). Its hash names the section: `#data/tables/orders`, `#data/documents`. */
+const DATA_TAB = 'data';
 
-/** Search, export and delete across tables, and the do-not-store list (001.04). */
-const DATA_PROTECTION_TAB = 'data-protection';
+/** Roles, users, knowledge and data protection (002.00). Its hash names the section: `#admin/users`. */
+const ADMIN_TAB = 'admin';
+
+/**
+ * Hashes from before 002.00 and where they went, so a bookmark or a sign-in
+ * return still lands in the right place: `#tables/orders` → `#data/tables/orders`,
+ * `#data-protection` → `#admin/data-protection`.
+ */
+const movedHash = (path: string): string | null => {
+  const [key] = path.split('/');
+  if (key === 'tables') return `#${DATA_TAB}/${path}`;
+  if (key === 'data-protection') return `#${ADMIN_TAB}/${path}`;
+  return null;
+};
+
+/** The Data tab's section, from the hash path after `data/`. */
+const dataSelection = ([section, table]: string[]): DataSelection =>
+  section === 'documents'
+    ? { kind: 'documents' }
+    : {
+        kind: 'tables',
+        table: section === 'tables' && table ? decodeURIComponent(table) : null,
+      };
 
 const isActivityTab = (key: string): key is ActivityTab =>
   ACTIVITY_TABS.some((tab) => tab.id === key);
@@ -50,7 +72,10 @@ export interface CompanyTabsProps {
 
 /**
  * The company's tabs: the office view, then one tab per live activity list,
- * each tab titled with its list's name and a badge of how many rows it shows.
+ * each tab titled with its list's name and a badge of how many rows it shows,
+ * then Data (record tables and document links) and Admin (roles, users,
+ * knowledge and data protection), each a side menu whose section is in the
+ * hash too (`#data/tables/orders`, `#admin/users`).
  *
  * **The selected tab is the URL hash** (`#tasks`, `#enquiries`, …), so a
  * notification's link to `#enquiries` opens that tab, and every tab can be
@@ -89,18 +114,32 @@ export const CompanyTabs = ({
 
   const { hash } = useLocation();
   const navigate = useNavigate();
-  const [hashKey, tableHash = ''] = hash.slice(1).split('/');
+  // An old hash is read as its new one at once, so the right tab mounts
+  // first time, and then rewritten in the address.
+  const moved = movedHash(hash.slice(1));
+  useEffect(() => {
+    if (moved !== null) void navigate({ hash: moved }, { replace: true });
+  }, [moved, navigate]);
+  const [hashKey, ...hashRest] = (moved ?? hash).slice(1).split('/');
   const selectedKey =
-    isActivityTab(hashKey) ||
-    hashKey === TABLES_TAB ||
-    hashKey === DATA_PROTECTION_TAB
+    isActivityTab(hashKey) || hashKey === DATA_TAB || hashKey === ADMIN_TAB
       ? hashKey
       : DEFAULT_TAB;
-  const openTable = tableHash === '' ? null : decodeURIComponent(tableHash);
+  const [adminHash = ''] = hashRest;
+  const adminSection = isAdminSection(adminHash) ? adminHash : 'roles';
+  const replaceHash = (next: string): void => {
+    void navigate({ hash: next }, { replace: true });
+  };
   const onSelectionChange = (key: Key): void => {
-    void navigate(
-      { hash: key === DEFAULT_TAB ? '' : `#${String(key)}` },
-      { replace: true },
+    replaceHash(key === DEFAULT_TAB ? '' : `#${String(key)}`);
+  };
+  const onDataSelect = (selection: DataSelection): void => {
+    replaceHash(
+      selection.kind === 'documents'
+        ? `#${DATA_TAB}/documents`
+        : selection.table === null
+          ? `#${DATA_TAB}`
+          : `#${DATA_TAB}/tables/${encodeURIComponent(selection.table)}`,
     );
   };
 
@@ -208,11 +247,11 @@ export const CompanyTabs = ({
               </Tab>
             );
           })}
-          <Tab id={TABLES_TAB} className="react-aria-Tab">
-            {t('company.tab.tables')}
+          <Tab id={DATA_TAB} className="react-aria-Tab">
+            {t('company.tab.data')}
           </Tab>
-          <Tab id={DATA_PROTECTION_TAB} className="react-aria-Tab">
-            {t('company.tab.dataProtection')}
+          <Tab id={ADMIN_TAB} className="react-aria-Tab">
+            {t('company.tab.admin')}
           </Tab>
         </TabList>
         <TabPanel
@@ -232,38 +271,30 @@ export const CompanyTabs = ({
           </TabPanel>
         ))}
         {/*
-          Not force-mounted: the sheet is large and not live, so it loads when
-          the tab opens. The open table survives in the URL instead.
+          Not force-mounted: a table's sheet is large and not live, so it
+          loads when the tab opens. What is open survives in the URL instead.
         */}
         <TabPanel
-          id={TABLES_TAB}
+          id={DATA_TAB}
           className="react-aria-TabPanel company-page__tab"
         >
-          <TablesPanel
+          <DataPanel
             companyId={companyId}
             companySlug={companySlug}
-            selected={openTable}
-            onSelect={(table) =>
-              void navigate(
-                {
-                  hash:
-                    table === null
-                      ? `#${TABLES_TAB}`
-                      : `#${TABLES_TAB}/${encodeURIComponent(table)}`,
-                },
-                { replace: true },
-              )
-            }
+            selected={dataSelection(hashRest)}
+            onSelect={onDataSelect}
           />
         </TabPanel>
-        {/* Not force-mounted, like Tables: its sheets load when it opens. */}
+        {/* Not force-mounted, like Data: its sections load when they open. */}
         <TabPanel
-          id={DATA_PROTECTION_TAB}
+          id={ADMIN_TAB}
           className="react-aria-TabPanel company-page__tab"
         >
-          <DataProtectionPanel
+          <AdminPanel
             companyId={companyId}
             companySlug={companySlug}
+            section={adminSection}
+            onSelect={(section) => replaceHash(`#${ADMIN_TAB}/${section}`)}
           />
         </TabPanel>
       </Tabs>

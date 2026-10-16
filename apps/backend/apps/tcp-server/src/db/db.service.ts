@@ -2,6 +2,7 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
+  MemberType,
   TcpAgent,
   TcpCompany,
   TcpRole,
@@ -67,6 +68,11 @@ export class DbService {
     return this.companies.list(identifiers);
   }
 
+  /** The caller's member type per company — {@link CompanyDbService.memberTypes}. */
+  companyMemberTypes(identifiers: string[]): Promise<Map<UUID, MemberType>> {
+    return this.companies.memberTypes(identifiers);
+  }
+
   /** Retrieves a company by UUID or slug — {@link CompanyDbService.get}. */
   getCompany(identifier: string): Promise<TcpCompany | null> {
     return this.companies.get(identifier);
@@ -105,7 +111,11 @@ export class DbService {
     return this.roles.list(companyId);
   }
 
-  /** Deletes a role and its dependants — {@link RoleDbService.delete}. */
+  /**
+   * Deletes a role and its dependants — {@link RoleDbService.delete}. Leaves
+   * its knowledge files in storage; the API deletes roles through
+   * `KnowledgeService.deleteRole`, which removes them first.
+   */
   deleteRole(id: UUID): Promise<boolean> {
     return this.roles.delete(id);
   }
