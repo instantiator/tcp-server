@@ -1,0 +1,20 @@
+.role-dialog__tools,
+.role-dialog__model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  margin-block-start: var(--tcp-space-md);
+}
+
+.role-dialog__server {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+}
+
+.role-dialog__warnings {
+  margin-block: var(--tcp-space-md);
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+}
