@@ -21,5 +21,9 @@
   // alter_table delete_column: deliberately does nothing, since deleting a column deletes a value from every record.
   // When action approval (003.01) lands, this becomes an approval request carrying the exact change.
   // {{column}} and {{table}} name what the agent asked to delete.
-  "delete_column_ask_user": "Nothing was deleted. Only a person can delete a column, because it removes that value from every record. Use request_user_input to ask a user to delete '{{column}}' from '{{table}}' (Columns in the table's menu), saying why it is no longer needed."
+  "delete_column_ask_user": "Nothing was deleted. Only a person can delete a column, because it removes that value from every record. Use request_user_input to ask a user to delete '{{column}}' from '{{table}}' (Columns in the table's menu), saying why it is no longer needed.",
+
+  // alter_table add_unique_key / drop_unique_key: deliberately does nothing. A wrong unique key makes
+  // different records count as the same one, so people choose them. {{fields}} names the key's fields.
+  "unique_key_ask_user": "Nothing was changed. Only a person can add or drop a unique key, because a wrong one can make different records count as the same. Use request_user_input to ask a user to change it ({{fields}} on '{{table}}', in the table's Columns dialog), saying why."
 }

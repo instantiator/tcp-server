@@ -45,6 +45,7 @@ function httpError(e: unknown): unknown {
       return new NotFoundException(e.message);
     case 'conflict':
     case 'stale':
+    case 'unconvertible':
       return new ConflictException({ message: e.message, code: e.code });
     default:
       return new BadRequestException(e.message);
@@ -446,6 +447,52 @@ export class RecordsApiService {
     );
   }
 
+  /** Adds a unique key over the given fields. */
+  addUniqueKey(
+    company: TcpCompany,
+    table: string,
+    fields: string[],
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(company, table, { op: 'add_unique_key', fields }, userId);
+  }
+
+  /** Drops a unique key; its fields stay required. */
+  dropUniqueKey(
+    company: TcpCompany,
+    table: string,
+    fields: string[],
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(
+      company,
+      table,
+      { op: 'drop_unique_key', fields },
+      userId,
+    );
+  }
+
+  /**
+   * Changes a column's type, converting every value. Values that don't convert
+   * are a 409 unless `blankUnconvertible` is set, which removes them.
+   */
+  retypeColumn(
+    company: TcpCompany,
+    table: string,
+    change: Omit<Extract<TableChange, { op: 'retype_column' }>, 'op'>,
+    userId: string | null,
+    blankUnconvertible?: boolean,
+  ): Promise<TableDefinition> {
+    return this.alter(
+      company,
+      table,
+      { op: 'retype_column', ...change },
+      userId,
+      {},
+      { blankUnconvertible },
+    );
+  }
+
   /** Applies one schema change as a person (so narrowing is allowed) and audits it, never with the default's value. */
   private async alter(
     company: TcpCompany,
@@ -453,10 +500,12 @@ export class RecordsApiService {
     change: TableChange,
     userId: string | null,
     overridden: { doNotStoreOverride?: string[] } = {},
+    opts: { blankUnconvertible?: boolean } = {},
   ): Promise<TableDefinition> {
     const result: AlterResult = await call(() =>
       this.records.alterTable(company.id, table, change, {
         byPerson: true,
+        ...opts,
       }),
     );
     await this.changed(company, userId, {
@@ -466,6 +515,7 @@ export class RecordsApiService {
       before: result.before,
       after: result.definition,
       rewritten: result.rewritten,
+      blanked: result.blanked,
       ...overridden,
     });
     return result.definition;

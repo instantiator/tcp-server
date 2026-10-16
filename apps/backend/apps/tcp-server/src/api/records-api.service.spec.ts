@@ -467,6 +467,7 @@ describe('RecordsApiService', () => {
       definition: DEFINITION,
       before: DEFINITION,
       rewritten: 3,
+      blanked: 2,
     };
     beforeEach(() => {
       records.alterTable.mockResolvedValue(alterResult);
@@ -499,6 +500,27 @@ describe('RecordsApiService', () => {
         () => service.setPrimaryKey(acme, 'orders', ['order_id', 'qty'], 'u1'),
         { op: 'set_primary_key', fields: ['order_id', 'qty'] },
       ],
+      [
+        'addUniqueKey',
+        () => service.addUniqueKey(acme, 'orders', ['sku'], 'u1'),
+        { op: 'add_unique_key', fields: ['sku'] },
+      ],
+      [
+        'dropUniqueKey',
+        () => service.dropUniqueKey(acme, 'orders', ['sku'], 'u1'),
+        { op: 'drop_unique_key', fields: ['sku'] },
+      ],
+      [
+        'retypeColumn',
+        () =>
+          service.retypeColumn(
+            acme,
+            'orders',
+            { column: 'qty', type: 'integer' },
+            'u1',
+          ),
+        { op: 'retype_column', column: 'qty', type: 'integer' },
+      ],
     ])(
       '%s applies its change as a person and audits it',
       async (_name, run, change) => {
@@ -516,10 +538,44 @@ describe('RecordsApiService', () => {
           before: DEFINITION,
           after: DEFINITION,
           rewritten: 3,
+          blanked: 2,
           userId: 'u1',
         });
       },
     );
+
+    it('passes blankUnconvertible to the service when asked', async () => {
+      await service.retypeColumn(
+        acme,
+        'orders',
+        { column: 'qty', type: 'integer' },
+        'u1',
+        true,
+      );
+      expect(records.alterTable).toHaveBeenCalledWith(
+        company.id,
+        'orders',
+        { op: 'retype_column', column: 'qty', type: 'integer' },
+        { byPerson: true, blankUnconvertible: true },
+      );
+    });
+
+    it('answers unconvertible values with a 409 carrying the code', async () => {
+      records.alterTable.mockRejectedValue(
+        new RecordsError('1 value will not convert', 'unconvertible'),
+      );
+      await expect(
+        service.retypeColumn(
+          acme,
+          'orders',
+          { column: 'qty', type: 'integer' },
+          'u1',
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'unconvertible' },
+      });
+    });
 
     it('keeps a default out of the audit trail', async () => {
       await service.addColumn(

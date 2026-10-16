@@ -82,7 +82,48 @@ describe('alterRequest', () => {
     });
   });
 
+  it('maps add-unique-key to a POST of the fields', () => {
+    expect(
+      alterRequest({ ...base, op: 'add-unique-key', fields: 'a, b' }),
+    ).toEqual({
+      method: 'POST',
+      path: '/unique-keys',
+      body: { fields: ['a', 'b'] },
+    });
+  });
+
+  it('maps drop-unique-key to a DELETE naming the encoded fields', () => {
+    expect(
+      alterRequest({ ...base, op: 'drop-unique-key', fields: 'a, b' }),
+    ).toEqual({ method: 'DELETE', path: '/unique-keys/a%2Cb' });
+  });
+
+  it('maps retype-column to a PUT, blanking only with the flag and --yes', () => {
+    const retype = {
+      ...base,
+      op: 'retype-column',
+      column: 'qty',
+      type: 'integer',
+    };
+    expect(alterRequest(retype)).toEqual({
+      method: 'PUT',
+      path: '/columns/qty/type',
+      body: { type: 'integer', format: undefined },
+      query: {},
+    });
+    expect(() => alterRequest({ ...retype, blankUnconvertible: true })).toThrow(
+      '--yes',
+    );
+    expect(
+      alterRequest({ ...retype, blankUnconvertible: true, yes: true }).query,
+    ).toEqual({ blankUnconvertible: 'true' });
+  });
+
   it.each([
+    [{ op: 'add-unique-key' }, '--fields'],
+    [{ op: 'drop-unique-key' }, '--fields'],
+    [{ op: 'retype-column', type: 'string' }, '--column'],
+    [{ op: 'retype-column', column: 'c' }, '--type'],
     [{ op: 'add-column', type: 'string' }, '--column'],
     [{ op: 'add-column', column: 'c' }, '--type'],
     [{ op: 'rename-column', column: 'c' }, '--new-name'],
@@ -128,5 +169,27 @@ describe('alterTableAction', () => {
       { fields: ['a'] },
     );
     expect(stdoutSpy).toHaveBeenCalledWith('{\n  "name": "orders"\n}\n');
+  });
+
+  it("combines the operation's query with the confirmation", async () => {
+    await alterTableAction(
+      { tcpServer: 'http://localhost:3000' },
+      {
+        ...base,
+        op: 'retype-column',
+        column: 'qty',
+        type: 'integer',
+        blankUnconvertible: true,
+        yes: true,
+        confirmDoNotStore: true,
+      },
+    );
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'PUT',
+      '/api/company/c1/records/tables/orders/columns/qty/type?blankUnconvertible=true&confirmDoNotStore=true',
+      { type: 'integer', format: undefined },
+    );
   });
 });

@@ -413,6 +413,16 @@ export class RecordsToolsService {
               table,
             });
           }
+          // So is choosing which fields must be unique.
+          if (
+            change.op === 'add_unique_key' ||
+            change.op === 'drop_unique_key'
+          ) {
+            return interpolate(recordsPrompts.unique_key_ask_user, {
+              fields: change.fields.join(', '),
+              table,
+            });
+          }
           if (change.op === 'add_column' && change.default !== undefined) {
             const refused = await this.refuseDoNotStore(
               companyId,

@@ -869,6 +869,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/records/tables/{table}/unique-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a unique key to a record table */
+        post: operations["RecordsController_addUniqueKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/unique-keys/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Drop a unique key of a record table */
+        delete: operations["RecordsController_dropUniqueKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/columns/{column}/type": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change a column's type */
+        put: operations["RecordsController_retypeColumn"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company/{companyId}/records/do-not-store": {
         parameters: {
             query?: never;
@@ -2324,6 +2375,15 @@ export interface components {
         };
         SetPrimaryKeyDto: {
             fields: string[];
+        };
+        UniqueKeyDto: {
+            fields: string[];
+        };
+        RetypeColumnDto: {
+            /** @enum {string} */
+            type: "string" | "number" | "integer" | "boolean";
+            /** @enum {string} */
+            format?: "date";
         };
         DoNotStoreEntryDto: {
             /** @enum {string} */
@@ -4322,6 +4382,85 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetPrimaryKeyDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_addUniqueKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UniqueKeyDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_dropUniqueKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
+                };
+            };
+        };
+    };
+    RecordsController_retypeColumn: {
+        parameters: {
+            query?: {
+                /** @description Blank the values that don't convert to the new type; without it they are refused with 409 `unconvertible`. */
+                blankUnconvertible?: boolean;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+                column: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetypeColumnDto"];
             };
         };
         responses: {

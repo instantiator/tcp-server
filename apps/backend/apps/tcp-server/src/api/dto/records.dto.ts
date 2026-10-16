@@ -278,6 +278,26 @@ export class SetPrimaryKeyDto {
   fields!: string[];
 }
 
+/** The fields that make up a unique key. */
+export class UniqueKeyDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  fields!: string[];
+}
+
+/** A column's new type. */
+export class RetypeColumnDto {
+  @ApiProperty({ enum: ['string', 'number', 'integer', 'boolean'] })
+  @IsIn(['string', 'number', 'integer', 'boolean'])
+  type!: 'string' | 'number' | 'integer' | 'boolean';
+  /** `date` for a text column holding `YYYY-MM-DD`. */
+  @ApiPropertyOptional({ enum: ['date'] })
+  @IsOptional()
+  @IsIn(['date'])
+  format?: 'date';
+}
+
 /** An entry on the do-not-store list. */
 export class DoNotStoreEntryDto {
   id!: string;

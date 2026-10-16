@@ -503,6 +503,9 @@ describe('Records API (e2e)', () => {
     ['patch', '/tables/orders/columns/qty'],
     ['delete', '/tables/orders/columns/qty'],
     ['put', '/tables/orders/primary-key'],
+    ['post', '/tables/orders/unique-keys'],
+    ['delete', '/tables/orders/unique-keys/note'],
+    ['put', '/tables/orders/columns/note/type'],
     ['get', '/do-not-store'],
     ['post', '/do-not-store'],
     ['patch', '/do-not-store/x'],
@@ -639,6 +642,66 @@ describe('Records API (e2e)', () => {
       expect(audited).toEqual([
         expect.objectContaining({ op: 'add_column', userId: 'alice' }),
       ]);
+    });
+  });
+
+  describe('unique keys and retyping (001.06)', () => {
+    const tables = ['uk_keys', 'uk_retype'];
+
+    beforeAll(async () => {
+      for (const name of tables) {
+        await records.createTable(companyId, { ...ORDERS, name }, null);
+      }
+      await alice()
+        .post('/tables/uk_keys/rows')
+        .send({ data: { order_id: 'A1', qty: 1, note: 'x' } })
+        .expect(201);
+      for (const [order_id, note] of [
+        ['R1', '12'],
+        ['R2', 'lots'],
+      ]) {
+        await alice()
+          .post('/tables/uk_retype/rows')
+          .send({ data: { order_id, qty: 1, note } })
+          .expect(201);
+      }
+    });
+
+    it('refuses a clash once a unique key is added, and allows it once dropped', async () => {
+      const clash = { data: { order_id: 'A2', qty: 1, note: 'x' } };
+      await alice()
+        .post('/tables/uk_keys/unique-keys')
+        .send({ fields: ['note'] })
+        .expect(201);
+      const refused = await alice()
+        .post('/tables/uk_keys/rows')
+        .send(clash)
+        .expect(409);
+      expect(refused.body).toMatchObject({ code: 'conflict' });
+
+      await alice().delete('/tables/uk_keys/unique-keys/note').expect(200);
+      await alice().post('/tables/uk_keys/rows').send(clash).expect(201);
+    });
+
+    it('refuses values that do not convert, then blanks them when told to', async () => {
+      const type = { type: 'integer' };
+      const refused = await alice()
+        .put('/tables/uk_retype/columns/note/type')
+        .send(type)
+        .expect(409);
+      expect(refused.body).toMatchObject({ code: 'unconvertible' });
+      expect((refused.body as { message: string }).message).toContain('"lots"');
+
+      await alice()
+        .put('/tables/uk_retype/columns/note/type?blankUnconvertible=true')
+        .send(type)
+        .expect(200);
+      const { rows } = (await alice().get('/tables/uk_retype').expect(200))
+        .body as { rows: Row[] };
+      const noteOf = (id: string) =>
+        rows.find((r) => r.data.order_id === id)?.data.note;
+      expect(noteOf('R1')).toBe(12);
+      expect(noteOf('R2')).toBeUndefined();
     });
   });
 });

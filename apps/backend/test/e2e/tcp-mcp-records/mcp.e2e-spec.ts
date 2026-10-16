@@ -181,6 +181,36 @@ describe('tcp-mcp-records MCP endpoint (e2e)', () => {
         column: 'animal',
       }),
     ).toMatch(/^Error: .*take it out of the key first/);
+
+    // Times kept as text become whole numbers of minutes only where they convert.
+    await callTool(app, 'alter_table', {
+      ...ids,
+      table: 'feedings',
+      action: 'add_column',
+      column: 'minutes',
+      type: 'string',
+      default: '15',
+    });
+    const retyped = JSON.parse(
+      await callTool(app, 'alter_table', {
+        ...ids,
+        table: 'feedings',
+        action: 'retype_column',
+        column: 'minutes',
+        type: 'integer',
+      }),
+    ) as { table: { schema: { properties: Record<string, unknown> } } };
+    expect(retyped.table.schema.properties['minutes']).toEqual({
+      type: 'integer',
+    });
+    expect(
+      await callTool(app, 'alter_table', {
+        ...ids,
+        table: 'feedings',
+        action: 'add_unique_key',
+        fields: ['minutes'],
+      }),
+    ).toMatch(/^Nothing was changed/);
   });
 
   it('refuses to store someone on the do-not-store list an agent added — over the real transport', async () => {

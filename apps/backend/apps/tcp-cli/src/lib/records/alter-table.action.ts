@@ -10,6 +10,9 @@ export const ALTER_OPS = [
   'rename-column',
   'delete-column',
   'set-key',
+  'add-unique-key',
+  'drop-unique-key',
+  'retype-column',
 ] as const;
 
 /** What `alter-table` is given on the command line. */
@@ -25,6 +28,7 @@ export interface AlterTableOpts extends EntityRefOpts {
   required?: boolean;
   fields?: string;
   confirmDoNotStore?: boolean;
+  blankUnconvertible?: boolean;
   yes?: boolean;
 }
 
@@ -33,6 +37,8 @@ export interface AlterRequest {
   method: 'POST' | 'PATCH' | 'DELETE' | 'PUT';
   path: string;
   body?: unknown;
+  /** Query parameters the change needs. */
+  query?: Record<string, string>;
 }
 
 /** A default is JSON when it parses (`1`, `true`, `"x"`), else the text as typed. */
@@ -42,6 +48,11 @@ function parseDefault(text: string): unknown {
   } catch {
     return text;
   }
+}
+
+/** A comma-separated list of field names. */
+function fieldList(text: string): string[] {
+  return text.split(',').map((f) => f.trim());
 }
 
 /**
@@ -90,10 +101,31 @@ export function alterRequest(o: AlterTableOpts): AlterRequest {
         method: 'PUT',
         path: '/primary-key',
         body: {
-          fields: need(o.fields, '--fields')
-            .split(',')
-            .map((f) => f.trim()),
+          fields: fieldList(need(o.fields, '--fields')),
         },
+      };
+    case 'add-unique-key':
+      return {
+        method: 'POST',
+        path: '/unique-keys',
+        body: { fields: fieldList(need(o.fields, '--fields')) },
+      };
+    case 'drop-unique-key':
+      return {
+        method: 'DELETE',
+        path: `/unique-keys/${encodeURIComponent(fieldList(need(o.fields, '--fields')).join(','))}`,
+      };
+    case 'retype-column':
+      if (o.blankUnconvertible && !o.yes) {
+        throw new Error(
+          "--blank-unconvertible needs --yes: it removes the values that don't convert to the new type",
+        );
+      }
+      return {
+        method: 'PUT',
+        path: `${columns}/${encodeURIComponent(need(o.column, '--column'))}/type`,
+        body: { type: need(o.type, '--type'), format: o.format },
+        query: o.blankUnconvertible ? { blankUnconvertible: 'true' } : {},
       };
     default:
       throw new Error(`Unknown change "${o.op}": use ${ALTER_OPS.join(', ')}`);
@@ -111,15 +143,17 @@ export function alterTableAction(
   cmdOpts: AlterTableOpts,
 ): Promise<void> {
   return runCommand(async () => {
-    const { method, path, body } = alterRequest(cmdOpts);
+    const { method, path, body, query } = alterRequest(cmdOpts);
     const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const companyId = await resolveCompanyId(api, cmdOpts);
-    const confirm = cmdOpts.confirmDoNotStore ? '?confirmDoNotStore=true' : '';
+    const params = new URLSearchParams(query);
+    if (cmdOpts.confirmDoNotStore) params.set('confirmDoNotStore', 'true');
+    const queryString = params.size ? `?${params}` : '';
     const definition = await apiRequest<unknown>(
       api,
       method,
-      `/api/company/${companyId}/records/tables/${encodeURIComponent(cmdOpts.table)}${path}${confirm}`,
+      `/api/company/${companyId}/records/tables/${encodeURIComponent(cmdOpts.table)}${path}${queryString}`,
       body,
     );
     process.stdout.write(JSON.stringify(definition, null, 2) + '\n');

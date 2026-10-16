@@ -555,6 +555,64 @@ describe('RecordsToolsService', () => {
       expect(audit.record).not.toHaveBeenCalled();
     });
 
+    it.each(['add_unique_key', 'drop_unique_key'])(
+      '%s changes nothing: it advises asking a user, naming the fields, with no audit',
+      async (action) => {
+        const { text } = await callTool(service, 'alter_table', {
+          table: 'feedings',
+          action,
+          fields: ['animal', 'feeding_date'],
+        });
+        expect(text).toMatch(/^Nothing was changed/);
+        expect(text).toContain("animal, feeding_date on 'feedings'");
+        expect(text).toMatch(/request_user_input/);
+        expect(records.alterTable).not.toHaveBeenCalled();
+        expect(audit.record).not.toHaveBeenCalled();
+      },
+    );
+
+    it('retypes a column as an agent, passing a refusal back as a correctable error', async () => {
+      records.alterTable.mockResolvedValueOnce({
+        definition: feedings(),
+        before: feedings(),
+        rewritten: 2,
+        blanked: 0,
+      });
+      await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'retype_column',
+        column: 'portion',
+        type: 'integer',
+      });
+      expect(records.alterTable).toHaveBeenCalledWith(
+        companyId,
+        'feedings',
+        {
+          op: 'retype_column',
+          column: 'portion',
+          type: 'integer',
+          format: undefined,
+        },
+        { byPerson: false },
+      );
+
+      records.alterTable.mockRejectedValueOnce(
+        new RecordsError(
+          "1 value doesn't convert ... ask a user with request_user_input",
+          'unconvertible',
+        ),
+      );
+      const { text } = await callTool(service, 'alter_table', {
+        table: 'feedings',
+        action: 'retype_column',
+        column: 'portion',
+        type: 'integer',
+      });
+      expect(text).toMatch(
+        /^Error: 1 value doesn't convert.*request_user_input/,
+      );
+    });
+
     it('refuses a default on the do-not-store list, auditing the field name only', async () => {
       records.doNotStoreMatches.mockResolvedValue(['keeper']);
       const { text } = await callTool(service, 'alter_table', {
