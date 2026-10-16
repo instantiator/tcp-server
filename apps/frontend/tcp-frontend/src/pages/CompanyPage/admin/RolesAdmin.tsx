@@ -19,6 +19,7 @@ import {
   useCompanyRolesList,
   useDeleteRole,
   useLiveCompanyState,
+  useLlmDefaults,
 } from '../../../api/hooks';
 import { ConfirmDialog } from '../../../components/Dialog/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState/EmptyState';
@@ -61,6 +62,14 @@ export const RolesAdmin = ({ companyId }: RolesAdminProps) => {
   // `GET /api/company/{id}` answers a JSON `null` for a company the caller
   // can't see, so read the planner through optional chaining.
   const plannerId = company.data?.plannerRoleId ?? null;
+  // A role with no model of its own falls back to the company's, then the
+  // app's. Marked only once both are known to be missing, never while loading.
+  const defaults = useLlmDefaults().data;
+  const nothingToFallBackTo =
+    company.data !== undefined &&
+    !company.data.llmConfig &&
+    defaults !== undefined &&
+    defaults.chat === null;
   const deleteRole = useDeleteRole();
 
   const [filter, setFilter] = useState('');
@@ -216,6 +225,11 @@ export const RolesAdmin = ({ companyId }: RolesAdminProps) => {
                   >
                     {role.name}
                   </Button>
+                  {nothingToFallBackTo && !role.llmConfig && (
+                    <span className="roles-admin__flag">
+                      {t('admin.roles.noModel')}
+                    </span>
+                  )}
                 </Cell>
                 <Cell className="react-aria-Cell">{role.slug}</Cell>
                 <Cell className="react-aria-Cell roles-admin__description">

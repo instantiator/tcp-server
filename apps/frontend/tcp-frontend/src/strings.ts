@@ -886,12 +886,6 @@ const strings = {
   'admin.role.mcp.off': 'Off',
   'admin.role.mcp.unavailable': '{name} (not set up here)',
   'admin.role.llm.heading': 'Language model',
-  'admin.role.llm.role': 'This role has its own model: {provider}, {model}.',
-  'admin.role.llm.company':
-    'This role uses the company’s model: {provider}, {model}.',
-  'admin.role.llm.app': 'This role uses the app’s default model.',
-  'admin.role.llm.useCompany': 'Use the company’s model',
-  'admin.role.llm.later': 'Choosing a model here comes in a later release.',
   'admin.role.save': 'Save',
   'admin.role.create': 'Add role',
   'admin.role.cancel': 'Close',

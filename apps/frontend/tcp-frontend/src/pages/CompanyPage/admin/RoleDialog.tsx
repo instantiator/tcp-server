@@ -19,7 +19,9 @@ import {
   useCompanyRolesList,
   useCreateRole,
   useLiveCompanyState,
+  useLlmDefaults,
   useMcpServers,
+  useToolFootprint,
   useUpdateRole,
 } from '../../../api/hooks';
 import { ButtonRow } from '../../../components/ButtonRow/ButtonRow';
@@ -28,6 +30,14 @@ import { ErrorState } from '../../../components/ErrorState/ErrorState';
 import { TextField } from '../../../components/Field/TextField';
 import { focusFirstInvalid } from '../../../components/Field/focusFirstInvalid';
 import { LoadingState } from '../../../components/LoadingState/LoadingState';
+import { LlmConfigPicker } from '../../../components/LlmConfigPicker/LlmConfigPicker';
+import {
+  draftOf,
+  patchOf,
+  validate,
+  type LlmDraftErrors,
+} from '../../../components/LlmConfigPicker/llmDraft';
+import { useLocalAddressCheck } from '../../../components/LlmConfigPicker/useLocalAddressCheck';
 import { t } from '../../../strings';
 import './RoleDialog.css';
 import { KnowledgePanel } from './KnowledgePanel';
@@ -142,6 +152,7 @@ const RoleEditor = ({
   readonly onClose: () => void;
 }) => {
   const company = useLiveCompanyState(companyId).data;
+  const defaults = useLlmDefaults().data;
   const servers = useMcpServers().data ?? [];
   const createRole = useCreateRole();
   const updateRole = useUpdateRole();
@@ -157,6 +168,9 @@ const RoleEditor = ({
     (initial?.knowledgeDomains ?? []).join(', '),
   );
   const [choices, setChoices] = useState(choicesOf(initial?.mcpServerToggles));
+  const [llm, setLlm] = useState(() => draftOf(initial?.llmConfig));
+  const [llmErrors, setLlmErrors] = useState<LlmDraftErrors>({});
+  const localAddress = useLocalAddressCheck();
   const [errors, setErrors] = useState<{
     name?: string;
     slug?: string;
@@ -170,6 +184,8 @@ const RoleEditor = ({
 
   const shownSlug = slugTouched ? slug : slugify(name);
   const adding = saved === null;
+  // `implement` is the route's default, and the mode that is offered the most tools.
+  const footprint = useToolFootprint(companyId, saved?.slug, 'implement').data;
 
   /** Records a successful save: the new baseline, the announcement, any warnings. */
   const succeeded = (
@@ -178,6 +194,8 @@ const RoleEditor = ({
     notes: readonly string[],
   ): void => {
     setSaved(role);
+    // The typed key is sent now; the form forgets it and describes the saved one.
+    setLlm(draftOf(role.llmConfig));
     setWarnings(notes);
     setProblem(null);
     announce({ channel: CHANNEL, change, params: { name: role.name } });
@@ -203,6 +221,10 @@ const RoleEditor = ({
       }),
     };
     setErrors(found);
+    // An untouched model is never sent, so it can't block saving the rest.
+    const foundLlm =
+      patchOf(llm, saved?.llmConfig) === undefined ? {} : validate(llm, 'chat');
+    setLlmErrors(foundLlm);
     if (Object.keys(found).length > 0) {
       focusFirstInvalid([
         { error: found.name, ref: nameRef },
@@ -211,6 +233,12 @@ const RoleEditor = ({
       ]);
       return;
     }
+    if (Object.keys(foundLlm).length > 0) return;
+
+    const asked = patchOf(llm, saved?.llmConfig);
+    const llmConfig = asked?.baseUrl
+      ? { ...asked, baseUrl: await localAddress.check(asked.baseUrl) }
+      : asked;
 
     const body = {
       name: name.trim(),
@@ -225,6 +253,7 @@ const RoleEditor = ({
           companyId,
           slug: shownSlug,
           ...body,
+          ...(llmConfig && { llmConfig }),
           mcpServerList: [],
         });
         succeeded(result.role, 'admin.role.announce.created', result.warnings);
@@ -248,6 +277,7 @@ const RoleEditor = ({
         ) && {
           mcpServerToggles: body.mcpServerToggles,
         }),
+        ...(llmConfig !== undefined && { llmConfig }),
       };
       const result = await updateRole.mutateAsync({
         id: saved.id,
@@ -259,30 +289,9 @@ const RoleEditor = ({
     }
   };
 
-  /** Drops the role's own model so it follows the company's. */
-  const followCompanyModel = async (role: RoleDTO) => {
-    try {
-      const result = await updateRole.mutateAsync({
-        id: role.id,
-        body: { llmConfig: null },
-      });
-      succeeded(result.role, 'admin.role.announce.saved', result.warnings);
-    } catch (error) {
-      failed(error);
-    }
-  };
-
-  const modelSentence = saved?.llmConfig
-    ? t('admin.role.llm.role', {
-        provider: saved.llmConfig.provider,
-        model: saved.llmConfig.model,
-      })
-    : company?.llmConfig
-      ? t('admin.role.llm.company', {
-          provider: company.llmConfig.provider,
-          model: company.llmConfig.model,
-        })
-      : t('admin.role.llm.app');
+  const fallback = company?.llmConfig
+    ? { from: 'company' as const, config: company.llmConfig }
+    : { from: 'app' as const, config: defaults?.chat ?? null };
 
   return (
     <Dialog
@@ -405,17 +414,21 @@ const RoleEditor = ({
             </div>
             <div className="role-dialog__model">
               <h3>{t('admin.role.llm.heading')}</h3>
-              <p>{modelSentence}</p>
-              <p>{t('admin.role.llm.later')}</p>
-              {saved?.llmConfig && (
-                <Button
-                  className="react-aria-Button tcp-button--outline"
-                  isPending={updateRole.isPending}
-                  onPress={() => void followCompanyModel(saved)}
-                >
-                  {t('admin.role.llm.useCompany')}
-                </Button>
-              )}
+              <LlmConfigPicker
+                purpose="chat"
+                draft={llm}
+                onChange={(next) => {
+                  setLlm(next);
+                  setLlmErrors({});
+                }}
+                saved={saved?.llmConfig}
+                fallback={fallback}
+                companyId={companyId}
+                roleId={saved?.id}
+                footprint={adding ? 'unsaved' : footprint?.total}
+                errors={llmErrors}
+              />
+              {localAddress.dialog}
             </div>
             {warnings.length > 0 && (
               <div className="role-dialog__warnings">

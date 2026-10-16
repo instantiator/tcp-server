@@ -43,6 +43,21 @@ const routes = (role: object = ROLE, company: object | null = COMPANY) =>
     [/\/api\/company\/c1\/roles$/, { body: [role] }],
     [/\/api\/company\/c1$/, { body: company }],
     [/\/api\/mcp-servers$/, { body: SERVERS }],
+    [
+      /\/api\/system\/llm-defaults$/,
+      {
+        body: {
+          chat: { provider: 'openai', model: 'gpt-5-mini' },
+          embedding: null,
+          embeddingDimension: 768,
+        },
+      },
+    ],
+    [
+      /\/tool-footprint/,
+      { body: { mode: 'implement', servers: [], total: 5800 } },
+    ],
+    [/\/llm\/models$/, { body: { models: [] } }],
     [/\/api\/role\/r1$/, { body: ROLE }],
     [
       /\/api\/role$/,
@@ -67,7 +82,10 @@ const sentBodies = async (): Promise<unknown[]> => {
     .map(([input]) => input)
     .filter(
       (input): input is Request =>
-        input instanceof Request && ['POST', 'PUT'].includes(input.method),
+        input instanceof Request &&
+        ['POST', 'PUT'].includes(input.method) &&
+        // The picker's model listing is a POST too, but saves nothing.
+        !input.url.endsWith('/llm/models'),
     );
   return Promise.all(writes.map((request) => request.clone().json()));
 };
@@ -313,47 +331,125 @@ describe('RoleDialog', () => {
       ).toBeInTheDocument();
     });
 
-    it('says which model applies, and drops the role’s own on request', async () => {
+    /** Opens the model's provider list and picks `name`. */
+    const chooseProvider = async (
+      user: ReturnType<typeof userEvent.setup>,
+      name: string | RegExp,
+    ) => {
+      await user.click(
+        await screen.findByRole('button', { name: /Provider$/ }),
+      );
+      await user.click(await screen.findByRole('option', { name }));
+    };
+
+    it('drops the role’s own model by choosing what it falls back to', async () => {
       const user = userEvent.setup();
       render_('r1');
-      expect(
-        await screen.findByText(
-          t('admin.role.llm.role', {
-            provider: 'openai-compatible',
-            model: 'm',
-          }),
-        ),
-      ).toBeInTheDocument();
+      await chooseProvider(user, /Use the app default/);
       await user.click(
-        screen.getByRole('button', { name: t('admin.role.llm.useCompany') }),
+        screen.getByRole('button', { name: t('admin.role.save') }),
       );
+
       await waitFor(() => expect(announce).toHaveBeenCalled());
       expect(await sentBodies()).toEqual([{ llmConfig: null }]);
     });
 
-    it('falls back to the company model, then the app default', async () => {
+    it('labels the fallback: the company’s model, else the app default', async () => {
       const bare = { ...ROLE, llmConfig: null };
       respondByRoute([
         ...routes(bare, {
           ...COMPANY,
-          llmConfig: { provider: 'p', model: 'cm' },
+          llmConfig: { provider: 'lm-studio', model: 'cm' },
         }),
       ]);
       const view = render_('r1');
       expect(
-        await screen.findByText(
-          t('admin.role.llm.company', { provider: 'p', model: 'cm' }),
-        ),
+        await screen.findByRole('button', {
+          name: /Use the company’s model \(LM Studio · cm\)/,
+        }),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', { name: t('admin.role.llm.useCompany') }),
-      ).toBeNull();
       view.unmount();
 
       respondByRoute([...routes(bare)]);
       render_('r1');
       expect(
-        await screen.findByText(t('admin.role.llm.app')),
+        await screen.findByRole('button', {
+          name: /Use the app default \(OpenAI · gpt-5-mini\)/,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('sends a newly chosen model whole, without a key unless one is typed', async () => {
+      const user = userEvent.setup();
+      render_('r1');
+      await chooseProvider(user, 'OpenAI');
+      await user.click(
+        screen.getByRole('button', { name: t('admin.role.save') }),
+      );
+
+      await waitFor(() => expect(announce).toHaveBeenCalled());
+      expect(await sentBodies()).toEqual([
+        {
+          llmConfig: {
+            provider: 'openai',
+            model: 'm',
+            baseUrl: 'https://api.openai.com/v1',
+          },
+        },
+      ]);
+    });
+
+    it('sends a typed key', async () => {
+      const user = userEvent.setup();
+      render_('r1');
+      await chooseProvider(user, 'OpenAI');
+      await user.type(screen.getByLabelText(/API key/), 'sk-new');
+      await user.click(
+        screen.getByRole('button', { name: t('admin.role.save') }),
+      );
+
+      await waitFor(() => expect(announce).toHaveBeenCalled());
+      expect(await sentBodies()).toEqual([
+        { llmConfig: expect.objectContaining({ apiKey: 'sk-new' }) as unknown },
+      ]);
+    });
+
+    it('offers host.docker.internal for a localhost address on save', async () => {
+      const user = userEvent.setup();
+      render_('r1');
+      await chooseProvider(user, 'LM Studio');
+      await user.click(
+        screen.getByRole('button', { name: t('admin.role.save') }),
+      );
+      await user.click(
+        await screen.findByRole('button', { name: t('llm.local.replace') }),
+      );
+
+      await waitFor(() => expect(announce).toHaveBeenCalled());
+      expect(await sentBodies()).toEqual([
+        {
+          llmConfig: expect.objectContaining({
+            provider: 'lm-studio',
+            baseUrl: 'http://host.docker.internal:1234/v1',
+          }) as unknown,
+        },
+      ]);
+    });
+
+    it('shows how much of the context window the role’s tools take', async () => {
+      const user = userEvent.setup();
+      render_('r1');
+      await chooseProvider(user, 'LM Studio');
+      await user.type(
+        screen.getByRole('textbox', { name: /Context window/ }),
+        '32768',
+      );
+      expect(
+        await screen.findByText(
+          new RegExp(
+            t('llm.contextWindow.budget', { tools: '5,800', left: '26,968' }),
+          ),
+        ),
       ).toBeInTheDocument();
     });
 
