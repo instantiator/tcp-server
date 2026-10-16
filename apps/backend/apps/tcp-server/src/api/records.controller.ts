@@ -37,6 +37,7 @@ import { CompanyScope } from '../auth/company-scope.decorator';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
+  AddColumnDto,
   AddDoNotStoreDto,
   AddRecordDto,
   AppendRecordsCsvResultDto,
@@ -50,7 +51,11 @@ import {
   RecordTableRowsDto,
   RecordTableSummaryDto,
   RemovedRecordsDto,
+  RenameColumnDto,
   SearchRecordsDto,
+  SetPrimaryKeyDto,
+  RetypeColumnDto,
+  UniqueKeyDto,
   SetRetentionDto,
   TimedRecordDto,
   UpdateDoNotStoreDto,
@@ -72,6 +77,19 @@ const CONFIRM_QUERY = {
   type: Boolean,
   description:
     'Store data that matches the do-not-store list; without it a match is refused with 409 `do_not_store`.',
+} as const;
+
+/**
+ * `?blankUnconvertible=true`: the person has seen the values that don't
+ * convert and blanks them. Without it they are refused.
+ */
+const BLANK = new ParseBoolPipe({ optional: true });
+const BLANK_QUERY = {
+  name: 'blankUnconvertible',
+  required: false,
+  type: Boolean,
+  description:
+    "Blank the values that don't convert to the new type; without it they are refused with 409 `unconvertible`.",
 } as const;
 
 /** The route's company, from its `:companyId` (UUID or slug). */
@@ -400,6 +418,155 @@ export class RecordsController {
       table,
       body.retention ?? null,
       getCurrentUserId(req),
+    );
+  }
+
+  /** Adds a column; every existing record gets the default, if one is given. */
+  @ApiOperation({ summary: 'Add a column to a record table' })
+  @ApiCreatedResponse({ type: RecordTableDefinitionDto })
+  @ApiQuery(CONFIRM_QUERY)
+  @CompanyScope(SCOPE)
+  @Post('tables/:table/columns')
+  async addColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: AddColumnDto,
+    @Req() req: Request,
+    @Query('confirmDoNotStore', CONFIRM) confirm?: boolean,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.addColumn(
+      company,
+      table,
+      body,
+      getCurrentUserId(req),
+      confirm,
+    );
+  }
+
+  /** Renames a column in the table and in every record. */
+  @ApiOperation({ summary: 'Rename a column of a record table' })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Patch('tables/:table/columns/:column')
+  async renameColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Param('column') column: string,
+    @Body() body: RenameColumnDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.renameColumn(
+      company,
+      table,
+      column,
+      body.newName,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Deletes a column and its values. A key field must leave the key first. */
+  @ApiOperation({ summary: 'Delete a column of a record table' })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Delete('tables/:table/columns/:column')
+  async deleteColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Param('column') column: string,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.deleteColumn(
+      company,
+      table,
+      column,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Replaces the fields that identify a record. */
+  @ApiOperation({ summary: "Set a record table's primary key" })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Put('tables/:table/primary-key')
+  async setPrimaryKey(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: SetPrimaryKeyDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.setPrimaryKey(
+      company,
+      table,
+      body.fields,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Adds a unique key; every record needs a value and none may clash. */
+  @ApiOperation({ summary: 'Add a unique key to a record table' })
+  @ApiCreatedResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Post('tables/:table/unique-keys')
+  async addUniqueKey(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Body() body: UniqueKeyDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.addUniqueKey(
+      company,
+      table,
+      body.fields,
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Drops a unique key, named by its fields joined with commas. */
+  @ApiOperation({ summary: 'Drop a unique key of a record table' })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Delete('tables/:table/unique-keys/:key')
+  async dropUniqueKey(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Param('key') key: string,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.dropUniqueKey(
+      company,
+      table,
+      key.split(',').map((f) => f.trim()),
+      getCurrentUserId(req),
+    );
+  }
+
+  /** Changes a column's type, converting its values. 409 `unconvertible` when some don't convert. */
+  @ApiOperation({ summary: "Change a column's type" })
+  @ApiOkResponse({ type: RecordTableDefinitionDto })
+  @ApiQuery(BLANK_QUERY)
+  @CompanyScope(SCOPE)
+  @Put('tables/:table/columns/:column/type')
+  async retypeColumn(
+    @Param('companyId') companyId: string,
+    @Param('table') table: string,
+    @Param('column') column: string,
+    @Body() body: RetypeColumnDto,
+    @Req() req: Request,
+    @Query('blankUnconvertible', BLANK) blank?: boolean,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.retypeColumn(
+      company,
+      table,
+      { column, type: body.type, format: body.format },
+      getCurrentUserId(req),
+      blank,
     );
   }
 

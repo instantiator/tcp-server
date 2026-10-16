@@ -50,7 +50,12 @@ import type {
   TaskDetailDTO,
   TaskDTO,
 } from './dtos';
-import { compareRows, NO_ROW_CHANGES, type RowChanges } from './compareRows';
+import {
+  compareRows,
+  NO_ROW_CHANGES,
+  type RowChanges,
+  sameColumns,
+} from './compareRows';
 import {
   forgetLatestRecords,
   keyParams,
@@ -75,6 +80,13 @@ import {
   useClearRecordTableMutation,
   useDeleteRecordMutation,
   useDropRecordTableMutation,
+  useAddColumnMutation,
+  useRenameColumnMutation,
+  useDeleteColumnMutation,
+  useSetPrimaryKeyMutation,
+  useAddUniqueKeyMutation,
+  useDropUniqueKeyMutation,
+  useRetypeColumnMutation,
   useRecordTable,
   useRecordTables,
   useUpdateRecordMutation,
@@ -892,6 +904,36 @@ export const useClearRecordTable = (companyId: string, table: string) =>
 export const useDropRecordTable = (companyId: string, table: string) =>
   useBulkRecordMutation(companyId, table, useDropRecordTableMutation);
 
+// Column changes rewrite every row, so each reloads every record view (001.06).
+
+/** Adds a column; a `409` `do_not_store` means its default needs confirming. */
+export const useAddColumn = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useAddColumnMutation);
+
+/** Renames a column. */
+export const useRenameColumn = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useRenameColumnMutation);
+
+/** Deletes a column and its values. */
+export const useDeleteColumn = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useDeleteColumnMutation);
+
+/** Replaces the primary key; a `400` or `409` says which rows stop it. */
+export const useSetPrimaryKey = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useSetPrimaryKeyMutation);
+
+/** Adds a unique key; a `400` or `409` says which rows stop it. */
+export const useAddUniqueKey = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useAddUniqueKeyMutation);
+
+/** Drops a unique key. */
+export const useDropUniqueKey = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useDropUniqueKeyMutation);
+
+/** Changes a column's type; a `409` `unconvertible` asks whether to blank what won't convert. */
+export const useRetypeColumn = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useRetypeColumnMutation);
+
 /**
  * Deletes chosen rows together, removing them from the cached table where
  * they stand; the rest don't move (ADR-027). Searches and counts reload.
@@ -960,25 +1002,38 @@ export const useSetRetention = (companyId: string, table: string) => {
  * How what is on screen differs from what is stored now (001.05). Nothing,
  * until a change elsewhere is heard and a fresher copy has been read.
  */
-export interface LiveRecordChanges extends RowChanges {
+export interface LiveRecordChanges extends TableChanges {
   /** The table itself was deleted elsewhere. */
   readonly dropped: boolean;
   /** Anything at all differs: the sheet is out of date. */
   readonly any: boolean;
 }
 
+/** One table's differences: its rows, and whether its columns or key changed (001.06). */
+export interface TableChanges extends RowChanges {
+  /**
+   * The table's columns or key were changed elsewhere. Every edit made
+   * against the columns on screen could go to the wrong place, so the whole
+   * sheet waits for a reload.
+   */
+  readonly columnsChanged: boolean;
+}
+
 /** What a sheet with nothing changed elsewhere shows. */
 const UNCHANGED: LiveRecordChanges = {
   ...NO_ROW_CHANGES,
+  columnsChanged: false,
   dropped: false,
   any: false,
 };
 
 /** Adds `dropped` and `any` to a comparison. */
-const withSummary = (changes: RowChanges): LiveRecordChanges => ({
+const withSummary = (changes: TableChanges): LiveRecordChanges => ({
   ...changes,
   dropped: false,
-  any: changes.changed.size + changes.deleted.size + changes.added > 0,
+  any:
+    changes.columnsChanged ||
+    changes.changed.size + changes.deleted.size + changes.added > 0,
 });
 
 /**
@@ -998,16 +1053,17 @@ export const useLiveRecordTableChanges = (
   return useMemo(() => {
     if (latest.data === undefined || shown === undefined) return UNCHANGED;
     if (latest.data === null) return { ...UNCHANGED, dropped: true, any: true };
-    return withSummary(
-      compareRows(shown.rows, latest.data.rows, latest.data.truncated),
-    );
+    return withSummary({
+      ...compareRows(shown.rows, latest.data.rows, latest.data.truncated),
+      columnsChanged: !sameColumns(shown.definition, latest.data.definition),
+    });
   }, [latest.data, shown]);
 };
 
 /** A search's differences: per table shown, and for the search as a whole. */
 export interface LiveRecordSearchChanges extends LiveRecordChanges {
   /** Each shown table's differences, by table name. */
-  readonly byTable: ReadonlyMap<string, RowChanges>;
+  readonly byTable: ReadonlyMap<string, TableChanges>;
 }
 
 /**
@@ -1029,28 +1085,35 @@ export const useLiveRecordSearchChanges = (
       return { ...UNCHANGED, byTable: new Map() };
     }
     const fresh = new Map(
-      latest.data.groups.map((g) => [g.definition.name, g.rows]),
+      latest.data.groups.map((g) => [g.definition.name, g]),
     );
-    const byTable = new Map<string, RowChanges>();
+    const byTable = new Map<string, TableChanges>();
     const changed = new Set<string>();
     const deleted = new Set<string>();
     let added = 0;
+    let columnsChanged = false;
     for (const group of shown.groups) {
       const name = group.definition.name;
-      const changes = compareRows(
-        group.rows,
-        fresh.get(name) ?? [],
-        latest.data.truncated,
-      );
+      const now = fresh.get(name);
+      const changes = {
+        ...compareRows(group.rows, now?.rows ?? [], latest.data.truncated),
+        // A table with no matches left says nothing about its columns.
+        columnsChanged:
+          now !== undefined && !sameColumns(group.definition, now.definition),
+      };
       byTable.set(name, changes);
+      columnsChanged ||= changes.columnsChanged;
       changes.changed.forEach((id) => changed.add(id));
       changes.deleted.forEach((id) => deleted.add(id));
       added += changes.added;
       fresh.delete(name);
     }
     // Tables that weren't in the results at all, and now are.
-    for (const rows of fresh.values()) added += rows.length;
-    return { ...withSummary({ changed, deleted, added }), byTable };
+    for (const group of fresh.values()) added += group.rows.length;
+    return {
+      ...withSummary({ changed, deleted, added, columnsChanged }),
+      byTable,
+    };
   }, [latest.data, shown]);
 };
 

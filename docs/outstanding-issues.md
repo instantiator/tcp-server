@@ -568,19 +568,27 @@ is its security boundary.
 **Act when:** an agent is seen changing records in plan or qa mode. Then pass the
 mode to the records server and refuse the write tools there.
 
-## Record tables cannot have columns added or renamed
+## Agents can't delete a column, narrow a key or change unique keys
 
-People can clear and delete a whole table (001.03), but nobody can add, rename
-or retype a column, in the web UI or through a tool. A wrong first schema has to
-be worked around: make a new table, export, and append the rows back.
+These are placebos for agents (001.06), as is blanking the values a retype
+can't convert. `alter_table` answers with advice to ask
+a person through `request_user_input`, and the person does it in the Columns
+dialog. Deleting a column or blanking values removes data from records, and a
+narrower key or a new unique key can make different records count as the same
+one.
 
-A user has now asked for it (2026-10-12): on the dev server, an agent made a
-`feedings` table with no column for which animal was fed, and could not add one.
+**Act when:** 003.01 (action approval) lands. Make each an approval request
+carrying the exact change, which the platform runs when the person approves.
 
-**Act when:** now — planned in
-[001.06](prompts/phase%2004%20-%20utility/001.06.00.prompt%20-%20record%20table%20schema%20changes%20%28draft%29.md):
-agents may add and rename columns, and asking to delete one returns advice to
-ask a user; people get a column editor in the sheet. Key fields are protected.
+## Rebuilding a record table's key reads every record
+
+`RecordsService.rebuildKey` reads a table's records into memory to check for missing
+values and clashes, and computes each key in JavaScript, because Postgres's
+`jsonb` text differs from `JSON.stringify`. The table is locked while it runs.
+
+**Act when:** changing a key, adding a unique key or retyping a key column on
+a table over 10,000 records takes more than 2 seconds. Page through the records, or compute keys in SQL with a matching
+encoding.
 
 ## No template table schemas for records
 

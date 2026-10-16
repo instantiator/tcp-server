@@ -34,6 +34,12 @@ An insert writes the record and its key rows in one transaction. If another inse
 
 Deleting a table's record, or the table, cascades to its key rows.
 
+A key's stored name is its field names joined (`order_id`, or `marketplace,listing_id`), and its stored value holds only the values. Renaming a key field therefore changes only `keyName`; changing the key rebuilds that key's rows.
+
+### Column changes and locking (001.06)
+
+A column change rewrites records, so it must never meet a write that read the old columns. Every write reads the table's definition inside its own transaction, under `FOR SHARE` on the `record_table` row. A column change takes `FOR UPDATE` on that row first. Writes don't block each other, but a column change waits for writes in flight, and new writes wait for it. The table lock is always taken before any record lock, so the two can't deadlock. Deleting rows by id and clearing a table never read the columns, so they take no table lock.
+
 ---
 
 ## Tools
@@ -51,6 +57,7 @@ Every tool takes `companyId` and `agentId`. The agent side injects both (see [Ac
 | [`delete`](#delete)                   | `delete(table, id \| key)`                                       | Delete one record                                |
 | [`query`](#query)                     | `query(table, filters?, sort?, limit?, offset?)`                 | Find records                                     |
 | [`aggregate`](#aggregate)             | `aggregate(table, op, field?, group_by?, filters?)`              | Count, sum, average, minimum or maximum, exactly |
+| [`alter_table`](#alter_table)         | `alter_table(table, action, …)`                                  | Add or rename a column, or widen the key         |
 | [`do_not_store`](#do_not_store)       | `do_not_store(action, value, reason)`                            | Add someone to the do-not-store list             |
 
 Tool descriptions live in `apps/backend/apps/tcp-mcp-records/src/tools.jsonc`. The `describe_server` text lives in `prompts.jsonc` beside it.
@@ -263,6 +270,34 @@ The check runs just before the write, outside its transaction, so an entry added
 
 ---
 
+## `alter_table`
+
+Changes a table's columns or primary key (001.06), so an agent can fix a table instead of making another. One tool, not four, because every tool's schema is sent on every turn. It costs about 500 tokens a turn.
+
+| Parameter     | For                          | Description                                                                                                             |
+| ------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `table`       | all                          | The table name                                                                                                          |
+| `action`      | all                          | `add_column`, `rename_column`, `retype_column`, `set_primary_key`, `delete_column`, `add_unique_key`, `drop_unique_key` |
+| `column`      | add, rename, retype, delete  | The column                                                                                                              |
+| `type`        | add, retype                  | `string`, `number`, `integer` or `boolean`                                                                              |
+| `format`      | add, retype                  | `date`, for a text column holding `YYYY-MM-DD`                                                                          |
+| `description` | add                          | Shown as the column's tooltip                                                                                           |
+| `default`     | add                          | Given to every existing record. Without it, they are left blank                                                         |
+| `required`    | add                          | Allowed only with a `default`, or on an empty table                                                                     |
+| `new_name`    | rename                       | The new name                                                                                                            |
+| `fields`      | set_primary_key, unique keys | The key's fields                                                                                                        |
+
+- **Add** checks the name, the 50-column limit, that the default fits the column, that it keeps every record under 64 KB, and that it is not on the do-not-store list.
+- **Rename** moves the field in every record, the schema, `required`, the keys, `retention.from` and the stored key names. Key fields can be renamed.
+- **Set key** needs every field to be a string or integer column with a value in every record. It refuses with a count and example record ids when values are missing, and with up to three example values when two records would share a key. The new fields become required. **An agent may only add fields to the key**: a narrower key can make different records count as the same one, so the refusal tells it to ask a user.
+- **Retype** converts every value: numbers written as text become numbers, any value can become text, and text already written as a `YYYY-MM-DD` date or as `true`/`false` keeps its meaning. Only records whose value changes are rewritten, and any key the column is in is rebuilt, so `"01"` and `"1"` both becoming `1` is refused as a clash. A key column must stay text or a whole number, and the column retention counts from can't be retyped. **If any value won't convert, an agent is refused** with the count, up to three examples, and advice to ask a user.
+- **Unique keys** are a person's choice: `add_unique_key` and `drop_unique_key` change nothing and advise asking a user, naming the fields.
+- **Delete** deletes nothing. It answers with advice to ask a user with `request_user_input`, naming the column. A key column, or the column retention counts from, is refused outright with the reason.
+
+Each rewritten record's `version` goes up, so an edit made against the old columns is refused as stale. Its `updatedAt` does not change: a column change is not an edit of its data, and retention must not restart. People can also do what agents are advised to ask for (see [Routes](#routes)): narrow the key, add and drop unique keys, delete columns, and retype a column whose values don't all convert, which blanks those values once confirmed. A key or required column is never blanked.
+
+---
+
 ## Idempotency
 
 An agent that retries, or restarts after a crash, must not add a record twice. So `insert` never makes a duplicate. If a record already holds the same primary or unique key, nothing is added. The result says so:
@@ -289,7 +324,7 @@ This covers records only. An action that leaves the system, such as sending an e
 
 - **Per company.** Every statement filters on `companyId`. An agent reaches any table of its own company and nothing of another company's. This is the security boundary.
 - **Identity is injected.** `companyId` and `agentId` are in every tool's schema, but the agent side removes them from what the model sees and fills in the real values on every call (see [agent-services.md → Identity fields](agent-services.md#enabling-mcp-tools-for-a-role)). A model cannot name another company.
-- **Plan and QA are read-only.** In `plan` and `qa` mode the agent side drops `create_table`, `insert`, `update` and `delete` (`RECORDS_WRITE_TOOLS` in `mode-tools.ts`). The records server does no mode check of its own. If an agent were seen changing records in those modes, a server-side check would be needed. See [outstanding-issues.md](outstanding-issues.md#plan-and-qa-are-read-only-for-records-on-the-agent-side-only).
+- **Plan and QA are read-only.** In `plan` and `qa` mode the agent side drops `create_table`, `insert`, `update`, `alter_table` and `delete` (`RECORDS_WRITE_TOOLS` in `mode-tools.ts`). The records server does no mode check of its own. If an agent were seen changing records in those modes, a server-side check would be needed. See [outstanding-issues.md](outstanding-issues.md#plan-and-qa-are-read-only-for-records-on-the-agent-side-only).
 - **The internal route** (`DELETE /internal/companies/:id/records`) needs the internal API key, like tcp-server's `/internal/*` routes.
 
 ---
@@ -300,15 +335,16 @@ The server writes audit events itself, through `AuditClientService`, because it 
 
 Changes are `state_change` events. Reads are `tool_call` events. Both carry `source: 'records'`.
 
-| Event          | Payload                                                             | When                                    |
-| -------------- | ------------------------------------------------------------------- | --------------------------------------- |
-| `state_change` | `{ action: 'create_table', table, definition }`                     | A table is made                         |
-| `state_change` | `{ action: 'insert', table, recordId, before: null, after }`        | A record is added                       |
-| `state_change` | `{ action: 'update', table, recordId, before, after }`              | A record is changed                     |
-| `state_change` | `{ action: 'delete', table, recordId, before, after: null }`        | A record is deleted                     |
-| `tool_call`    | `{ tool: 'query', table, filters, recordIds }`                      | A query                                 |
-| `tool_call`    | `{ tool: 'aggregate', table, op, field, groupBy, filters, groups }` | An aggregate                            |
-| `tool_call`    | `{ tool: 'insert', table, outcome: 'already_exists', recordIds }`   | An insert that found an existing record |
+| Event          | Payload                                                             | When                                                              |
+| -------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `state_change` | `{ action: 'create_table', table, definition }`                     | A table is made                                                   |
+| `state_change` | `{ action: 'insert', table, recordId, before: null, after }`        | A record is added                                                 |
+| `state_change` | `{ action: 'update', table, recordId, before, after }`              | A record is changed                                               |
+| `state_change` | `{ action: 'delete', table, recordId, before, after: null }`        | A record is deleted                                               |
+| `tool_call`    | `{ tool: 'query', table, filters, recordIds }`                      | A query                                                           |
+| `tool_call`    | `{ tool: 'aggregate', table, op, field, groupBy, filters, groups }` | An aggregate                                                      |
+| `tool_call`    | `{ tool: 'insert', table, outcome: 'already_exists', recordIds }`   | An insert that found an existing record                           |
+| `state_change` | `{ action: 'alter_table', op, table, before, after, rewritten }`    | A column change. Definitions and a count, never the default value |
 
 Audit writes are fire-and-forget. A lost audit request does not undo the write. tcp-agent also records its own `tool_call` and `tool_result` events for every tool call.
 
@@ -316,15 +352,16 @@ Audit writes are fire-and-forget. A lost audit request does not undo the write. 
 
 When a person changes records in the web UI, tcp-server writes the audit event itself (`RecordsApiService`). It is a `state_change` with role `user` and no agent, and the payload carries `source: 'records'` and the person's `userId`. Reads are not audited, as with the storage proxy. See [ADR-008](ADRs/ADR-008-audit-logging.md#amendment-as-implemented-p04-001-03).
 
-| Event          | Payload                                                            | When                                 |
-| -------------- | ------------------------------------------------------------------ | ------------------------------------ |
-| `state_change` | `{ action: 'create_table', table, definition, userId }`            | A table is made through the API      |
-| `state_change` | `{ action: 'add_row', table, recordId, after, userId }`            | A row is added                       |
-| `state_change` | `{ action: 'update', table, recordId, before, after, userId }`     | A row is edited                      |
-| `state_change` | `{ action: 'delete_row', table, recordId, before, userId }`        | A row is deleted                     |
-| `state_change` | `{ action: 'append_csv', table, inserted, alreadyExists, userId }` | A CSV is appended                    |
-| `state_change` | `{ action: 'clear_table', table, removed, userId }`                | A table is cleared. A count, no rows |
-| `state_change` | `{ action: 'drop_table', table, definition, removed, userId }`     | A table is deleted. Keeps the schema |
+| Event          | Payload                                                                           | When                                 |
+| -------------- | --------------------------------------------------------------------------------- | ------------------------------------ |
+| `state_change` | `{ action: 'create_table', table, definition, userId }`                           | A table is made through the API      |
+| `state_change` | `{ action: 'add_row', table, recordId, after, userId }`                           | A row is added                       |
+| `state_change` | `{ action: 'update', table, recordId, before, after, userId }`                    | A row is edited                      |
+| `state_change` | `{ action: 'delete_row', table, recordId, before, userId }`                       | A row is deleted                     |
+| `state_change` | `{ action: 'append_csv', table, inserted, alreadyExists, userId }`                | A CSV is appended                    |
+| `state_change` | `{ action: 'clear_table', table, removed, userId }`                               | A table is cleared. A count, no rows |
+| `state_change` | `{ action: 'drop_table', table, definition, removed, userId }`                    | A table is deleted. Keeps the schema |
+| `state_change` | `{ action: 'alter_table', op, table, before, after, rewritten, blanked, userId }` | A column change. No default value    |
 
 Clear and drop record how many rows went, not the rows. Drop keeps the table's definition so it can be made again.
 
@@ -349,19 +386,26 @@ Every `RecordsService` method takes `companyId` first, and every route checks th
 
 All routes are under `/api/company/:companyId/records`. All need a signed-in company member. There are no role checks, so any member can edit, clear and delete.
 
-| Method and path                 | Does                                                                                            |
-| ------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `GET tables`                    | The company's tables: `name`, `purpose`, `records`, `updatedAt`                                 |
-| `POST tables`                   | Makes a table from the same JSON Schema an agent sends to `create_table`. See below             |
-| `GET tables/:table`             | The definition and the rows (newest change first, at most 10,000), with `total` and `truncated` |
-| `DELETE tables/:table`          | Deletes the table and every row. Returns `{ removed }`                                          |
-| `GET tables/:table/csv`         | One table as `text/csv`                                                                         |
-| `POST tables/:table/csv`        | Appends rows from an uploaded CSV (multipart field `file`). All or nothing                      |
-| `POST tables/:table/rows`       | Adds a row. 409 `conflict` if its key is already held                                           |
-| `PATCH tables/:table/rows/:id`  | Edits a row: `{ changes, version }`. 409 `stale` if the row changed since `version`             |
-| `DELETE tables/:table/rows/:id` | Deletes a row (`?version=` is checked the same way). 204                                        |
-| `DELETE tables/:table/rows`     | Clears the table: every row goes, the table stays. Returns `{ removed }`                        |
-| `GET export`                    | Every table as a zip of CSVs (`application/zip`)                                                |
+| Method and path                          | Does                                                                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `GET tables`                             | The company's tables: `name`, `purpose`, `records`, `updatedAt`                                                                    |
+| `POST tables`                            | Makes a table from the same JSON Schema an agent sends to `create_table`. See below                                                |
+| `GET tables/:table`                      | The definition and the rows (newest change first, at most 10,000), with `total` and `truncated`                                    |
+| `DELETE tables/:table`                   | Deletes the table and every row. Returns `{ removed }`                                                                             |
+| `GET tables/:table/csv`                  | One table as `text/csv`                                                                                                            |
+| `POST tables/:table/csv`                 | Appends rows from an uploaded CSV (multipart field `file`). All or nothing                                                         |
+| `POST tables/:table/rows`                | Adds a row. 409 `conflict` if its key is already held                                                                              |
+| `PATCH tables/:table/rows/:id`           | Edits a row: `{ changes, version }`. 409 `stale` if the row changed since `version`                                                |
+| `DELETE tables/:table/rows/:id`          | Deletes a row (`?version=` is checked the same way). 204                                                                           |
+| `DELETE tables/:table/rows`              | Clears the table: every row goes, the table stays. Returns `{ removed }`                                                           |
+| `GET export`                             | Every table as a zip of CSVs (`application/zip`)                                                                                   |
+| `POST tables/:table/columns`             | Adds a column (`?confirmDoNotStore` for a default on the list). Returns the definition (001.06)                                    |
+| `PATCH tables/:table/columns/:column`    | Renames a column: `{ newName }`                                                                                                    |
+| `DELETE tables/:table/columns/:column`   | Deletes a column and its values. 400 for a key column                                                                              |
+| `POST tables/:table/unique-keys`         | Adds a unique key: `{ fields }`. Refused if records would clash or lack a value                                                    |
+| `DELETE tables/:table/unique-keys/:key`  | Drops the unique key whose fields, joined by commas, are `:key`                                                                    |
+| `PUT tables/:table/columns/:column/type` | Retypes a column: `{ type, format? }`. 409 `unconvertible` names values that won't convert; `?blankUnconvertible=true` blanks them |
+| `PUT tables/:table/primary-key`          | Replaces the key: `{ fields }`. People may narrow it; refused if records would clash                                               |
 
 `POST tables` has no screen. It exists for tests, tools and, later, templates (002.03).
 
@@ -468,11 +512,11 @@ The test tiers run the records migrations after tcp-server's in `apps/backend/te
 
 ## Testing
 
-| Tier        | Location                                                                                                                                                                                    |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | `apps/backend/apps/tcp-mcp-records/src/**/*.spec.ts` (tool wiring, audit payloads, prompts)                                                                                                 |
-| Integration | `apps/backend/test/integration/tcp-shared/records.integration-spec.ts` (concurrent inserts and updates, company isolation, injection, exact sums, a separate database migrating on its own) |
-| e2e         | `apps/backend/test/e2e/tcp-mcp-records/` (health, MCP protocol, the internal delete route)                                                                                                  |
+| Tier        | Location                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | `apps/backend/apps/tcp-mcp-records/src/**/*.spec.ts` (tool wiring, audit payloads, prompts)                                                                                                                               |
+| Integration | `apps/backend/test/integration/tcp-shared/records.integration-spec.ts` (concurrent inserts and updates, column changes racing writes, company isolation, injection, exact sums, a separate database migrating on its own) |
+| e2e         | `apps/backend/test/e2e/tcp-mcp-records/` (health, MCP protocol, the internal delete route)                                                                                                                                |
 
 See [manual-testing/06-mcp-servers.md](manual-testing/06-mcp-servers.md) for a manual check.
 
@@ -480,12 +524,14 @@ See [manual-testing/06-mcp-servers.md](manual-testing/06-mcp-servers.md) for a m
 
 ## What it deliberately does not do
 
-| Not offered                         | Why                                                                               |
-| ----------------------------------- | --------------------------------------------------------------------------------- |
-| Agents clearing or dropping a table | Only people can, through the web UI and API (001.03). Agents have no such tool    |
-| Alter a table's columns             | No tool and no UI. Planned with 002.03 (templates), or on request                 |
-| Template table schemas              | Orders, customers and so on are not shipped. Planned for 002.03                   |
-| Nested objects or array fields      | Fields are scalars, so queries and totals stay simple and exact                   |
-| Raw SQL                             | Agents never write SQL. Every query is built from checked fields and bound values |
-| A server-side read-only mode        | Plan and QA are filtered on the agent side. Company scoping is the boundary       |
-| Guaranteed audit                    | Audit writes are fire-and-forget                                                  |
+| Not offered                                               | Why                                                                               |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Agents clearing or dropping a table                       | Only people can, through the web UI and API (001.03). Agents have no such tool    |
+| Agents deleting a column                                  | Deletes a value from every record: the tool advises asking a person (001.06)      |
+| Agents narrowing a key                                    | Can make different records count as one: the tool advises asking a person         |
+| Agents changing unique keys, or blanking values to retype | The tool advises asking a person, who can                                         |
+| Template table schemas                                    | Orders, customers and so on are not shipped. Planned for 002.03                   |
+| Nested objects or array fields                            | Fields are scalars, so queries and totals stay simple and exact                   |
+| Raw SQL                                                   | Agents never write SQL. Every query is built from checked fields and bound values |
+| A server-side read-only mode                              | Plan and QA are filtered on the agent side. Company scoping is the boundary       |
+| Guaranteed audit                                          | Audit writes are fire-and-forget                                                  |

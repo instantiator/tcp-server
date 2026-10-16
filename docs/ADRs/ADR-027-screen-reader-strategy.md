@@ -354,3 +354,18 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **Later changes are not announced.** The notice keeps count, for anyone who wants the detail.
 - **Reload removes the notice, and the button with it,** so focus moves to the sheet's first cell, or to the search heading. It never falls to the page body.
 - **A table deleted elsewhere stays open and readable,** read-only, with no Reload and none of the write actions. It does not vanish from under its reader, even from the Tables tab.
+
+## Amendment as implemented (001.06, phase 04) <a id="amendment-as-implemented-p04-001-06"></a>
+
+[001.06](../prompts/phase%2004%20-%20utility/001.06.01.plan%20-%20record%20table%20schema%20changes.md) adds a Columns dialog to the record sheet, and a second kind of "changed elsewhere". One row is added to the [per-surface policy](#per-surface-policy):
+
+| Surface                                      | Exposure                                                                                    | Announcement                                                                                     | Politeness |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------- |
+| Record sheet whose columns changed elsewhere | The "Out of date" group says the columns changed, with Reload; the whole sheet is read-only | Once when it appears ("The columns of orders have changed elsewhere…"), even after a rows notice | `polite`   |
+
+- **The whole sheet locks, not just some rows.** An edit could name a column that has gone or been renamed. In the search view only that table's group locks.
+- **Every action in the Columns dialog names its column** ("Rename note", "Delete note"), so a list of buttons reads unambiguously out of context.
+- **A disabled button says why in visible text,** linked as its description: a key column's Delete reads "In a key, so it cannot be deleted…". Disabled alone would leave a screen reader user guessing.
+- **A change closes the dialog and is announced.** Focus returns to the More menu that opened it, the one stable place, rather than into a list that has just changed under it.
+- **Delete asks first** in an `alertdialog` with the row count and a download, focus on No, as Clear and Delete table do. So do dropping a unique key and a retype that would blank values; the latter quotes the server's count and examples, so the reader hears exactly what would go.
+- **A refused key change is linked to its checkbox group** with `aria-describedby`, not `isInvalid`: native validation would block the next submit until the ticks changed, though the fix may lie in the rows.

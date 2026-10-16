@@ -121,6 +121,98 @@ describe('tcp-mcp-records MCP endpoint (e2e)', () => {
     expect(totals).toEqual([{ group: {}, value: '0.3' }]);
   });
 
+  it('adds a column with alter_table, then stores records that use it — over the real transport', async () => {
+    const ids = { companyId, agentId };
+    await callTool(app, 'create_table', {
+      ...ids,
+      name: 'feedings',
+      purpose: 'When the animals were fed',
+      schema: {
+        properties: {
+          feeding_date: { type: 'string', format: 'date' },
+          feeding_time: { type: 'string' },
+        },
+        required: ['feeding_date', 'feeding_time'],
+      },
+      primary_key: ['feeding_date', 'feeding_time'],
+    });
+    await callTool(app, 'insert', {
+      ...ids,
+      table: 'feedings',
+      record: { feeding_date: '2026-10-12', feeding_time: '08:00' },
+    });
+
+    const altered = JSON.parse(
+      await callTool(app, 'alter_table', {
+        ...ids,
+        table: 'feedings',
+        action: 'add_column',
+        column: 'animal',
+        type: 'string',
+        default: 'chicken',
+      }),
+    ) as { table: { schema: { required: string[] } }; rewritten: number };
+    expect(altered.rewritten).toBe(1);
+
+    await callTool(app, 'alter_table', {
+      ...ids,
+      table: 'feedings',
+      action: 'set_primary_key',
+      fields: ['feeding_date', 'feeding_time', 'animal'],
+    });
+    const cat = JSON.parse(
+      await callTool(app, 'insert', {
+        ...ids,
+        table: 'feedings',
+        record: {
+          feeding_date: '2026-10-12',
+          feeding_time: '08:00',
+          animal: 'cat',
+        },
+      }),
+    ) as { status: string };
+    expect(cat.status).toBe('inserted');
+
+    expect(
+      await callTool(app, 'alter_table', {
+        ...ids,
+        table: 'feedings',
+        action: 'delete_column',
+        column: 'animal',
+      }),
+    ).toMatch(/^Error: .*take it out of the key first/);
+
+    // Times kept as text become whole numbers of minutes only where they convert.
+    await callTool(app, 'alter_table', {
+      ...ids,
+      table: 'feedings',
+      action: 'add_column',
+      column: 'minutes',
+      type: 'string',
+      default: '15',
+    });
+    const retyped = JSON.parse(
+      await callTool(app, 'alter_table', {
+        ...ids,
+        table: 'feedings',
+        action: 'retype_column',
+        column: 'minutes',
+        type: 'integer',
+      }),
+    ) as { table: { schema: { properties: Record<string, unknown> } } };
+    expect(retyped.table.schema.properties['minutes']).toEqual({
+      type: 'integer',
+    });
+    expect(
+      await callTool(app, 'alter_table', {
+        ...ids,
+        table: 'feedings',
+        action: 'add_unique_key',
+        fields: ['minutes'],
+      }),
+    ).toMatch(/^Nothing was changed/);
+  });
+
   it('refuses to store someone on the do-not-store list an agent added — over the real transport', async () => {
     const identity = { companyId, agentId };
     await callTool(app, 'create_table', {

@@ -1,11 +1,13 @@
 import {
   AuditEventType,
+  type AlterResult,
   type DoNotStoreEntry,
   type NewTable,
   type RecordData,
   RecordsError,
   RecordsService,
   type SearchResult,
+  type TableChange,
   type TableDefinition,
   type TableRetention,
   type TableRows,
@@ -43,6 +45,7 @@ function httpError(e: unknown): unknown {
       return new NotFoundException(e.message);
     case 'conflict':
     case 'stale':
+    case 'unconvertible':
       return new ConflictException({ message: e.message, code: e.code });
     default:
       return new BadRequestException(e.message);
@@ -376,6 +379,146 @@ export class RecordsApiService {
       retention,
     });
     return definition;
+  }
+
+  /** Adds a column. A default matching the do-not-store list is a 409 unless confirmed. */
+  async addColumn(
+    company: TcpCompany,
+    table: string,
+    change: Omit<Extract<TableChange, { op: 'add_column' }>, 'op'>,
+    userId: string | null,
+    confirmDoNotStore = false,
+  ): Promise<TableDefinition> {
+    const overridden =
+      change.default === undefined
+        ? {}
+        : await this.checkDoNotStore(
+            company,
+            [{ [change.column]: change.default }],
+            confirmDoNotStore,
+          );
+    return this.alter(
+      company,
+      table,
+      { op: 'add_column', ...change },
+      userId,
+      overridden,
+    );
+  }
+
+  /** Renames a column, rewriting every record. */
+  renameColumn(
+    company: TcpCompany,
+    table: string,
+    column: string,
+    newName: string,
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(
+      company,
+      table,
+      { op: 'rename_column', column, newName },
+      userId,
+    );
+  }
+
+  /** Deletes a column and its value from every record. */
+  deleteColumn(
+    company: TcpCompany,
+    table: string,
+    column: string,
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(company, table, { op: 'delete_column', column }, userId);
+  }
+
+  /** Replaces a table's primary key. */
+  setPrimaryKey(
+    company: TcpCompany,
+    table: string,
+    fields: string[],
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(
+      company,
+      table,
+      { op: 'set_primary_key', fields },
+      userId,
+    );
+  }
+
+  /** Adds a unique key over the given fields. */
+  addUniqueKey(
+    company: TcpCompany,
+    table: string,
+    fields: string[],
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(company, table, { op: 'add_unique_key', fields }, userId);
+  }
+
+  /** Drops a unique key; its fields stay required. */
+  dropUniqueKey(
+    company: TcpCompany,
+    table: string,
+    fields: string[],
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    return this.alter(
+      company,
+      table,
+      { op: 'drop_unique_key', fields },
+      userId,
+    );
+  }
+
+  /**
+   * Changes a column's type, converting every value. Values that don't convert
+   * are a 409 unless `blankUnconvertible` is set, which removes them.
+   */
+  retypeColumn(
+    company: TcpCompany,
+    table: string,
+    change: Omit<Extract<TableChange, { op: 'retype_column' }>, 'op'>,
+    userId: string | null,
+    blankUnconvertible?: boolean,
+  ): Promise<TableDefinition> {
+    return this.alter(
+      company,
+      table,
+      { op: 'retype_column', ...change },
+      userId,
+      {},
+      { blankUnconvertible },
+    );
+  }
+
+  /** Applies one schema change as a person (so narrowing is allowed) and audits it, never with the default's value. */
+  private async alter(
+    company: TcpCompany,
+    table: string,
+    change: TableChange,
+    userId: string | null,
+    overridden: { doNotStoreOverride?: string[] } = {},
+    opts: { blankUnconvertible?: boolean } = {},
+  ): Promise<TableDefinition> {
+    const result: AlterResult = await call(() =>
+      this.records.alterTable(company.id, table, change, {
+        byPerson: true,
+        ...opts,
+      }),
+    );
+    await this.changed(company, userId, {
+      action: 'alter_table',
+      op: change.op,
+      table,
+      before: result.before,
+      after: result.definition,
+      rewritten: result.rewritten,
+      blanked: result.blanked,
+      ...overridden,
+    });
+    return result.definition;
   }
 
   listDoNotStore(company: TcpCompany): Promise<DoNotStoreEntry[]> {

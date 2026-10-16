@@ -6,7 +6,10 @@ import {
   RecordsError,
   RecordsService,
   type RecordRef,
+  TABLE_CHANGE_OPS,
+  type TableChange,
   ToolResult,
+  checkDelete,
   err,
   ok,
   registerDescribeServer,
@@ -52,6 +55,60 @@ function recordRef(args: {
   if (args.id) return { id: args.id };
   if (args.key) return { key: args.key };
   throw new RecordsError('give either the record `id` or its primary `key`');
+}
+
+/** The arguments `alter_table` takes, as the model sends them. */
+interface AlterArgs {
+  action: (typeof TABLE_CHANGE_OPS)[number];
+  column?: string;
+  new_name?: string;
+  type?: 'string' | 'number' | 'integer' | 'boolean';
+  format?: 'date';
+  description?: string;
+  default?: unknown;
+  required?: boolean;
+  fields?: string[];
+}
+
+/** Turns `alter_table`'s flat arguments into a {@link TableChange}, saying which one is missing. */
+function tableChange(args: AlterArgs): TableChange {
+  const need = <T>(value: T | undefined, name: string): T => {
+    if (value === undefined) {
+      throw new RecordsError(`${args.action} needs \`${name}\``);
+    }
+    return value;
+  };
+  switch (args.action) {
+    case 'add_column':
+      return {
+        op: 'add_column',
+        column: need(args.column, 'column'),
+        type: need(args.type, 'type'),
+        format: args.format,
+        description: args.description,
+        default: args.default,
+        required: args.required,
+      };
+    case 'rename_column':
+      return {
+        op: 'rename_column',
+        column: need(args.column, 'column'),
+        newName: need(args.new_name, 'new_name'),
+      };
+    case 'delete_column':
+      return { op: 'delete_column', column: need(args.column, 'column') };
+    case 'set_primary_key':
+    case 'add_unique_key':
+    case 'drop_unique_key':
+      return { op: args.action, fields: need(args.fields, 'fields') };
+    case 'retype_column':
+      return {
+        op: 'retype_column',
+        column: need(args.column, 'column'),
+        type: need(args.type, 'type'),
+        format: args.format,
+      };
+  }
 }
 
 /** Replaces `{{key}}` placeholders in a template string. */
@@ -325,6 +382,75 @@ export class RecordsToolsService {
     );
 
     server.registerTool(
+      'alter_table',
+      {
+        description: d.alter_table,
+        inputSchema: {
+          ...identity,
+          table: tableArg,
+          action: z.enum(TABLE_CHANGE_OPS),
+          column: z.string().optional(),
+          new_name: z.string().optional(),
+          type: z.enum(['string', 'number', 'integer', 'boolean']).optional(),
+          format: z.literal('date').optional(),
+          description: z.string().optional(),
+          default: z.unknown().optional(),
+          required: z.boolean().optional(),
+          fields: z.array(z.string()).optional(),
+        },
+      },
+      ({ companyId, agentId, table, ...args }) =>
+        this.run(async () => {
+          const change = tableChange(args);
+          // Deleting a column deletes data from every record: a person's call.
+          if (change.op === 'delete_column') {
+            checkDelete(
+              await this.records.describeTable(companyId, table),
+              change.column,
+            );
+            return interpolate(recordsPrompts.delete_column_ask_user, {
+              column: change.column,
+              table,
+            });
+          }
+          // So is choosing which fields must be unique.
+          if (
+            change.op === 'add_unique_key' ||
+            change.op === 'drop_unique_key'
+          ) {
+            return interpolate(recordsPrompts.unique_key_ask_user, {
+              fields: change.fields.join(', '),
+              table,
+            });
+          }
+          if (change.op === 'add_column' && change.default !== undefined) {
+            const refused = await this.refuseDoNotStore(
+              companyId,
+              agentId,
+              'alter_table',
+              table,
+              { [change.column]: change.default },
+            );
+            if (refused) return refused;
+          }
+          const { definition, before, rewritten } =
+            await this.records.alterTable(companyId, table, change, {
+              byPerson: false,
+            });
+          // Definitions and a count only: a default value is row data.
+          this.change(companyId, agentId, {
+            action: 'alter_table',
+            op: change.op,
+            table,
+            before,
+            after: definition,
+            rewritten,
+          });
+          return { table: definition, rewritten };
+        }),
+    );
+
+    server.registerTool(
       'do_not_store',
       {
         description: d.do_not_store,
@@ -375,7 +501,7 @@ export class RecordsToolsService {
   private async refuseDoNotStore(
     companyId: string,
     agentId: string,
-    tool: 'insert' | 'update',
+    tool: 'insert' | 'update' | 'alter_table',
     table: string,
     data: Record<string, unknown>,
   ): Promise<

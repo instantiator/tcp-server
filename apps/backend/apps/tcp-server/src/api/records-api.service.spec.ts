@@ -58,6 +58,7 @@ describe('RecordsApiService', () => {
     deleteRows: jest.fn(),
     readRowsById: jest.fn(),
     setRetention: jest.fn(),
+    alterTable: jest.fn(),
     addDoNotStore: jest.fn(),
   };
   const audit = {
@@ -458,6 +459,153 @@ describe('RecordsApiService', () => {
           ),
         ).rejects.toBeInstanceOf(BadRequestException);
       });
+    });
+  });
+
+  describe('column changes (001.06)', () => {
+    const alterResult = {
+      definition: DEFINITION,
+      before: DEFINITION,
+      rewritten: 3,
+      blanked: 2,
+    };
+    beforeEach(() => {
+      records.alterTable.mockResolvedValue(alterResult);
+    });
+
+    it.each([
+      [
+        'addColumn',
+        () =>
+          service.addColumn(
+            acme,
+            'orders',
+            { column: 'note', type: 'string' },
+            'u1',
+          ),
+        { op: 'add_column', column: 'note', type: 'string' },
+      ],
+      [
+        'renameColumn',
+        () => service.renameColumn(acme, 'orders', 'qty', 'count', 'u1'),
+        { op: 'rename_column', column: 'qty', newName: 'count' },
+      ],
+      [
+        'deleteColumn',
+        () => service.deleteColumn(acme, 'orders', 'qty', 'u1'),
+        { op: 'delete_column', column: 'qty' },
+      ],
+      [
+        'setPrimaryKey',
+        () => service.setPrimaryKey(acme, 'orders', ['order_id', 'qty'], 'u1'),
+        { op: 'set_primary_key', fields: ['order_id', 'qty'] },
+      ],
+      [
+        'addUniqueKey',
+        () => service.addUniqueKey(acme, 'orders', ['sku'], 'u1'),
+        { op: 'add_unique_key', fields: ['sku'] },
+      ],
+      [
+        'dropUniqueKey',
+        () => service.dropUniqueKey(acme, 'orders', ['sku'], 'u1'),
+        { op: 'drop_unique_key', fields: ['sku'] },
+      ],
+      [
+        'retypeColumn',
+        () =>
+          service.retypeColumn(
+            acme,
+            'orders',
+            { column: 'qty', type: 'integer' },
+            'u1',
+          ),
+        { op: 'retype_column', column: 'qty', type: 'integer' },
+      ],
+    ])(
+      '%s applies its change as a person and audits it',
+      async (_name, run, change) => {
+        await expect(run()).resolves.toBe(DEFINITION);
+        expect(records.alterTable).toHaveBeenCalledWith(
+          company.id,
+          'orders',
+          change,
+          { byPerson: true },
+        );
+        expect(audited()).toMatchObject({
+          action: 'alter_table',
+          op: change.op,
+          table: 'orders',
+          before: DEFINITION,
+          after: DEFINITION,
+          rewritten: 3,
+          blanked: 2,
+          userId: 'u1',
+        });
+      },
+    );
+
+    it('passes blankUnconvertible to the service when asked', async () => {
+      await service.retypeColumn(
+        acme,
+        'orders',
+        { column: 'qty', type: 'integer' },
+        'u1',
+        true,
+      );
+      expect(records.alterTable).toHaveBeenCalledWith(
+        company.id,
+        'orders',
+        { op: 'retype_column', column: 'qty', type: 'integer' },
+        { byPerson: true, blankUnconvertible: true },
+      );
+    });
+
+    it('answers unconvertible values with a 409 carrying the code', async () => {
+      records.alterTable.mockRejectedValue(
+        new RecordsError('1 value will not convert', 'unconvertible'),
+      );
+      await expect(
+        service.retypeColumn(
+          acme,
+          'orders',
+          { column: 'qty', type: 'integer' },
+          'u1',
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'unconvertible' },
+      });
+    });
+
+    it('keeps a default out of the audit trail', async () => {
+      await service.addColumn(
+        acme,
+        'orders',
+        { column: 'note', type: 'string', default: 'secret-default' },
+        'u1',
+      );
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain(
+        'secret-default',
+      );
+    });
+
+    it('refuses a default on the do-not-store list until confirmed', async () => {
+      records.doNotStoreMatches.mockResolvedValue(['note']);
+      const column = {
+        column: 'note',
+        type: 'string',
+        default: 'Ann Lee',
+      } as const;
+
+      await expect(
+        service.addColumn(acme, 'orders', column, 'u1'),
+      ).rejects.toMatchObject({
+        response: { code: 'do_not_store', fields: ['note'] },
+      });
+      expect(records.alterTable).not.toHaveBeenCalled();
+
+      await service.addColumn(acme, 'orders', column, 'u1', true);
+      expect(audited()).toMatchObject({ doNotStoreOverride: ['note'] });
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { TimedRecord } from './dtos';
+import type { RecordTableDefinition, TimedRecord } from './dtos';
 
 /** How the rows on screen differ from a fresher copy read in the background. */
 export interface RowChanges {
@@ -43,3 +43,24 @@ export const compareRows = (
   const added = fresh.filter((row) => !shownIds.has(row.id)).length;
   return { changed, deleted, added };
 };
+
+/** JSON with object keys sorted at every level: Postgres `jsonb` keeps no key order. */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_, v: unknown) =>
+    v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : v,
+  );
+
+/**
+ * Whether two copies of a table have the same columns and keys (001.06).
+ * Retention, name and purpose don't count: they change no cell.
+ */
+export const sameColumns = (
+  shown: RecordTableDefinition,
+  fresh: RecordTableDefinition,
+): boolean =>
+  canonical([shown.schema, shown.primaryKey, shown.uniqueKeys]) ===
+  canonical([fresh.schema, fresh.primaryKey, fresh.uniqueKeys]);

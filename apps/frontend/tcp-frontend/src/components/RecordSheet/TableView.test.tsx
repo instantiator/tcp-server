@@ -360,6 +360,65 @@ describe('TableView', () => {
     ).toHaveAccessibleDescription(expect.stringContaining('Row 3'));
   });
 
+  it('renames a column from the Columns dialog, and shows the new name once reloaded (001.06)', async () => {
+    const user = userEvent.setup();
+    const renamed: RecordTableRows = {
+      ...TABLE,
+      definition: {
+        ...TABLE.definition,
+        schema: {
+          properties: {
+            amount: { type: 'integer' },
+            order_id: { type: 'string' },
+            paid: { type: 'boolean' },
+          },
+          required: ['order_id', 'amount'],
+        },
+      },
+      rows: [
+        row('r2', { order_id: 'A2', amount: 5, paid: true }, 4),
+        row('r1', { order_id: 'A1', amount: 2 }, 2),
+      ],
+    };
+    renderView();
+    await screen.findByRole('grid');
+    respondByRoute([
+      [/\/columns\/qty$/, { body: renamed.definition }],
+      [new RegExp(`${BASE}/tables/orders$`), { body: renamed }],
+    ]);
+    await user.click(
+      screen.getByRole('button', {
+        name: t('records.more', { table: 'orders' }),
+      }),
+    );
+    await user.click(
+      screen.getByRole('menuitem', { name: t('records.action.columns') }),
+    );
+    await user.click(
+      await screen.findByRole('button', {
+        name: t('records.columns.rename', { column: 'qty' }),
+      }),
+    );
+    const name = screen.getByRole('textbox', {
+      name: t('records.columns.newName', { column: 'qty' }),
+    });
+    await user.clear(name);
+    await user.type(name, 'amount{Enter}');
+
+    // AG Grid pads header text and adds the sort position after the name.
+    await waitFor(() =>
+      expect(
+        dataCells(screen.getByRole('grid'), 'columnheader').map(
+          (h) => h.textContent.trim().split(/\s+/)[0],
+        ),
+      ).toEqual(['order_id', 'amount', 'paid', t('records.column.updated')]),
+    );
+    expect(announceRecords).toHaveBeenCalledWith(
+      'records.announce.columnRenamed',
+      { table: 'orders', column: 'qty', newName: 'amount' },
+    );
+  });
+
   it('asks before clearing, with the count, offering a download first', async () => {
     const user = userEvent.setup();
     renderView();

@@ -20,6 +20,7 @@ import { t, tCount } from '../../strings';
 import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { Dialog } from '../Dialog/Dialog';
 import { Icon, WithTooltip } from '../Icon/Icon';
+import { ColumnsDialog } from './ColumnsDialog';
 import { RetentionDialog } from './RetentionDialog';
 import { announceRecords } from './announceRecords';
 import { useDoNotStoreGuard } from './useDoNotStoreGuard';
@@ -34,16 +35,20 @@ export interface RecordTableActionsProps {
   readonly onReload?: () => void;
   /** Called once the table is deleted, so the caller can move focus somewhere stable. */
   readonly onDropped?: () => void;
-  /** Adds "Retention…" to the menu, for a view that has the table's definition. */
+  /** Adds "Columns…" and "Retention…" to the menu, for a view that has the table's definition. */
   readonly definition?: RecordTableDefinition;
   readonly portalContainer?: Element | undefined;
 }
 
-type Open = 'append' | 'retention' | 'clear' | 'drop' | null;
+type Open = 'append' | 'columns' | 'retention' | 'clear' | 'drop' | null;
 
 /** Narrows a menu key to the dialog it opens, without a cast. */
 const asOpen = (key: Key): Open =>
-  key === 'append' || key === 'retention' || key === 'clear' || key === 'drop'
+  key === 'append' ||
+  key === 'columns' ||
+  key === 'retention' ||
+  key === 'clear' ||
+  key === 'drop'
     ? key
     : null;
 
@@ -117,6 +122,9 @@ export const RecordTableActions = ({
               <MenuItem id="reload">{t('records.action.reload')}</MenuItem>
             )}
             {definition !== undefined && (
+              <MenuItem id="columns">{t('records.action.columns')}</MenuItem>
+            )}
+            {definition !== undefined && (
               <MenuItem id="retention">
                 {t('records.action.retention')}
               </MenuItem>
@@ -133,6 +141,19 @@ export const RecordTableActions = ({
           table={table}
           portalContainer={portalContainer}
           onClose={() => setOpen(null)}
+        />
+      )}
+
+      {open === 'columns' && definition !== undefined && (
+        <ColumnsDialog
+          companyId={companyId}
+          companySlug={companySlug}
+          definition={definition}
+          records={records}
+          portalContainer={portalContainer}
+          onClose={() => setOpen(null)}
+          // Rows on screen, and edits waiting to be undone, name the old columns.
+          onChanged={onReload}
         />
       )}
 

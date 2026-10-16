@@ -1,8 +1,15 @@
-import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  getSchemaPath,
+} from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayNotEmpty,
   IsArray,
+  IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -228,6 +235,67 @@ export class SetRetentionDto {
   @ValidateNested()
   @Type(() => RecordTableRetentionDto)
   retention!: RecordTableRetentionDto | null;
+}
+
+/** A column to add to a table. */
+export class AddColumnDto {
+  @IsString()
+  column!: string;
+  @ApiProperty({ enum: ['string', 'number', 'integer', 'boolean'] })
+  @IsIn(['string', 'number', 'integer', 'boolean'])
+  type!: 'string' | 'number' | 'integer' | 'boolean';
+  /** `date` for a text column holding `YYYY-MM-DD`. */
+  @ApiPropertyOptional({ enum: ['date'] })
+  @IsOptional()
+  @IsIn(['date'])
+  format?: 'date';
+  @IsOptional()
+  @IsString()
+  description?: string;
+  @ApiPropertyOptional({
+    description: 'Given to every existing record',
+    oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+  })
+  @IsOptional()
+  default?: string | number | boolean;
+  /** Allowed only with a default, or on an empty table. */
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+}
+
+/** A column's new name. */
+export class RenameColumnDto {
+  @IsString()
+  newName!: string;
+}
+
+/** The fields that make up a table's primary key. */
+export class SetPrimaryKeyDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  fields!: string[];
+}
+
+/** The fields that make up a unique key. */
+export class UniqueKeyDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  fields!: string[];
+}
+
+/** A column's new type. */
+export class RetypeColumnDto {
+  @ApiProperty({ enum: ['string', 'number', 'integer', 'boolean'] })
+  @IsIn(['string', 'number', 'integer', 'boolean'])
+  type!: 'string' | 'number' | 'integer' | 'boolean';
+  /** `date` for a text column holding `YYYY-MM-DD`. */
+  @ApiPropertyOptional({ enum: ['date'] })
+  @IsOptional()
+  @IsIn(['date'])
+  format?: 'date';
 }
 
 /** An entry on the do-not-store list. */

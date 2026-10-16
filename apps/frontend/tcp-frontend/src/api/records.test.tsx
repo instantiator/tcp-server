@@ -20,10 +20,12 @@ import {
   downloadRecordSelection,
   downloadRecordTableCsv,
   recordErrorBody,
+  useAddColumn,
   useAddDoNotStore,
   useAddRecord,
   useAppendRecordsCsv,
   useClearRecordTable,
+  useDeleteColumn,
   useDeleteRecord,
   useDeleteRecords,
   useDoNotStoreList,
@@ -32,6 +34,8 @@ import {
   useRecordTable,
   useLiveRecordTables,
   useReloadRecordTable,
+  useRenameColumn,
+  useSetPrimaryKey,
   useSetRetention,
   useUpdateRecord,
 } from './hooks';
@@ -398,6 +402,116 @@ describe('getBlob and downloads', () => {
     await downloadAllRecordTables(C, 'acme');
     expect(new URL(requestedUrls()[0] ?? '').pathname).toBe(`${BASE}/export`);
     expect(names[0]).toMatch(/ acme tables\.zip$/);
+  });
+});
+
+describe('column changes (001.06)', () => {
+  beforeEach(() => {
+    installFetchMock();
+    respondByRoute([[/records/, { body: tableOf([]).definition }]]);
+  });
+
+  /** A hook's render with a fresher copy of the table cached, as an open sheet would have. */
+  const withLatest = <R,>(callback: () => R) => {
+    const rendered = setup(callback);
+    rendered.queryClient.setQueryData(
+      queryKeys.recordTableLatest(C, T),
+      tableOf([row('r1')]),
+    );
+    return rendered;
+  };
+
+  /** The nth request's method, path and JSON body. */
+  const sent = async (n = 0) => {
+    const text = await call(n).clone().text();
+    return {
+      method: call(n).method,
+      path: new URL(call(n).url).pathname,
+      body: text === '' ? null : (JSON.parse(text) as unknown),
+    };
+  };
+
+  /** After a column change: the fresher copy is gone and every record view reloads. */
+  const expectForgotten = (
+    queryClient: QueryClient,
+    spy: { mock: { calls: unknown[][] } },
+  ) => {
+    expect(
+      queryClient.getQueryData(queryKeys.recordTableLatest(C, T)),
+    ).toBeUndefined();
+    expect(invalidatedKeys(spy)).toEqual([['record']]);
+  };
+
+  it('adds a column, confirming a do-not-store default only when asked', async () => {
+    const { result, queryClient, spy } = withLatest(() => useAddColumn(C, T));
+    await act(() =>
+      result.current.mutateAsync({
+        column: 'animal',
+        type: 'string',
+        default: 'chicken',
+      }),
+    );
+    expect(await sent()).toEqual({
+      method: 'POST',
+      path: `${BASE}/tables/${T}/columns`,
+      body: { column: 'animal', type: 'string', default: 'chicken' },
+    });
+    expect(new URL(call().url).searchParams.has('confirmDoNotStore')).toBe(
+      false,
+    );
+    expectForgotten(queryClient, spy);
+
+    await act(() =>
+      result.current.mutateAsync({
+        column: 'keeper',
+        type: 'string',
+        confirmDoNotStore: true,
+      }),
+    );
+    expect(new URL(call(1).url).searchParams.get('confirmDoNotStore')).toBe(
+      'true',
+    );
+  });
+
+  it('renames a column', async () => {
+    const { result, queryClient, spy } = withLatest(() =>
+      useRenameColumn(C, T),
+    );
+    await act(() =>
+      result.current.mutateAsync({ column: 'qty', newName: 'amount' }),
+    );
+    expect(await sent()).toEqual({
+      method: 'PATCH',
+      path: `${BASE}/tables/${T}/columns/qty`,
+      body: { newName: 'amount' },
+    });
+    expectForgotten(queryClient, spy);
+  });
+
+  it('deletes a column', async () => {
+    const { result, queryClient, spy } = withLatest(() =>
+      useDeleteColumn(C, T),
+    );
+    await act(() => result.current.mutateAsync('note'));
+    expect(await sent()).toEqual({
+      method: 'DELETE',
+      path: `${BASE}/tables/${T}/columns/note`,
+      body: null,
+    });
+    expectForgotten(queryClient, spy);
+  });
+
+  it('sets the primary key', async () => {
+    const { result, queryClient, spy } = withLatest(() =>
+      useSetPrimaryKey(C, T),
+    );
+    await act(() => result.current.mutateAsync(['order_id', 'line']));
+    expect(await sent()).toEqual({
+      method: 'PUT',
+      path: `${BASE}/tables/${T}/primary-key`,
+      body: { fields: ['order_id', 'line'] },
+    });
+    expectForgotten(queryClient, spy);
   });
 });
 

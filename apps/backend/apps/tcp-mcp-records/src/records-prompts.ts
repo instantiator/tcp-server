@@ -11,6 +11,8 @@ export interface RecordsPrompts {
   do_not_store_added: string;
   do_not_store_already: string;
   do_not_store_ask_user: string;
+  delete_column_ask_user: string;
+  unique_key_ask_user: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */

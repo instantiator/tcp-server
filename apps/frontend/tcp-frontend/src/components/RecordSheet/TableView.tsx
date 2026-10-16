@@ -105,6 +105,8 @@ export const TableView = ({
   const deleteRecords = useDeleteRecords(companyId, table);
   const reload = useReloadRecordTable(companyId, table);
   const changes = useLiveRecordTableChanges(companyId, table, query.data);
+  // Deleted, or its columns changed: any edit made here could go astray.
+  const locked = changes.dropped || changes.columnsChanged;
   /** Rows changed elsewhere: marked, and not editable until a reload. */
   const staleRows = useMemo(
     () =>
@@ -319,7 +321,7 @@ export const TableView = ({
             icon={Plus}
             label={t('records.addRow', { table })}
             outline
-            isDisabled={definition === undefined || changes.dropped}
+            isDisabled={definition === undefined || locked}
             portalContainer={portalContainer}
             onPress={() => setAdding(true)}
           />
@@ -336,7 +338,7 @@ export const TableView = ({
             }
             outline
             isDisabled={
-              changes.dropped ||
+              locked ||
               (selected.length === 0 && (focusedRow === null || focusedStale))
             }
             portalContainer={portalContainer}
@@ -354,7 +356,7 @@ export const TableView = ({
                 : t('records.undo', { change: describeChange(undo.last) })
             }
             outline
-            isDisabled={undo.last === undefined || changes.dropped}
+            isDisabled={undo.last === undefined || locked}
             isPending={undoing}
             portalContainer={portalContainer}
             onPress={() => void runUndo()}
@@ -384,6 +386,13 @@ export const TableView = ({
           message={t('records.outOfDate.dropped')}
           announcement="records.announce.droppedElsewhere"
           announcementParams={{ table }}
+        />
+      ) : changes.columnsChanged ? (
+        <OutOfDateNotice
+          message={t('records.outOfDate.columns')}
+          announcement="records.announce.columnsChanged"
+          announcementParams={{ table }}
+          onReload={reloadFromNotice}
         />
       ) : (
         changes.any && (
@@ -435,7 +444,7 @@ export const TableView = ({
               onSelectionChange={setSelected}
               portalContainer={portalContainer}
               staleRows={staleRows}
-              readOnly={changes.dropped}
+              readOnly={locked}
             />
           </Suspense>
         </>

@@ -352,6 +352,72 @@ describe('DataProtectionPanel', () => {
         ).toHaveLength(2),
       );
     });
+
+    it("locks a table whose columns changed elsewhere, even where its rows didn't (001.06)", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      renderPanel(client);
+      await user.type(
+        screen.getByRole('textbox', { name: t('dataProtection.search.label') }),
+        'Ann',
+      );
+      await user.click(
+        screen.getByRole('button', { name: t('dataProtection.search.submit') }),
+      );
+      const orders = t('dataProtection.search.sheet', { table: 'orders' });
+      await rowIn(orders, 'A1');
+
+      // A person added a column to orders; no row has a value in it yet.
+      respondByRoute([
+        [
+          /\/search$/,
+          {
+            body: {
+              ...FOUND,
+              groups: [
+                FOUND.groups[0],
+                {
+                  ...FOUND.groups[1],
+                  definition: definition('orders', [
+                    'order_id',
+                    'customer',
+                    'channel',
+                  ]),
+                },
+              ],
+            },
+          },
+        ],
+        [/\/do-not-store$/, { body: [ENTRY] }],
+      ]);
+      await hear(client, recordEvent('c1', 'orders'));
+
+      expect(
+        await screen.findByRole('group', {
+          name: t('records.outOfDate.label'),
+        }),
+      ).toHaveTextContent(t('dataProtection.outOfDate.columns'));
+      // The untouched table still edits; the changed one doesn't.
+      const contacts = t('dataProtection.search.sheet', { table: 'contacts' });
+      const email = within(await rowIn(contacts, 'ann@example.com')).getByRole(
+        'gridcell',
+        { name: /ann@example\.com/ },
+      );
+      await user.click(email);
+      expect(await within(email).findByRole('textbox')).toBeVisible();
+      await user.keyboard('{Escape}');
+
+      const customer = within(await rowIn(orders, 'A1'))
+        .getAllByRole('gridcell')
+        .find((c) => c.textContent === 'Ann Lee');
+      if (customer === undefined) throw new Error('no customer cell');
+      await user.click(customer);
+      await expect(
+        within(customer).findByRole('textbox', {}, { timeout: 500 }),
+      ).rejects.toThrow();
+    });
   });
 
   describe('the do-not-store list', () => {

@@ -204,3 +204,13 @@ Data protection ([ADR-036](ADR-036-customer-data-protection.md)) added `state_ch
 ## Amendment as implemented (001.05, phase 04) <a id="amendment-as-implemented-p04-001-05"></a>
 
 [001.05](../prompts/phase%2004%20-%20utility/001.05.01.plan%20-%20live%20record%20updates.md) lets records audits feed the web UI. Every `state_change` with `source: 'records'`, from agents, people and the retention sweep alike, now also reaches the company stream. It goes as `{entity: 'record', action, table}` only. The persisted row, and what the agent stream carries, are unchanged. See [ADR-025](ADR-025-browser-event-stream-consumption.md#amendment-as-implemented-p04-001-05).
+
+## Amendment as implemented (001.06, phase 04) <a id="amendment-as-implemented-p04-001-06"></a>
+
+[001.06](../prompts/phase%2004%20-%20utility/001.06.01.plan%20-%20record%20table%20schema%20changes.md) lets agents and people change a table's columns and primary key. A change is one more `state_change` with `source: 'records'`:
+
+| `action`      | Payload besides `source` and `action`                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alter_table` | `op` (`add_column`, `rename_column`, `retype_column`, `delete_column`, `set_primary_key`, `add_unique_key`, `drop_unique_key`), `table`, `before` and `after` definitions, `rewritten` and, from tcp-server, `blanked` (counts) |
+
+It is written by tcp-mcp-records as role `agent`, and by tcp-server as role `user` with `userId` and, for a confirmed do-not-store match, `doNotStoreOverride`. **A new column's default value is never in the payload**, in line with 001.04: it is row data, and the audit log outlives an erasure. The definitions are kept, so a deleted column can be made again, though its values are gone; the web UI offers a download first. A retype that blanks values records how many, never which. An agent's request to delete a column, or to add or drop a unique key, changes nothing and writes no `state_change`: tcp-agent's own `tool_call` and `tool_result` record it. Like every records change, it reaches the company stream cut down to `{entity: 'record', action, table}`.

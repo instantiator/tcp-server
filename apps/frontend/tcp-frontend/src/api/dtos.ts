@@ -28,4 +28,8 @@ export type AppendRecordsCsvResult =
 export type RecordTableRetention =
   components['schemas']['RecordTableRetentionDto'];
 export type RecordSearchResult = components['schemas']['RecordSearchResultDto'];
+/** A column to add to a record table (001.06). */
+export type AddColumn = components['schemas']['AddColumnDto'];
+/** A column's new type (001.06). */
+export type RetypeColumn = components['schemas']['RetypeColumnDto'];
 export type DoNotStoreEntry = components['schemas']['DoNotStoreEntryDto'];
