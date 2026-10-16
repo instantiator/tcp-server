@@ -1,10 +1,18 @@
-import { RecordsError, type TableDefinition } from './records.types';
+import {
+  type FieldType,
+  RecordsError,
+  type TableDefinition,
+} from './records.types';
 import {
   RECORD_LIMITS,
   checkAddColumn,
   checkDelete,
+  checkDropUniqueKey,
   checkNewKey,
+  checkNewUniqueKey,
   checkRename,
+  checkRetype,
+  convertValue,
 } from './table-schema';
 
 /** A feedings table like the one that prompted 001.06: keyed on date and time, with no animal. */
@@ -192,5 +200,109 @@ describe('checkNewKey', () => {
     expect((error as RecordsError).message).toMatch(
       /taking feeding_time out of the key .*request_user_input/,
     );
+  });
+});
+
+describe('checkNewUniqueKey and checkDropUniqueKey', () => {
+  it('tells an agent to ask a person, for adding and dropping alike', () => {
+    expect(() => checkNewUniqueKey(feedings(), ['animal'], false)).toThrow(
+      /only a person .*request_user_input/,
+    );
+    expect(() => checkDropUniqueKey(feedings(), ['tag'], false)).toThrow(
+      /only a person/,
+    );
+  });
+
+  it('lets a person add a key of text or whole-number fields, not the primary key again', () => {
+    expect(
+      checkNewUniqueKey(feedings(), ['animal', 'feeding_date'], true),
+    ).toEqual(['animal', 'feeding_date']);
+    expect(() => checkNewUniqueKey(feedings(), ['portion'], true)).toThrow(
+      /not number/,
+    );
+    expect(() =>
+      checkNewUniqueKey(feedings(), ['feeding_time', 'feeding_date'], true),
+    ).toThrow(/already the primary key/);
+    expect(() => checkNewUniqueKey(feedings(), ['tag'], true)).toThrow(
+      /already a unique key/,
+    );
+  });
+
+  it('finds the key to drop in any order, or lists the ones there are', () => {
+    const two = feedings({ uniqueKeys: [['tag'], ['animal', 'feeding_date']] });
+    expect(checkDropUniqueKey(two, ['feeding_date', 'animal'], true)).toEqual([
+      'animal',
+      'feeding_date',
+    ]);
+    expect(() => checkDropUniqueKey(two, ['animal'], true)).toThrow(
+      /no unique key on animal; the unique keys are \(tag\), \(animal, feeding_date\)/,
+    );
+  });
+});
+
+describe('checkRetype', () => {
+  const retype = (column: string, type: FieldType, extra: object = {}) =>
+    checkRetype(feedings(), {
+      op: 'retype_column',
+      column,
+      type,
+      ...extra,
+    });
+
+  it('returns the new field, keeping only its description', () => {
+    const table = feedings();
+    table.schema.properties['portion'] = {
+      type: 'number',
+      minimum: 0,
+      description: 'grams',
+    };
+    expect(
+      checkRetype(table, {
+        op: 'retype_column',
+        column: 'portion',
+        type: 'string',
+      }),
+    ).toEqual({ type: 'string', description: 'grams' });
+  });
+
+  it('refuses the same type, a key column leaving text or whole numbers, and the retention column', () => {
+    expect(() => retype('animal', 'string')).toThrow(/already has that type/);
+    expect(() => retype('feeding_time', 'number')).toThrow(
+      /in a key, so it must stay text or a whole number/,
+    );
+    expect(() => retype('tag', 'boolean')).toThrow(/in a key/);
+    expect(() => retype('feeding_date', 'string')).toThrow(
+      /primary|retention|kept/,
+    );
+  });
+
+  it('allows text to a date and a key column to whole numbers', () => {
+    expect(retype('animal', 'string', { format: 'date' })).toEqual({
+      type: 'string',
+      format: 'date',
+    });
+    expect(retype('feeding_time', 'integer')).toEqual({ type: 'integer' });
+  });
+});
+
+describe('convertValue', () => {
+  it.each([
+    [' 12 ', { type: 'number' }, 12],
+    ['1.5', { type: 'number' }, 1.5],
+    ['1.5', { type: 'integer' }, undefined],
+    ['007', { type: 'integer' }, 7],
+    ['', { type: 'number' }, undefined],
+    ['twelve', { type: 'number' }, undefined],
+    [true, { type: 'number' }, undefined],
+    [12, { type: 'string' }, '12'],
+    [false, { type: 'string' }, 'false'],
+    ['2026-10-12', { type: 'string', format: 'date' }, '2026-10-12'],
+    ['12/10/2026', { type: 'string', format: 'date' }, undefined],
+    ['2026-13-45', { type: 'string', format: 'date' }, undefined],
+    ['TRUE', { type: 'boolean' }, true],
+    ['yes', { type: 'boolean' }, undefined],
+    [1, { type: 'boolean' }, undefined],
+  ] as const)('%j to %j is %j', (value, field, expected) => {
+    expect(convertValue(value, field)).toEqual(expected);
   });
 });

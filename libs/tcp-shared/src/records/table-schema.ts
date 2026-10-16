@@ -291,11 +291,7 @@ export function checkNewKey(
   fields: unknown,
   allowNarrow: boolean,
 ): string[] {
-  const key = checkKey('primary key', fields, {
-    ...table.schema,
-    // Every key field becomes required, so don't ask for that up front.
-    required: Object.keys(table.schema.properties),
-  });
+  const key = checkKeyFields(table, 'primary key', fields);
   if (sameFields(key, table.primaryKey)) {
     throw new RecordsError(
       `the primary key is already ${table.primaryKey.join(', ')}`,
@@ -314,6 +310,160 @@ export function checkNewKey(
     );
   }
   return key;
+}
+
+/** A key's field list, checked against the columns; the fields need not be required yet. */
+function checkKeyFields(
+  table: TableDefinition,
+  label: string,
+  fields: unknown,
+): string[] {
+  return checkKey(label, fields, {
+    ...table.schema,
+    // Every key field becomes required, so don't ask for that up front.
+    required: Object.keys(table.schema.properties),
+  });
+}
+
+/**
+ * Checks a new unique key: fields that could be a key, and not the same set
+ * as the primary key or another unique key. Only a person may add one: a
+ * unique key that is too loose makes different records count as the same.
+ */
+export function checkNewUniqueKey(
+  table: TableDefinition,
+  fields: unknown,
+  byPerson: boolean,
+): string[] {
+  if (!byPerson) throw uniqueKeysArePeoples();
+  const key = checkKeyFields(table, 'unique key', fields);
+  if (sameFields(key, table.primaryKey)) {
+    throw new RecordsError(`${key.join(', ')} is already the primary key`);
+  }
+  if (table.uniqueKeys.some((unique) => sameFields(key, unique))) {
+    throw new RecordsError(`${key.join(', ')} is already a unique key`);
+  }
+  return key;
+}
+
+/** Finds the unique key with exactly `fields`, in any order. Only a person may drop one. */
+export function checkDropUniqueKey(
+  table: TableDefinition,
+  fields: unknown,
+  byPerson: boolean,
+): string[] {
+  if (!byPerson) throw uniqueKeysArePeoples();
+  const wanted = Array.isArray(fields)
+    ? fields.filter((f): f is string => typeof f === 'string')
+    : [];
+  const found = table.uniqueKeys.find((key) => sameFields(key, wanted));
+  if (!found) {
+    throw new RecordsError(
+      table.uniqueKeys.length
+        ? `there is no unique key on ${wanted.join(', ')}; the unique keys are ${table.uniqueKeys.map((k) => `(${k.join(', ')})`).join(', ')}`
+        : 'the table has no unique keys',
+      'not_found',
+    );
+  }
+  return found;
+}
+
+/** The refusal an agent gets for changing unique keys. */
+function uniqueKeysArePeoples(): RecordsError {
+  return new RecordsError(
+    "only a person can change a table's unique keys, because a wrong one can make different records count as the same. " +
+      "Ask a user with request_user_input to change it in the table's Columns dialog, saying which fields and why",
+  );
+}
+
+/**
+ * Checks a column can take a new type, and returns its new field schema. A
+ * key column must stay text or a whole number; the column retention counts
+ * from must stay a date. The description is kept; other keywords (such as a
+ * minimum) belonged to the old type, so they go.
+ */
+export function checkRetype(
+  table: TableDefinition,
+  change: Extract<TableChange, { op: 'retype_column' }>,
+): FieldSchema {
+  checkExists(table.schema, change.column);
+  if (!FIELD_TYPES.includes(change.type)) {
+    throw new RecordsError(
+      'type must be string, number, integer or boolean (use "format": "date" with string for dates)',
+    );
+  }
+  if (change.format !== undefined && change.format !== 'date') {
+    throw new RecordsError('format can only be "date"');
+  }
+  if (change.format === 'date' && change.type !== 'string') {
+    throw new RecordsError('a date column must have type string');
+  }
+  const current = table.schema.properties[change.column];
+  if (
+    current.type === change.type &&
+    (current.format === 'date' ? 'date' : undefined) === change.format
+  ) {
+    throw new RecordsError(`'${change.column}' already has that type`);
+  }
+  const inKey = [table.primaryKey, ...table.uniqueKeys].some((key) =>
+    key.includes(change.column),
+  );
+  if (inKey && !KEY_TYPES.includes(change.type)) {
+    throw new RecordsError(
+      `'${change.column}' is in a key, so it must stay text or a whole number`,
+    );
+  }
+  if (table.retention?.from === change.column) {
+    throw new RecordsError(
+      `rows are kept for ${table.retention.days} days from '${change.column}'; change how long rows are kept first`,
+    );
+  }
+  const field: FieldSchema = { type: change.type };
+  if (change.format) field.format = change.format;
+  if (typeof current.description === 'string') {
+    field.description = current.description;
+  }
+  return field;
+}
+
+/** A calendar date written `YYYY-MM-DD`. */
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A stored value in a column's new type, or `undefined` when it doesn't
+ * convert. Only conversions that lose nothing a person would miss: text that
+ * is a number becomes that number, any scalar becomes its text, and text that
+ * is already a date or `true`/`false` stays meaningful.
+ */
+export function convertValue(value: unknown, field: FieldSchema): unknown {
+  const text = typeof value === 'string' ? value.trim() : undefined;
+  switch (field.type) {
+    case 'string':
+      if (field.format === 'date') {
+        return text !== undefined &&
+          DATE_PATTERN.test(text) &&
+          !Number.isNaN(Date.parse(text))
+          ? text
+          : undefined;
+      }
+      return typeof value === 'string' ? value : String(value);
+    case 'number':
+    case 'integer': {
+      const n =
+        typeof value === 'number'
+          ? value
+          : text !== undefined && text !== ''
+            ? Number(text)
+            : NaN;
+      if (!Number.isFinite(n)) return undefined;
+      return field.type === 'integer' && !Number.isInteger(n) ? undefined : n;
+    }
+    case 'boolean':
+      if (typeof value === 'boolean') return value;
+      if (text?.toLowerCase() === 'true') return true;
+      if (text?.toLowerCase() === 'false') return false;
+      return undefined;
+  }
 }
 
 /**

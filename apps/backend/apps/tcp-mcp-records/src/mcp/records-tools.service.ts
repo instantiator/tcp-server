@@ -98,7 +98,16 @@ function tableChange(args: AlterArgs): TableChange {
     case 'delete_column':
       return { op: 'delete_column', column: need(args.column, 'column') };
     case 'set_primary_key':
-      return { op: 'set_primary_key', fields: need(args.fields, 'fields') };
+    case 'add_unique_key':
+    case 'drop_unique_key':
+      return { op: args.action, fields: need(args.fields, 'fields') };
+    case 'retype_column':
+      return {
+        op: 'retype_column',
+        column: need(args.column, 'column'),
+        type: need(args.type, 'type'),
+        format: args.format,
+      };
   }
 }
 
@@ -416,7 +425,7 @@ export class RecordsToolsService {
           }
           const { definition, before, rewritten } =
             await this.records.alterTable(companyId, table, change, {
-              allowNarrow: false,
+              byPerson: false,
             });
           // Definitions and a count only: a default value is row data.
           this.change(companyId, agentId, {

@@ -456,7 +456,7 @@ export class RecordsApiService {
   ): Promise<TableDefinition> {
     const result: AlterResult = await call(() =>
       this.records.alterTable(company.id, table, change, {
-        allowNarrow: true,
+        byPerson: true,
       }),
     );
     await this.changed(company, userId, {

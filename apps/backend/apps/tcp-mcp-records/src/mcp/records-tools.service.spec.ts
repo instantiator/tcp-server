@@ -426,6 +426,7 @@ describe('RecordsToolsService', () => {
         definition: after,
         before: feedings(),
         rewritten: 2,
+        blanked: 0,
       });
       const { text } = await callTool(service, 'alter_table', {
         table: 'feedings',
@@ -447,7 +448,7 @@ describe('RecordsToolsService', () => {
           default: 'chicken',
           required: undefined,
         },
-        { allowNarrow: false },
+        { byPerson: false },
       );
       expect(JSON.parse(text)).toEqual({ table: after, rewritten: 2 });
       expect(audit.record).toHaveBeenCalledWith(
@@ -473,6 +474,7 @@ describe('RecordsToolsService', () => {
         definition: feedings(),
         before: feedings(),
         rewritten: 0,
+        blanked: 0,
       });
       await callTool(service, 'alter_table', {
         table: 'feedings',

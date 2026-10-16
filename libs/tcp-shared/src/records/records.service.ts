@@ -10,10 +10,12 @@ import type { UUID } from '../uuid';
 import { RecordSql } from './filter-sql';
 import {
   AGGREGATE_OPS,
+  type AlterOptions,
   type AlterResult,
   type AggregateQuery,
   type AggregateRow,
   type DoNotStoreEntry,
+  type FieldSchema,
   type InsertManyResult,
   type InsertResult,
   type NewTable,
@@ -41,10 +43,14 @@ import {
   canonicalJson,
   checkAddColumn,
   checkDelete,
+  checkDropUniqueKey,
   checkNewKey,
+  checkNewUniqueKey,
   checkNewTable,
   checkRecord,
   checkRename,
+  checkRetype,
+  convertValue,
   keyName,
   keyValue,
   recordValidator,
@@ -118,6 +124,17 @@ function isDateField(schema: TableSchema, field: string): boolean {
     property?.type === 'string' &&
     (property.format === 'date' || property.format === 'date-time')
   );
+}
+
+/** A column type in words, for a message about converting to it. */
+function typeWords(field: FieldSchema): string {
+  if (field.format === 'date') return 'a date';
+  return {
+    string: 'text',
+    number: 'a number',
+    integer: 'a whole number',
+    boolean: 'true or false',
+  }[field.type];
 }
 
 /** A LIKE pattern finding `text` anywhere, with `%`, `_` and `\` taken literally. */
@@ -672,19 +689,20 @@ export class RecordsService {
    * so a stale edit of it is refused, but its `updatedAt` stays: this is not
    * an edit of its data, and retention mustn't restart.
    *
-   * With `allowNarrow` false, a key can only gain fields (see {@link checkNewKey}).
+   * With `byPerson` false, a key can only gain fields (see {@link checkNewKey}).
    */
   async alterTable(
     companyId: string,
     tableName: string,
     change: TableChange,
-    opts: { allowNarrow: boolean },
+    opts: AlterOptions,
   ): Promise<AlterResult> {
     return this.ds.transaction(async (tx) => {
       const table = await this.table(tx, companyId, tableName, 'update');
       const before = definitionOf(table);
       const after = structuredClone(before);
       let rewritten = 0;
+      let blanked = 0;
       switch (change.op) {
         case 'add_column': {
           const [{ records, largest }] = await tx.query<
@@ -777,12 +795,46 @@ export class RecordsService {
           break;
         }
         case 'set_primary_key': {
-          const key = checkNewKey(before, change.fields, opts.allowNarrow);
-          await this.rekey(tx, table, before.primaryKey, key);
+          const key = checkNewKey(before, change.fields, opts.byPerson);
+          await this.rebuildKey(tx, table, before.primaryKey, key);
           after.primaryKey = key;
           after.schema.required = [
             ...new Set([...(before.schema.required ?? []), ...key]),
           ];
+          break;
+        }
+        case 'add_unique_key': {
+          const key = checkNewUniqueKey(before, change.fields, opts.byPerson);
+          await this.rebuildKey(tx, table, null, key);
+          after.uniqueKeys = [...before.uniqueKeys, key];
+          after.schema.required = [
+            ...new Set([...(before.schema.required ?? []), ...key]),
+          ];
+          break;
+        }
+        case 'drop_unique_key': {
+          const key = keyName(
+            checkDropUniqueKey(before, change.fields, opts.byPerson),
+          );
+          await tx.query(
+            `DELETE FROM "record_key" WHERE "tableId" = $1 AND "keyName" = $2`,
+            [table.id, key],
+          );
+          after.uniqueKeys = before.uniqueKeys.filter(
+            (fields) => keyName(fields) !== key,
+          );
+          break;
+        }
+        case 'retype_column': {
+          const field = checkRetype(before, change);
+          ({ rewritten, blanked } = await this.retype(
+            tx,
+            table,
+            change.column,
+            field,
+            opts,
+          ));
+          after.schema.properties[change.column] = field;
           break;
         }
       }
@@ -797,7 +849,7 @@ export class RecordsService {
           after.retention ? JSON.stringify(after.retention) : null,
         ],
       );
-      return { definition: after, before, rewritten };
+      return { definition: after, before, rewritten, blanked };
     });
   }
 
@@ -1197,17 +1249,98 @@ export class RecordsService {
   }
 
   /**
-   * Replaces the stored values of the primary key `oldKey` with those of
-   * `key`. Refuses, with examples, when a record has no value for a key
-   * field or two records would share a key: the caller holds the table's
-   * update lock, so nothing can change between this check and the write.
+   * Converts one column's values to its new type (see {@link convertValue}),
+   * rewriting only the records whose value changes, then rebuilds every key
+   * the column is in, since a key's stored value holds the values' JSON.
+   *
+   * Values that don't convert stop it: an agent is told to ask a person; a
+   * person must confirm with `blankUnconvertible`, and even then a required
+   * or key column is refused, since its values can't be blank.
+   */
+  private async retype(
+    tx: EntityManager,
+    table: TableRow,
+    column: string,
+    field: FieldSchema,
+    opts: AlterOptions,
+  ): Promise<{ rewritten: number; blanked: number }> {
+    const rows = await tx.query<{ id: string; value: unknown }[]>(
+      `SELECT "id"::text AS "id", "data" -> $2::text AS "value" FROM "record"
+       WHERE "tableId" = $1 AND jsonb_exists("data", $2::text)`,
+      [table.id, column],
+    );
+    const converted = rows.map((r) => ({
+      ...r,
+      to: convertValue(r.value, field),
+    }));
+    const failed = converted.filter((r) => r.to === undefined);
+    if (failed.length) {
+      const examples = failed
+        .slice(0, 3)
+        .map((r) => `record ${r.id}: ${JSON.stringify(r.value)}`)
+        .join('; ');
+      const what = `${failed.length === 1 ? "1 value doesn't" : `${failed.length} values don't`} convert to ${typeWords(field)} in '${column}', e.g. ${examples}`;
+      if (!opts.byPerson) {
+        throw new RecordsError(
+          `${what}. Fix them with update first, or ask a user with request_user_input to change the type in the table's Columns dialog, where values that don't convert can be blanked`,
+          'unconvertible',
+        );
+      }
+      const inKey = [table.primaryKey, ...table.uniqueKeys].some((key) =>
+        key.includes(column),
+      );
+      if (inKey || table.schema.required?.includes(column)) {
+        throw new RecordsError(
+          `${what}. '${column}' is ${inKey ? 'in a key' : 'required'}, so they can't be blanked: fix them first`,
+        );
+      }
+      if (!opts.blankUnconvertible) {
+        throw new RecordsError(
+          `${what}. Changing the type blanks them`,
+          'unconvertible',
+        );
+      }
+    }
+    const changed = converted.filter(
+      (r) => JSON.stringify(r.to) !== JSON.stringify(r.value),
+    );
+    if (changed.length) {
+      await tx.query(
+        `UPDATE "record" r
+         SET "data" = CASE WHEN v."value" IS NULL THEN r."data" - $2::text
+                           ELSE jsonb_set(r."data", ARRAY[$2::text], v."value"::jsonb) END,
+             "version" = r."version" + 1
+         FROM unnest($3::uuid[], $4::text[]) AS v("id", "value")
+         WHERE r."id" = v."id" AND r."tableId" = $1`,
+        [
+          table.id,
+          column,
+          changed.map((r) => r.id),
+          changed.map((r) =>
+            r.to === undefined ? null : JSON.stringify(r.to),
+          ),
+        ],
+      );
+      for (const key of [table.primaryKey, ...table.uniqueKeys]) {
+        if (key.includes(column)) await this.rebuildKey(tx, table, key, key);
+      }
+    }
+    return { rewritten: changed.length, blanked: failed.length };
+  }
+
+  /**
+   * Replaces the stored values of the key `oldKey` (none, for a new key) with
+   * those of `key`, from every record. Refuses, with examples, when a record
+   * has no value for a key field or two records would share a key: the
+   * caller holds the table's update lock, so nothing can change between this
+   * check and the write.
    */
   // ponytail: reads every record into memory; fine to the 10,000-row scale,
   // page through them if a table grows far past that.
-  private async rekey(
+  private async rebuildKey(
     tx: EntityManager,
     table: TableRow,
-    oldKey: string[],
+    oldKey: string[] | null,
     key: string[],
   ): Promise<void> {
     const rows = await tx.query<{ id: string; data: RecordData }[]>(
@@ -1242,10 +1375,12 @@ export class RecordsService {
         'conflict',
       );
     }
-    await tx.query(
-      `DELETE FROM "record_key" WHERE "tableId" = $1 AND "keyName" = $2`,
-      [table.id, keyName(oldKey)],
-    );
+    if (oldKey) {
+      await tx.query(
+        `DELETE FROM "record_key" WHERE "tableId" = $1 AND "keyName" = $2`,
+        [table.id, keyName(oldKey)],
+      );
+    }
     await tx.query(
       `INSERT INTO "record_key" ("tableId", "keyName", "keyValue", "recordId")
        SELECT $1, $2, t."value", t."recordId" FROM unnest($3::text[], $4::uuid[]) AS t("value", "recordId")`,

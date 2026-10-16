@@ -20,9 +20,11 @@ export class RecordsError extends Error {
 /**
  * `invalid`: the request itself is wrong. `not_found`: no such table or record.
  * `conflict`: a key or name another row already holds. `stale`: the record
- * changed since the caller read it.
+ * changed since the caller read it. `unconvertible`: a column can't take a
+ * new type, because some of its values don't convert (001.06).
  */
-export type RecordsErrorCode = 'invalid' | 'not_found' | 'conflict' | 'stale';
+export type RecordsErrorCode =
+  'invalid' | 'not_found' | 'conflict' | 'stale' | 'unconvertible';
 
 /** The JSON types a top-level record field may have. Scalars only, so every field can be filtered, sorted and grouped. */
 export type FieldType = 'string' | 'number' | 'integer' | 'boolean';
@@ -91,7 +93,16 @@ export type TableChange =
     }
   | { op: 'rename_column'; column: string; newName: string }
   | { op: 'delete_column'; column: string }
-  | { op: 'set_primary_key'; fields: string[] };
+  | { op: 'set_primary_key'; fields: string[] }
+  | { op: 'add_unique_key'; fields: string[] }
+  | { op: 'drop_unique_key'; fields: string[] }
+  | {
+      op: 'retype_column';
+      column: string;
+      type: FieldType;
+      /** Only `date`, for a text column holding `YYYY-MM-DD`. */
+      format?: 'date';
+    };
 
 /** The names of the changes {@link TableChange} offers. */
 export const TABLE_CHANGE_OPS = [
@@ -99,13 +110,29 @@ export const TABLE_CHANGE_OPS = [
   'rename_column',
   'delete_column',
   'set_primary_key',
+  'add_unique_key',
+  'drop_unique_key',
+  'retype_column',
 ] as const;
+
+/** Who asked for a column change, and what they have agreed to. */
+export interface AlterOptions {
+  /**
+   * A person, not an agent: may narrow the primary key, change unique keys,
+   * and confirm `blankUnconvertible`.
+   */
+  byPerson: boolean;
+  /** Blank the values a retype can't convert, rather than refuse. People only. */
+  blankUnconvertible?: boolean;
+}
 
 /** A changed table, and how many of its records were rewritten to match. */
 export interface AlterResult {
   definition: TableDefinition;
   before: TableDefinition;
   rewritten: number;
+  /** How many values a retype blanked because they didn't convert. */
+  blanked: number;
 }
 
 /** A record's field values. */

@@ -1010,8 +1010,8 @@ describe('RecordsService (integration)', () => {
       },
       primaryKey: ['feeding_date', 'feeding_time'],
     };
-    const PEOPLE = { allowNarrow: true };
-    const AGENT = { allowNarrow: false };
+    const PEOPLE = { byPerson: true };
+    const AGENT = { byPerson: false };
 
     /** A fresh company with a feedings table holding the chicken at 08:00 and the cat at 09:00. */
     async function fed(): Promise<string> {
@@ -1342,6 +1342,216 @@ describe('RecordsService (integration)', () => {
         expect(insertStatus).toBe('inserted');
         expect(String(rekeyed.reason)).toMatch(/would not tell records apart/);
       }
+    });
+  });
+
+  describe('unique keys and retyping (001.06)', () => {
+    const PEOPLE = { byPerson: true };
+    const AGENT = { byPerson: false };
+    /** Stock levels kept as text by a careless agent: a sku, a count and a tag. */
+    const STOCK: NewTable = {
+      name: 'stock',
+      purpose: 'Stock levels.',
+      schema: {
+        properties: {
+          sku: { type: 'string' },
+          count: { type: 'string' },
+          shelf: { type: 'string' },
+          note: { type: 'string' },
+        },
+        required: ['sku'],
+      },
+      primaryKey: ['sku'],
+    };
+
+    async function stocked(rows: Record<string, unknown>[]): Promise<string> {
+      const companyId = await newCompany();
+      await records.createTable(companyId, STOCK, null);
+      for (const row of rows) await records.insert(companyId, 'stock', row);
+      return companyId;
+    }
+
+    it('adds a unique key that later inserts are matched on, and drops it again', async () => {
+      const companyId = await stocked([
+        { sku: 'A', shelf: 's1' },
+        { sku: 'B', shelf: 's2' },
+      ]);
+      await expect(
+        records.alterTable(
+          companyId,
+          'stock',
+          { op: 'add_unique_key', fields: ['shelf'] },
+          AGENT,
+        ),
+      ).rejects.toThrow(/only a person/);
+      const { definition } = await records.alterTable(
+        companyId,
+        'stock',
+        { op: 'add_unique_key', fields: ['shelf'] },
+        PEOPLE,
+      );
+      expect(definition.uniqueKeys).toEqual([['shelf']]);
+      expect(definition.schema.required).toContain('shelf');
+      const clash = await records.insert(companyId, 'stock', {
+        sku: 'C',
+        shelf: 's1',
+      });
+      expect(clash).toMatchObject({
+        status: 'already_exists',
+        key: { shelf: 's1' },
+      });
+
+      await records.alterTable(
+        companyId,
+        'stock',
+        { op: 'drop_unique_key', fields: ['shelf'] },
+        PEOPLE,
+      );
+      const now = await records.insert(companyId, 'stock', {
+        sku: 'C',
+        shelf: 's1',
+      });
+      expect(now.status).toBe('inserted');
+    });
+
+    it('refuses a unique key with missing values, or that records would share', async () => {
+      const companyId = await stocked([
+        { sku: 'A', shelf: 's1' },
+        { sku: 'B', shelf: 's1' },
+        { sku: 'C' },
+      ]);
+      await expect(
+        records.alterTable(
+          companyId,
+          'stock',
+          { op: 'add_unique_key', fields: ['shelf'] },
+          PEOPLE,
+        ),
+      ).rejects.toThrow(/1 record has no value for 'shelf'/);
+      await records.update(
+        companyId,
+        'stock',
+        { key: { sku: 'C' } },
+        { shelf: 's3' },
+      );
+      await expect(
+        records.alterTable(
+          companyId,
+          'stock',
+          { op: 'add_unique_key', fields: ['shelf'] },
+          PEOPLE,
+        ),
+      ).rejects.toThrow(/shelf="s1" \(2 records\)/);
+    });
+
+    it('retypes text to numbers, bumping only the records whose value changes', async () => {
+      const companyId = await stocked([
+        { sku: 'A', count: '12' },
+        { sku: 'B', count: ' 3 ' },
+        { sku: 'C' },
+      ]);
+      const before = (await records.readRows(companyId, 'stock')).rows;
+      const result = await records.alterTable(
+        companyId,
+        'stock',
+        { op: 'retype_column', column: 'count', type: 'integer' },
+        AGENT,
+      );
+      expect(result).toMatchObject({ rewritten: 2, blanked: 0 });
+      expect(result.definition.schema.properties['count']).toEqual({
+        type: 'integer',
+      });
+      const after = (await records.readRows(companyId, 'stock')).rows;
+      const bySku = (rows: typeof after, sku: string) =>
+        rows.find((r) => r.data['sku'] === sku)!;
+      expect(bySku(after, 'A').data['count']).toBe(12);
+      expect(bySku(after, 'B').data['count']).toBe(3);
+      expect(bySku(after, 'C').version).toBe(bySku(before, 'C').version);
+      expect(bySku(after, 'A').updatedAt).toBe(bySku(before, 'A').updatedAt);
+      // The new type holds for new records too.
+      await expect(
+        records.insert(companyId, 'stock', { sku: 'D', count: 'lots' }),
+      ).rejects.toThrow(/count must be integer/);
+    });
+
+    it("refuses values that don't convert: advice for an agent, a question for a person, blanked once confirmed", async () => {
+      const companyId = await stocked([
+        { sku: 'A', count: '12' },
+        { sku: 'B', count: 'lots' },
+      ]);
+      const change = {
+        op: 'retype_column' as const,
+        column: 'count',
+        type: 'integer' as const,
+      };
+      await expect(
+        records.alterTable(companyId, 'stock', change, AGENT),
+      ).rejects.toMatchObject({
+        code: 'unconvertible',
+        message: expect.stringMatching(
+          /1 value doesn't convert to a whole number in 'count', e\.g\. record .*: "lots".*request_user_input/,
+        ) as unknown,
+      });
+      await expect(
+        records.alterTable(companyId, 'stock', change, PEOPLE),
+      ).rejects.toMatchObject({ code: 'unconvertible' });
+
+      const result = await records.alterTable(companyId, 'stock', change, {
+        byPerson: true,
+        blankUnconvertible: true,
+      });
+      expect(result).toMatchObject({ rewritten: 2, blanked: 1 });
+      const rows = (await records.readRows(companyId, 'stock')).rows;
+      expect(rows.find((r) => r.data['sku'] === 'B')?.data).toEqual({
+        sku: 'B',
+      });
+    });
+
+    it('never blanks a key or required column, and refuses a key retype that would clash', async () => {
+      const companyId = await stocked([
+        { sku: '01', count: '1' },
+        { sku: '1', count: '2' },
+        { sku: 'x', count: '3' },
+      ]);
+      await expect(
+        records.alterTable(
+          companyId,
+          'stock',
+          { op: 'retype_column', column: 'sku', type: 'integer' },
+          { byPerson: true, blankUnconvertible: true },
+        ),
+      ).rejects.toThrow(/'sku' is in a key, so they can't be blanked/);
+      await records.delete(companyId, 'stock', { key: { sku: 'x' } });
+      await expect(
+        records.alterTable(
+          companyId,
+          'stock',
+          { op: 'retype_column', column: 'sku', type: 'integer' },
+          PEOPLE,
+        ),
+      ).rejects.toThrow(/would not tell records apart.*sku=1 \(2 records\)/);
+      // Refused as a whole: nothing changed.
+      const rows = (await records.readRows(companyId, 'stock')).rows;
+      expect(rows.map((r) => r.data['sku']).sort()).toEqual(['01', '1']);
+    });
+
+    it('rebuilds the key when a key column retypes cleanly, so lookups use the new values', async () => {
+      const companyId = await stocked([{ sku: '7', count: '1' }]);
+      await records.alterTable(
+        companyId,
+        'stock',
+        { op: 'retype_column', column: 'sku', type: 'integer' },
+        PEOPLE,
+      );
+      const again = await records.insert(companyId, 'stock', { sku: 7 });
+      expect(again.status).toBe('already_exists');
+      const found = await records.update(
+        companyId,
+        'stock',
+        { key: { sku: 7 } },
+        { note: 'found' },
+      );
+      expect(found.record.data['note']).toBe('found');
     });
   });
 

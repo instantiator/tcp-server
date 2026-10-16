@@ -507,7 +507,7 @@ describe('RecordsApiService', () => {
           company.id,
           'orders',
           change,
-          { allowNarrow: true },
+          { byPerson: true },
         );
         expect(audited()).toMatchObject({
           action: 'alter_table',
