@@ -671,6 +671,26 @@ body {
   border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
 }
 
+/* A sortable header is a button to the pointer as well as the keyboard. */
+.tcp-table [data-allows-sorting] {
+  cursor: pointer;
+}
+
+/*
+ * A selected row: a border as well as a colour, so it survives a monochrome
+ * rendering (WCAG 1.4.1), as the chat list's selected row does.
+ */
+.tcp-table [data-selected] {
+  background-color: var(--tcp-color-highlight);
+  color: var(--tcp-color-highlight-text);
+  outline: var(--tcp-border-width) solid var(--tcp-color-accent);
+}
+
+.tcp-table [data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: calc(-1 * var(--tcp-focus-ring-width));
+}
+
 /*
  * The page header (005.01): stays on screen while the page scrolls, rather
  * than being carried away with it, so the title and the account menu stay

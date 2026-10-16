@@ -749,6 +749,36 @@ const strings = {
   'admin.menu.knowledge': 'Knowledge',
   'admin.menu.dataProtection': 'Data protection',
   'admin.placeholder': 'Not built yet.',
+  // Admin → Roles (002.00): a sortable, filterable table of the company's
+  // roles, with add, open and delete. Deleting confirms first, and says when
+  // the company's default planner is among the roles going.
+  'admin.roles.heading': 'Roles',
+  'admin.roles.add': 'Add role',
+  'admin.roles.filter': 'Filter roles by name',
+  'admin.roles.column.name': 'Name',
+  'admin.roles.column.slug': 'Slug',
+  'admin.roles.column.description': 'Description',
+  'admin.roles.column.planner': 'Planner',
+  'admin.roles.column.actions': 'Actions',
+  'admin.roles.planner': 'Default planner',
+  'admin.roles.open': 'Open {name}',
+  'admin.roles.loading': 'Loading the roles',
+  'admin.roles.error': 'The roles could not be loaded.',
+  'admin.roles.empty':
+    'No roles yet. Add one to give the company someone to do its work.',
+  'admin.roles.noMatch': 'No roles match "{filter}".',
+  'admin.roles.deleteNone': 'Delete the selected roles',
+  'admin.roles.delete.one': 'Delete {count} selected role',
+  'admin.roles.delete.other': 'Delete {count} selected roles',
+  'admin.roles.deleteHeading.one': 'Delete {count} role?',
+  'admin.roles.deleteHeading.other': 'Delete {count} roles?',
+  'admin.roles.deleteMessage':
+    'Delete {names}? Their knowledge, agents and conversations are deleted too.',
+  'admin.roles.deletePlanner':
+    "{name} is the company's default planner. Tasks without their own planner won't start until another is chosen.",
+  'admin.roles.deleteConfirm': 'Delete',
+  'admin.roles.announce.deleted': 'Roles deleted: {count}',
+  'admin.roles.deleteFailed': 'Some roles were not deleted: {message}',
   'documents.heading': 'Documents',
   'documents.intro':
     'Folders in the document store. Each link opens the storage browser in a new tab.',

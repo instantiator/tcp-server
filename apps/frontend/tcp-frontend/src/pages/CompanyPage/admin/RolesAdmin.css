@@ -1,0 +1,22 @@
+/* Admin → Roles. Theme tokens only (ADR-026); the table itself is the shared `.tcp-table`. */
+.roles-admin__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--tcp-space-sm);
+  margin-block-end: var(--tcp-space-md);
+}
+
+/* Long descriptions are cut to one line here; the dialog shows them whole. */
+.roles-admin__description {
+  max-inline-size: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roles-admin__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tcp-space-xs);
+}

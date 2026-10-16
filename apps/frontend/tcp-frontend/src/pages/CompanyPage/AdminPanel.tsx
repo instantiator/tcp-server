@@ -5,6 +5,7 @@ import {
   isAdminSection,
   type AdminSection,
 } from './admin-sections';
+import { RolesAdmin } from './admin/RolesAdmin';
 import { DataProtectionPanel } from './DataProtectionPanel';
 
 export interface AdminPanelProps {
@@ -50,7 +51,9 @@ export const AdminPanel = ({
       </ListBox>
     </div>
     <div>
-      {section === 'data-protection' ? (
+      {section === 'roles' ? (
+        <RolesAdmin companyId={companyId} />
+      ) : section === 'data-protection' ? (
         <DataProtectionPanel companyId={companyId} companySlug={companySlug} />
       ) : (
         <p>{t('admin.placeholder')}</p>
