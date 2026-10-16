@@ -578,7 +578,7 @@ A user has now asked for it (2026-10-12): on the dev server, an agent made a
 `feedings` table with no column for which animal was fed, and could not add one.
 
 **Act when:** now — planned in
-[001.06](prompts/phase%2004%20-%20utility/001.06.00.prompt%20-%20record%20table%20schema%20changes%20%28draft%29.md):
+[001.06](prompts/phase%2004%20-%20utility/001.06.01.plan%20-%20record%20table%20schema%20changes.md):
 agents may add and rename columns, and asking to delete one returns advice to
 ask a user; people get a column editor in the sheet. Key fields are protected.
 

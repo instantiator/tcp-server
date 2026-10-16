@@ -995,6 +995,356 @@ describe('RecordsService (integration)', () => {
     });
   });
 
+  describe('column changes (001.06)', () => {
+    /** The table that prompted 001.06: keyed on when, with nowhere to say which animal. */
+    const FEEDINGS: NewTable = {
+      name: 'feedings',
+      purpose: 'When the animals were fed.',
+      schema: {
+        properties: {
+          feeding_date: { type: 'string', format: 'date' },
+          feeding_time: { type: 'string' },
+          note: { type: 'string' },
+        },
+        required: ['feeding_date', 'feeding_time'],
+      },
+      primaryKey: ['feeding_date', 'feeding_time'],
+    };
+    const PEOPLE = { allowNarrow: true };
+    const AGENT = { allowNarrow: false };
+
+    /** A fresh company with a feedings table holding the chicken at 08:00 and the cat at 09:00. */
+    async function fed(): Promise<string> {
+      const companyId = await newCompany();
+      await records.createTable(companyId, FEEDINGS, null);
+      for (const time of ['08:00', '09:00']) {
+        await records.insert(companyId, 'feedings', {
+          feeding_date: '2026-10-12',
+          feeding_time: time,
+        });
+      }
+      return companyId;
+    }
+
+    it('fixes the feedings table: add animal, fill it in, widen the key, then two animals fed at once', async () => {
+      const companyId = await fed();
+      await records.alterTable(
+        companyId,
+        'feedings',
+        { op: 'add_column', column: 'animal', type: 'string' },
+        AGENT,
+      );
+      await expect(
+        records.alterTable(
+          companyId,
+          'feedings',
+          {
+            op: 'set_primary_key',
+            fields: ['feeding_date', 'feeding_time', 'animal'],
+          },
+          AGENT,
+        ),
+      ).rejects.toThrow(/2 records have no value for 'animal'.*update/);
+
+      for (const [time, animal] of [
+        ['08:00', 'chicken'],
+        ['09:00', 'cat'],
+      ]) {
+        await records.update(
+          companyId,
+          'feedings',
+          { key: { feeding_date: '2026-10-12', feeding_time: time } },
+          { animal },
+        );
+      }
+      const { definition, rewritten } = await records.alterTable(
+        companyId,
+        'feedings',
+        {
+          op: 'set_primary_key',
+          fields: ['feeding_date', 'feeding_time', 'animal'],
+        },
+        AGENT,
+      );
+      expect(rewritten).toBe(0);
+      expect(definition.primaryKey).toEqual([
+        'feeding_date',
+        'feeding_time',
+        'animal',
+      ]);
+      expect(definition.schema.required).toContain('animal');
+
+      const dog = await records.insert(companyId, 'feedings', {
+        feeding_date: '2026-10-12',
+        feeding_time: '08:00',
+        animal: 'dog',
+      });
+      expect(dog.status).toBe('inserted');
+      const again = await records.insert(companyId, 'feedings', {
+        feeding_date: '2026-10-12',
+        feeding_time: '08:00',
+        animal: 'chicken',
+      });
+      expect(again.status).toBe('already_exists');
+      const byKey = await records.update(
+        companyId,
+        'feedings',
+        {
+          key: {
+            feeding_date: '2026-10-12',
+            feeding_time: '09:00',
+            animal: 'cat',
+          },
+        },
+        { note: 'ate it all' },
+      );
+      expect(byKey.record.data['note']).toBe('ate it all');
+    });
+
+    it('gives every record a default, bumping its version but not its update time', async () => {
+      const companyId = await fed();
+      const before = (await records.readRows(companyId, 'feedings')).rows;
+      const { definition, rewritten } = await records.alterTable(
+        companyId,
+        'feedings',
+        {
+          op: 'add_column',
+          column: 'portion',
+          type: 'integer',
+          default: 1,
+          required: true,
+        },
+        AGENT,
+      );
+      expect(rewritten).toBe(2);
+      expect(definition.schema.properties['portion']).toEqual({
+        type: 'integer',
+      });
+      expect(definition.schema.required).toContain('portion');
+      const after = (await records.readRows(companyId, 'feedings')).rows;
+      for (const row of after) {
+        const was = before.find((r) => r.id === row.id)!;
+        expect(row.data['portion']).toBe(1);
+        expect(row.version).toBe(was.version + 1);
+        expect(row.updatedAt).toBe(was.updatedAt);
+      }
+      // Required now holds for new records too.
+      await expect(
+        records.insert(companyId, 'feedings', {
+          feeding_date: '2026-10-13',
+          feeding_time: '08:00',
+        }),
+      ).rejects.toThrow(/portion/);
+    });
+
+    it('leaves records alone when a column has no default, and refuses required without one', async () => {
+      const companyId = await fed();
+      await expect(
+        records.alterTable(
+          companyId,
+          'feedings',
+          {
+            op: 'add_column',
+            column: 'animal',
+            type: 'string',
+            required: true,
+          },
+          AGENT,
+        ),
+      ).rejects.toThrow(/give a default/);
+      const before = (await records.readRows(companyId, 'feedings')).rows;
+      const { rewritten } = await records.alterTable(
+        companyId,
+        'feedings',
+        { op: 'add_column', column: 'animal', type: 'string' },
+        AGENT,
+      );
+      expect(rewritten).toBe(0);
+      const after = (await records.readRows(companyId, 'feedings')).rows;
+      expect(after.map((r) => r.version)).toEqual(before.map((r) => r.version));
+      expect(after.every((r) => !('animal' in r.data))).toBe(true);
+    });
+
+    it('renames a key field everywhere: data, schema, key, retention and lookups', async () => {
+      const companyId = await fed();
+      await records.setRetention(companyId, 'feedings', {
+        days: 30,
+        from: 'feeding_date',
+      });
+      const { definition, rewritten } = await records.alterTable(
+        companyId,
+        'feedings',
+        { op: 'rename_column', column: 'feeding_date', newName: 'fed_on' },
+        AGENT,
+      );
+      expect(rewritten).toBe(2);
+      expect(Object.keys(definition.schema.properties).sort()).toEqual([
+        'fed_on',
+        'feeding_time',
+        'note',
+      ]);
+      expect(definition.schema.required).toEqual(['fed_on', 'feeding_time']);
+      expect(definition.primaryKey).toEqual(['fed_on', 'feeding_time']);
+      expect(definition.retention).toEqual({ days: 30, from: 'fed_on' });
+      expect(await records.describeTable(companyId, 'feedings')).toEqual(
+        definition,
+      );
+
+      const rows = (await records.readRows(companyId, 'feedings')).rows;
+      expect(rows.every((r) => r.data['fed_on'] === '2026-10-12')).toBe(true);
+      expect(rows.every((r) => !('feeding_date' in r.data))).toBe(true);
+
+      const found = await records.update(
+        companyId,
+        'feedings',
+        { key: { fed_on: '2026-10-12', feeding_time: '08:00' } },
+        { note: 'found by the new name' },
+      );
+      expect(found.record.data['note']).toBe('found by the new name');
+      const repeat = await records.insert(companyId, 'feedings', {
+        fed_on: '2026-10-12',
+        feeding_time: '09:00',
+      });
+      expect(repeat.status).toBe('already_exists');
+      await expect(
+        records.insert(companyId, 'feedings', {
+          feeding_date: '2026-10-14',
+          feeding_time: '09:00',
+        }),
+      ).rejects.toThrow(/feeding_date/);
+    });
+
+    it('deletes a column from every record, but never a key field', async () => {
+      const companyId = await fed();
+      await records.update(
+        companyId,
+        'feedings',
+        { key: { feeding_date: '2026-10-12', feeding_time: '08:00' } },
+        { note: 'hungry' },
+      );
+      await expect(
+        records.alterTable(
+          companyId,
+          'feedings',
+          { op: 'delete_column', column: 'feeding_time' },
+          PEOPLE,
+        ),
+      ).rejects.toThrow(/take it out of the key first/);
+      const { definition, rewritten } = await records.alterTable(
+        companyId,
+        'feedings',
+        { op: 'delete_column', column: 'note' },
+        PEOPLE,
+      );
+      expect(rewritten).toBe(1);
+      expect(definition.schema.properties).not.toHaveProperty('note');
+      const rows = (await records.readRows(companyId, 'feedings')).rows;
+      expect(rows.every((r) => !('note' in r.data))).toBe(true);
+    });
+
+    it('refuses a key that would not tell records apart, with examples, and leaves the old key working', async () => {
+      const companyId = await fed();
+      await expect(
+        records.alterTable(
+          companyId,
+          'feedings',
+          { op: 'set_primary_key', fields: ['feeding_date'] },
+          PEOPLE,
+        ),
+      ).rejects.toThrow(
+        /1 value is shared, e\.g\. feeding_date="2026-10-12" \(2 records\)/,
+      );
+      await expect(
+        records.alterTable(
+          companyId,
+          'feedings',
+          { op: 'set_primary_key', fields: ['feeding_date'] },
+          AGENT,
+        ),
+      ).rejects.toThrow(/request_user_input/);
+      const repeat = await records.insert(companyId, 'feedings', {
+        feeding_date: '2026-10-12',
+        feeding_time: '08:00',
+      });
+      expect(repeat.status).toBe('already_exists');
+    });
+
+    it('lets people narrow a key when the records allow it', async () => {
+      const companyId = await fed();
+      const { definition } = await records.alterTable(
+        companyId,
+        'feedings',
+        { op: 'set_primary_key', fields: ['feeding_time'] },
+        PEOPLE,
+      );
+      expect(definition.primaryKey).toEqual(['feeding_time']);
+      const sameTime = await records.insert(companyId, 'feedings', {
+        feeding_date: '2026-10-13',
+        feeding_time: '08:00',
+      });
+      expect(sameTime.status).toBe('already_exists');
+    });
+
+    it('never stores a record under a column name a concurrent rename removed', async () => {
+      const companyId = await fed();
+      const inserts = Array.from({ length: 20 }, (_, i) =>
+        records
+          .insert(companyId, 'feedings', {
+            feeding_date: '2026-11-01',
+            feeding_time: `${String(i).padStart(2, '0')}:00`,
+            note: `n${i}`,
+          })
+          .then(
+            () => 'inserted',
+            (e: unknown) => {
+              expect(e).toBeInstanceOf(RecordsError);
+              return 'refused';
+            },
+          ),
+      );
+      const rename = records.alterTable(
+        companyId,
+        'feedings',
+        { op: 'rename_column', column: 'note', newName: 'remark' },
+        AGENT,
+      );
+      const [outcomes] = await Promise.all([Promise.all(inserts), rename]);
+
+      const rows = (await records.readRows(companyId, 'feedings')).rows;
+      expect(rows.some((r) => 'note' in r.data)).toBe(false);
+      expect(rows.filter((r) => 'remark' in r.data)).toHaveLength(
+        outcomes.filter((o) => o === 'inserted').length,
+      );
+    });
+
+    it('lets exactly one of a key change and a clashing insert win', async () => {
+      const companyId = await fed();
+      const [rekeyed, inserted] = await Promise.allSettled([
+        records.alterTable(
+          companyId,
+          'feedings',
+          { op: 'set_primary_key', fields: ['feeding_time'] },
+          PEOPLE,
+        ),
+        records.insert(companyId, 'feedings', {
+          feeding_date: '2026-10-13',
+          feeding_time: '08:00',
+        }),
+      ]);
+      expect(inserted.status).toBe('fulfilled');
+      const insertStatus =
+        inserted.status === 'fulfilled' ? inserted.value.status : undefined;
+      // Either the key changed first, and the insert found 08:00 taken; or
+      // the insert landed first, and the key change found a clash.
+      if (rekeyed.status === 'fulfilled') {
+        expect(insertStatus).toBe('already_exists');
+      } else {
+        expect(insertStatus).toBe('inserted');
+        expect(String(rekeyed.reason)).toMatch(/would not tell records apart/);
+      }
+    });
+  });
+
   describe('company deletion', () => {
     it('cascades from the company row in a shared database', async () => {
       const companyId = await newCompany();

@@ -72,6 +72,42 @@ export interface TableDefinition {
   retention: TableRetention | null;
 }
 
+/**
+ * One change to a table's columns or primary key (001.06). Existing records
+ * are rewritten to match, in the same transaction.
+ */
+export type TableChange =
+  | {
+      op: 'add_column';
+      column: string;
+      type: FieldType;
+      /** Only `date`, for a text column holding `YYYY-MM-DD`. */
+      format?: 'date';
+      description?: string;
+      /** Given to every existing record; without it they are left blank. */
+      default?: unknown;
+      /** Allowed only with a default, or on an empty table. */
+      required?: boolean;
+    }
+  | { op: 'rename_column'; column: string; newName: string }
+  | { op: 'delete_column'; column: string }
+  | { op: 'set_primary_key'; fields: string[] };
+
+/** The names of the changes {@link TableChange} offers. */
+export const TABLE_CHANGE_OPS = [
+  'add_column',
+  'rename_column',
+  'delete_column',
+  'set_primary_key',
+] as const;
+
+/** A changed table, and how many of its records were rewritten to match. */
+export interface AlterResult {
+  definition: TableDefinition;
+  before: TableDefinition;
+  rewritten: number;
+}
+
 /** A record's field values. */
 export type RecordData = Record<string, unknown>;
 

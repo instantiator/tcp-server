@@ -10,6 +10,7 @@ import type { UUID } from '../uuid';
 import { RecordSql } from './filter-sql';
 import {
   AGGREGATE_OPS,
+  type AlterResult,
   type AggregateQuery,
   type AggregateRow,
   type DoNotStoreEntry,
@@ -26,6 +27,7 @@ import {
   type RowError,
   type SearchResult,
   type StoredRecord,
+  type TableChange,
   type TableDefinition,
   type TableRetention,
   type TableRows,
@@ -37,8 +39,12 @@ import {
 import {
   RECORD_LIMITS,
   canonicalJson,
+  checkAddColumn,
+  checkDelete,
+  checkNewKey,
   checkNewTable,
   checkRecord,
+  checkRename,
   keyName,
   keyValue,
   recordValidator,
@@ -268,19 +274,20 @@ export class RecordsService {
    * Inserts a record, or returns the one already holding its primary or a
    * unique key. Never creates a duplicate: when two inserts race, the
    * `record_key` primary key lets exactly one commit, and the other is
-   * answered with the winner.
+   * answered with the winner. The table's definition is read under a share
+   * lock, so a column change can't land between the check and the write.
    */
   async insert(
     companyId: string,
     tableName: string,
     data: RecordData,
   ): Promise<InsertResult> {
-    const table = await this.table(this.ds.manager, companyId, tableName);
-    checkRecord(recordValidator(table.schema), data);
-    const existing = await this.findByKeys(this.ds.manager, table, data);
-    if (existing) return existing;
     try {
       return await this.ds.transaction(async (tx) => {
+        const table = await this.table(tx, companyId, tableName, 'share');
+        checkRecord(recordValidator(table.schema), data);
+        const existing = await this.findByKeys(tx, table, data);
+        if (existing) return existing;
         const [row] = await tx.query<RecordRowSql[]>(
           `INSERT INTO "record" ("tableId", "companyId", "data") VALUES ($1, $2, $3)
            RETURNING "id", "data", "version"`,
@@ -292,6 +299,7 @@ export class RecordsService {
     } catch (e) {
       if (!isUniqueViolation(e)) throw e;
       // Lost a race to a concurrent insert of the same key: answer with the winner.
+      const table = await this.table(this.ds.manager, companyId, tableName);
       const winner = await this.findByKeys(this.ds.manager, table, data);
       if (winner) return winner;
       throw e;
@@ -311,10 +319,10 @@ export class RecordsService {
     changes: RecordData,
     expectedVersion?: number,
   ): Promise<RecordChange> {
-    const table = await this.table(this.ds.manager, companyId, tableName);
-    const validate = recordValidator(table.schema);
     try {
       return await this.ds.transaction(async (tx) => {
+        const table = await this.table(tx, companyId, tableName, 'share');
+        const validate = recordValidator(table.schema);
         const current = await this.resolve(tx, table, ref, true);
         checkVersion(current, expectedVersion);
         const merged: RecordData = { ...current.data };
@@ -356,8 +364,9 @@ export class RecordsService {
     ref: RecordRef,
     expectedVersion?: number,
   ): Promise<RecordChange> {
-    const table = await this.table(this.ds.manager, companyId, tableName);
     return this.ds.transaction(async (tx) => {
+      // A ref by key is looked up by the key's stored name, which a column change rewrites.
+      const table = await this.table(tx, companyId, tableName, 'share');
       const current = await this.resolve(tx, table, ref, true);
       checkVersion(current, expectedVersion);
       await tx.query(`DELETE FROM "record" WHERE "id" = $1`, [current.id]);
@@ -575,23 +584,23 @@ export class RecordsService {
         `at most ${RECORD_LIMITS.rowsPerInsert} records can be added at once; this has ${rows.length}`,
       );
     }
-    const table = await this.table(this.ds.manager, companyId, tableName);
-    const validate = recordValidator(table.schema);
-    const errors: RowError[] = [];
-    rows.forEach((data, i) => {
-      try {
-        checkRecord(validate, data);
-      } catch (e) {
-        if (!(e instanceof RecordsError)) throw e;
-        errors.push({ row: i + 1, message: e.message });
-      }
-    });
-    if (errors.length) return { inserted: 0, alreadyExists: 0, errors };
     // ponytail: a few queries per row in one transaction; fine for the
     // 10,000-row cap, switch to a COPY into a staging table if appends get slow.
     for (let attempt = 1; ; attempt++) {
       try {
         return await this.ds.transaction(async (tx) => {
+          const table = await this.table(tx, companyId, tableName, 'share');
+          const validate = recordValidator(table.schema);
+          const errors: RowError[] = [];
+          rows.forEach((data, i) => {
+            try {
+              checkRecord(validate, data);
+            } catch (e) {
+              if (!(e instanceof RecordsError)) throw e;
+              errors.push({ row: i + 1, message: e.message });
+            }
+          });
+          if (errors.length) return { inserted: 0, alreadyExists: 0, errors };
           let inserted = 0;
           for (const [index, data] of rows.entries()) {
             if (await this.findByKeys(tx, table, data)) continue;
@@ -652,6 +661,143 @@ export class RecordsService {
         [table.id, companyId],
       );
       return { definition: definitionOf(table), removed };
+    });
+  }
+
+  /**
+   * Changes a table's columns or primary key, and rewrites its records to
+   * match, in one transaction. The table is locked first, so writes in flight
+   * finish before it and new ones wait for it: no record is ever stored under
+   * a column name that has just gone. A rewritten record's version goes up,
+   * so a stale edit of it is refused, but its `updatedAt` stays: this is not
+   * an edit of its data, and retention mustn't restart.
+   *
+   * With `allowNarrow` false, a key can only gain fields (see {@link checkNewKey}).
+   */
+  async alterTable(
+    companyId: string,
+    tableName: string,
+    change: TableChange,
+    opts: { allowNarrow: boolean },
+  ): Promise<AlterResult> {
+    return this.ds.transaction(async (tx) => {
+      const table = await this.table(tx, companyId, tableName, 'update');
+      const before = definitionOf(table);
+      const after = structuredClone(before);
+      let rewritten = 0;
+      switch (change.op) {
+        case 'add_column': {
+          const [{ records, largest }] = await tx.query<
+            { records: number; largest: number }[]
+          >(
+            `SELECT count(*)::int AS "records", coalesce(max(octet_length("data"::text)), 0)::int AS "largest"
+             FROM "record" WHERE "tableId" = $1`,
+            [table.id],
+          );
+          after.schema.properties[change.column] = checkAddColumn(
+            before,
+            change,
+            records,
+          );
+          if (change.required) {
+            after.schema.required = [
+              ...(after.schema.required ?? []),
+              change.column,
+            ];
+          }
+          if (change.default !== undefined && records > 0) {
+            const added = JSON.stringify({ [change.column]: change.default });
+            if (
+              largest + Buffer.byteLength(added) >
+              RECORD_LIMITS.recordBytes
+            ) {
+              throw new RecordsError(
+                `that default would make a record larger than ${RECORD_LIMITS.recordBytes / 1024} KB; use a shorter one`,
+              );
+            }
+            rewritten = await this.rewriteRows(
+              tx,
+              `"data" || jsonb_build_object($2::text, $3::jsonb)`,
+              [table.id, change.column, JSON.stringify(change.default)],
+            );
+          }
+          break;
+        }
+        case 'rename_column': {
+          const { column, newName } = change;
+          checkRename(before, column, newName);
+          const rename = (f: string): string => (f === column ? newName : f);
+          after.schema.properties = Object.fromEntries(
+            Object.entries(before.schema.properties).map(([f, s]) => [
+              rename(f),
+              s,
+            ]),
+          );
+          if (before.schema.required) {
+            after.schema.required = before.schema.required.map(rename);
+          }
+          after.primaryKey = before.primaryKey.map(rename);
+          after.uniqueKeys = before.uniqueKeys.map((key) => key.map(rename));
+          if (before.retention) {
+            after.retention = {
+              ...before.retention,
+              from: rename(before.retention.from),
+            };
+          }
+          // A key's stored value holds only values, so only its name changes.
+          for (const key of [before.primaryKey, ...before.uniqueKeys]) {
+            if (!key.includes(column)) continue;
+            await tx.query(
+              `UPDATE "record_key" SET "keyName" = $3 WHERE "tableId" = $1 AND "keyName" = $2`,
+              [table.id, keyName(key), keyName(key.map(rename))],
+            );
+          }
+          rewritten = await this.rewriteRows(
+            tx,
+            `("data" - $2::text) || jsonb_build_object($3::text, "data" -> $2::text)`,
+            [table.id, column, newName],
+            `jsonb_exists("data", $2::text)`,
+          );
+          break;
+        }
+        case 'delete_column': {
+          checkDelete(before, change.column);
+          delete after.schema.properties[change.column];
+          if (before.schema.required) {
+            after.schema.required = before.schema.required.filter(
+              (f) => f !== change.column,
+            );
+          }
+          rewritten = await this.rewriteRows(
+            tx,
+            `"data" - $2::text`,
+            [table.id, change.column],
+            `jsonb_exists("data", $2::text)`,
+          );
+          break;
+        }
+        case 'set_primary_key': {
+          const key = checkNewKey(before, change.fields, opts.allowNarrow);
+          await this.rekey(tx, table, before.primaryKey, key);
+          after.primaryKey = key;
+          after.schema.required = [
+            ...new Set([...(before.schema.required ?? []), ...key]),
+          ];
+          break;
+        }
+      }
+      await tx.query(
+        `UPDATE "record_table" SET "schema" = $2, "primaryKey" = $3, "uniqueKeys" = $4, "retention" = $5, "updatedAt" = now()
+         WHERE "id" = $1`,
+        [
+          table.id,
+          JSON.stringify(after.schema),
+          JSON.stringify(after.primaryKey),
+          JSON.stringify(after.uniqueKeys),
+          after.retention ? JSON.stringify(after.retention) : null,
+        ],
+      );
+      return { definition: after, before, rewritten };
     });
   }
 
@@ -1003,15 +1149,23 @@ export class RecordsService {
     return total;
   }
 
-  /** Loads a table by name within the company, or says which tables exist. */
+  /**
+   * Loads a table by name within the company, or says which tables exist.
+   * Inside a transaction, `share` holds the definition steady for a write
+   * (writes don't block each other) and `update` holds it for a column
+   * change, which waits for writes in flight and makes new ones wait. Take
+   * it before any record lock, so locks are always taken in the same order.
+   */
   private async table(
     manager: EntityManager,
     companyId: string,
     name: string,
+    lock?: 'share' | 'update',
   ): Promise<TableRow> {
+    const forLock = lock ? `FOR ${lock.toUpperCase()}` : '';
     const [table] = await manager.query<TableRow[]>(
       `SELECT "id", "companyId", "name", "purpose", "schema", "primaryKey", "uniqueKeys", "retention"
-       FROM "record_table" WHERE "companyId" = $1 AND "name" = $2`,
+       FROM "record_table" WHERE "companyId" = $1 AND "name" = $2 ${forLock}`,
       [companyId, name],
     );
     if (!table) {
@@ -1021,6 +1175,87 @@ export class RecordsService {
       );
     }
     return table;
+  }
+
+  /**
+   * Sets every record's data of the table to `expr` and bumps its version;
+   * returns how many changed. `$1` in `expr` and `where` is the table id.
+   */
+  private async rewriteRows(
+    tx: EntityManager,
+    expr: string,
+    params: unknown[],
+    where = 'true',
+  ): Promise<number> {
+    // TypeORM answers an UPDATE with [rows, affectedCount].
+    const [, count] = await tx.query<[unknown, number]>(
+      `UPDATE "record" SET "data" = ${expr}, "version" = "version" + 1
+       WHERE "tableId" = $1 AND ${where}`,
+      params,
+    );
+    return count;
+  }
+
+  /**
+   * Replaces the stored values of the primary key `oldKey` with those of
+   * `key`. Refuses, with examples, when a record has no value for a key
+   * field or two records would share a key: the caller holds the table's
+   * update lock, so nothing can change between this check and the write.
+   */
+  // ponytail: reads every record into memory; fine to the 10,000-row scale,
+  // page through them if a table grows far past that.
+  private async rekey(
+    tx: EntityManager,
+    table: TableRow,
+    oldKey: string[],
+    key: string[],
+  ): Promise<void> {
+    const rows = await tx.query<{ id: string; data: RecordData }[]>(
+      `SELECT "id"::text AS "id", "data" FROM "record" WHERE "tableId" = $1`,
+      [table.id],
+    );
+    for (const field of key) {
+      const missing = rows.filter((r) => r.data[field] === undefined);
+      if (missing.length) {
+        const ids = missing.slice(0, 3).map((r) => r.id);
+        throw new RecordsError(
+          `${missing.length === 1 ? '1 record has' : `${missing.length} records have`} no value for '${field}', and every key field needs one. ` +
+            `Fill it in with update (for example record ${ids.join(', ')}), then try again`,
+        );
+      }
+    }
+    const holders = new Map<string, number>();
+    for (const r of rows) {
+      const value = keyValue(key, r.data);
+      holders.set(value, (holders.get(value) ?? 0) + 1);
+    }
+    const clashes = [...holders].filter(([, n]) => n > 1);
+    if (clashes.length) {
+      const examples = clashes.slice(0, 3).map(([value, n]) => {
+        const values = JSON.parse(value) as unknown[];
+        const named = key.map((f, i) => `${f}=${JSON.stringify(values[i])}`);
+        return `${named.join(', ')} (${n} records)`;
+      });
+      throw new RecordsError(
+        `that key would not tell records apart: ${clashes.length === 1 ? '1 value is' : `${clashes.length} values are`} shared, e.g. ${examples.join('; ')}. ` +
+          'Add a field that tells them apart, or change those records first',
+        'conflict',
+      );
+    }
+    await tx.query(
+      `DELETE FROM "record_key" WHERE "tableId" = $1 AND "keyName" = $2`,
+      [table.id, keyName(oldKey)],
+    );
+    await tx.query(
+      `INSERT INTO "record_key" ("tableId", "keyName", "keyValue", "recordId")
+       SELECT $1, $2, t."value", t."recordId" FROM unnest($3::text[], $4::uuid[]) AS t("value", "recordId")`,
+      [
+        table.id,
+        keyName(key),
+        rows.map((r) => keyValue(key, r.data)),
+        rows.map((r) => r.id),
+      ],
+    );
   }
 
   /** Every key the table declares, primary first, with its stored name and value for `data`. */
