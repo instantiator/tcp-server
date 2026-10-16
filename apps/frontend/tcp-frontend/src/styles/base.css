@@ -622,6 +622,56 @@ body {
 }
 
 /*
+ * A menu down the side and the chosen section beside it (002.00): the Data
+ * and Admin tabs. The menu is a single-select `ListBox`; choosing an item
+ * moves no focus. Stacks, in the same order, on a narrow screen.
+ */
+.tcp-side-menu {
+  display: grid;
+  /* `minmax(0, …)`: a wide sheet scrolls rather than widening the page. */
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  gap: var(--tcp-space-lg);
+  align-items: start;
+}
+
+@media (max-width: 40rem) {
+  .tcp-side-menu {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tcp-side-menu__menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--tcp-space-sm);
+}
+
+.tcp-side-menu__list {
+  inline-size: 100%;
+}
+
+/* A section's heading inside the menu, such as "Tables". */
+.tcp-side-menu__header {
+  padding-inline: var(--tcp-space-xs);
+  color: var(--tcp-color-text-muted);
+  font-size: 0.875em;
+}
+
+/* A plain data table: full width, ruled rows. */
+.tcp-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.tcp-table th,
+.tcp-table td {
+  padding: var(--tcp-space-xs);
+  text-align: start;
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+/*
  * The page header (005.01): stays on screen while the page scrolls, rather
  * than being carried away with it, so the title and the account menu stay
  * reachable. `html`'s `scroll-padding-block-start` above keeps a focused

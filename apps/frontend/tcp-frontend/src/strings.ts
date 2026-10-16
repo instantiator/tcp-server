@@ -734,9 +734,37 @@ const strings = {
   'session.expiring.announcement':
     'Your session is about to expire. Choose "Stay signed in" to continue.',
 
+  // The Data and Admin tabs (002.00): each a menu down the side and the
+  // chosen section beside it. Data holds the record tables and links into
+  // the document store; Admin holds roles, users, knowledge and data
+  // protection.
+  'company.tab.data': 'Data',
+  'company.tab.admin': 'Admin',
+  'data.menu.label': 'Data',
+  'data.menu.tables': 'Tables',
+  'data.menu.documents': 'Documents',
+  'admin.menu.label': 'Company administration',
+  'admin.menu.roles': 'Roles',
+  'admin.menu.users': 'Users',
+  'admin.menu.knowledge': 'Knowledge',
+  'admin.menu.dataProtection': 'Data protection',
+  'admin.placeholder': 'Not built yet.',
+  'documents.heading': 'Documents',
+  'documents.intro':
+    'Folders in the document store. Each link opens the storage browser in a new tab.',
+  'documents.refresh': 'Refresh the document links',
+  'documents.column.folder': 'Folder',
+  'documents.column.location': 'Location',
+  'documents.root': 'Everything the company stores',
+  'documents.resources': 'Company resources',
+  'documents.taskOutputs': 'Outputs of {shortcode} — {request}',
+  'documents.linkSuffix': '(opens the storage browser in a new tab)',
+  'documents.unconfigured':
+    'The storage browser is not configured, so there are no links to show.',
+  'documents.loading': 'Loading the tasks',
+  'documents.error': "The tasks' outputs could not be loaded.",
+
   // Record tables (001.03): the spreadsheet view, its actions and dialogs.
-  'company.tab.tables': 'Tables',
-  'company.tab.dataProtection': 'Data protection',
   'dataProtection.duties.heading': 'Your data protection duties',
   'dataProtection.duties.body':
     "If this company keeps the names, addresses or emails of customers or other people, you may have data protection duties. In the UK, you may need to pay a fee to the Information Commissioner's Office (ICO). This page doesn't give advice: check the official guidance.",
@@ -786,7 +814,6 @@ const strings = {
   'dataProtection.list.remove.confirm': 'Remove',
   'dataProtection.announce.listChanged': 'Do-not-store list updated',
   'dataProtection.announce.listNotChanged': 'Not changed: {message}',
-  'tables.list.label': 'Record tables',
   'tables.loading': 'Loading the tables',
   'tables.error': 'The tables could not be loaded.',
   'tables.empty':

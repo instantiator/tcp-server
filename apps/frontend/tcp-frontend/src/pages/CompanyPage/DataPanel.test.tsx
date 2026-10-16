@@ -14,7 +14,7 @@ import {
   requestedUrls,
   respondByRoute,
 } from '../../test-support/fetch-mock';
-import { TablesPanel } from './TablesPanel';
+import { DataPanel, type DataSelection } from './DataPanel';
 
 vi.mock('../../components/RecordSheet/announceRecords', () => ({
   RECORDS_CHANNEL: 'records',
@@ -39,10 +39,10 @@ const ORDERS: RecordTableRows = {
 };
 
 /** The panel with its selection held in state, as the tab holds it in the URL. */
-const Harness = ({ initial }: { readonly initial: string | null }) => {
+const Harness = ({ initial }: { readonly initial: DataSelection }) => {
   const [selected, setSelected] = useState(initial);
   return (
-    <TablesPanel
+    <DataPanel
       companyId="c1"
       companySlug="acme"
       selected={selected}
@@ -54,7 +54,13 @@ const Harness = ({ initial }: { readonly initial: string | null }) => {
 const newClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-const renderPanel = (initial: string | null = null, client = newClient()) =>
+/** A table to open on arrival, or none. */
+const tables = (table: string | null = null): DataSelection => ({
+  kind: 'tables',
+  table,
+});
+
+const renderPanel = (initial = tables(), client = newClient()) =>
   render(
     <QueryClientProvider client={client}>
       <main>
@@ -86,7 +92,7 @@ const hear = async (queryClient: QueryClient, event: WireEvent) => {
   });
 };
 
-describe('TablesPanel', () => {
+describe('DataPanel', () => {
   beforeEach(() => {
     installFetchMock();
     respondByRoute([
@@ -103,15 +109,20 @@ describe('TablesPanel', () => {
     ]);
   });
 
-  it('lists each table with its count, and asks for a choice', async () => {
+  it('lists each table with its count under Tables, then Documents, and asks for a choice', async () => {
     renderPanel();
     const list = await screen.findByRole('listbox', {
-      name: t('tables.list.label'),
+      name: t('data.menu.label'),
     });
+    await within(list).findByRole('option', { name: /^orders/ });
+    expect(
+      within(list).getByRole('group', { name: t('data.menu.tables') }),
+    ).toBeInTheDocument();
     const options = within(list).getAllByRole('option');
     expect(options.map((o) => o.textContent)).toEqual([
       `orders${tCount('records.count', 1)}`,
       `stock${tCount('records.count', 12)}`,
+      t('data.menu.documents'),
     ]);
     expect(screen.getByText(t('tables.choose'))).toBeInTheDocument();
     expect(
@@ -135,7 +146,7 @@ describe('TablesPanel', () => {
   });
 
   it('opens the table named on arrival', async () => {
-    renderPanel('orders');
+    renderPanel(tables('orders'));
     expect(
       await screen.findByRole('heading', { level: 2, name: /^orders/ }),
     ).toBeInTheDocument();
@@ -154,13 +165,48 @@ describe('TablesPanel', () => {
     ).toBeDisabled();
   });
 
+  it('opens Documents from the menu, leaving focus on the menu', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByRole('option', { name: /^orders/ });
+    const documents = screen.getByRole('option', {
+      name: t('data.menu.documents'),
+    });
+    await user.click(documents);
+    expect(
+      screen.getByRole('heading', { level: 2, name: t('documents.heading') }),
+    ).toBeInTheDocument();
+    expect(documents).toHaveFocus();
+    expect(documents).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('keeps a table named "documents" apart from the Documents item', async () => {
+    respondByRoute([
+      [
+        new RegExp(`${BASE}/tables$`),
+        {
+          body: [{ name: 'documents', purpose: '', records: 3, updatedAt: '' }],
+        },
+      ],
+    ]);
+    renderPanel({ kind: 'documents' });
+    await screen.findByRole('option', { name: 'documents' });
+    expect(
+      screen.getByRole('option', { name: t('data.menu.documents') }),
+    ).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'documents' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
+  });
+
   describe('when tables change elsewhere (001.05)', () => {
     beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
     afterEach(() => vi.useRealTimers());
 
     it('keeps the counts current, and lists new tables and drops deleted ones', async () => {
       const client = newClient();
-      renderPanel(null, client);
+      renderPanel(tables(), client);
       await screen.findByRole('option', { name: /^stock/ });
 
       respondByRoute([
@@ -181,6 +227,7 @@ describe('TablesPanel', () => {
           [
             `leads${tCount('records.count', 4)}`,
             `orders${tCount('records.count', 2)}`,
+            t('data.menu.documents'),
           ],
         ),
       );
@@ -188,7 +235,7 @@ describe('TablesPanel', () => {
 
     it('keeps a table open, saying so, when it is deleted elsewhere', async () => {
       const client = newClient();
-      renderPanel('orders', client);
+      renderPanel(tables('orders'), client);
       await screen.findByRole('heading', { level: 2, name: /^orders/ });
 
       respondByRoute([

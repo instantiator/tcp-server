@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { taskOutputsUrl } from './storageLink';
+import { storageFolderUrl, taskOutputsUrl } from './storageLink';
 
 describe('taskOutputsUrl', () => {
   it('returns null without storageConsoleUrl', () => {
@@ -66,5 +66,20 @@ describe('taskOutputsUrl', () => {
     // The task id's own "/" must be encoded away, not left as a path
     // separator that would escape the intended segment.
     expect(url?.split('/browser/tcp/')[1]).not.toContain('/');
+  });
+});
+
+describe('storageFolderUrl', () => {
+  it('links any folder in the same format as the task outputs', () => {
+    expect(
+      storageFolderUrl(
+        { storageConsoleUrl: 'http://localhost:9001', storageBucket: 'tcp' },
+        'acme-co/resources/',
+      ),
+    ).toBe('http://localhost:9001/browser/tcp/acme-co%2Fresources%2F');
+  });
+
+  it('returns null without the console configured', () => {
+    expect(storageFolderUrl({}, 'acme-co/')).toBeNull();
   });
 });
