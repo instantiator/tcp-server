@@ -43,6 +43,14 @@ const UPLOAD = 'Upload a document';
 const SHARED_HEADING = 'Shared knowledge';
 const DELETE_ONE = 'Delete 1 selected role';
 const DELETE_CONFIRM = 'Delete';
+const CUSTOM_PROVIDER = 'Other OpenAI-compatible server';
+const SAVE = 'Save';
+const SAVE_ANYWAY = 'Save anyway';
+const NO_MODEL = 'No model';
+const SAVED = 'Saved. Worth checking:';
+// The provider list opens from the keyboard: near the foot of a dialog its
+// popover can open over the trigger, and a mouse click's release would then
+// pick whichever option landed under the pointer.
 
 /** One empty company, through the API only. */
 interface Fixture {
@@ -130,6 +138,86 @@ test.describe('company administration', () => {
       .getByRole('button', { name: DELETE_CONFIRM, exact: true })
       .click();
     await expect(row).toHaveCount(0);
+  });
+
+  test('the company model is chosen and kept, a role follows it, and clearing it is caught', async ({
+    page,
+    request,
+  }) => {
+    const auth = { Authorization: `Bearer ${fixture.token}` };
+    const role = await request.post('/api/role', {
+      headers: auth,
+      data: {
+        companyId: fixture.companyId,
+        slug: 'writer',
+        name: 'Writer',
+        description: 'Made by admin.spec.ts',
+        knowledgeDomains: [],
+        mcpServerList: [],
+        llmConfig: { provider: 'openai', model: 'gpt-5-mini' },
+      },
+    });
+    expect(role.status()).toBe(201);
+    const defaults = await request.get('/api/system/llm-defaults', {
+      headers: auth,
+    });
+    const { chat: appDefault } = (await defaults.json()) as {
+      chat: object | null;
+    };
+
+    // The company's chat model, saved and still there after a reload.
+    await gotoSignedIn(page, `/company/${fixture.companyId}#admin/models`);
+    const chat = page.getByRole('group', { name: 'Chat model' });
+    await chat.getByRole('button', { name: /Provider$/ }).press('Enter');
+    await page.getByRole('option', { name: CUSTOM_PROVIDER }).click();
+    // example.com is on the testing stack's LLM_ALLOWED_HOSTS.
+    await chat
+      .getByRole('textbox', { name: 'Address' })
+      .fill('http://example.com/v1');
+    await chat.getByRole('combobox', { name: 'Model' }).fill('test-model');
+    await page.getByRole('button', { name: SAVE, exact: true }).click();
+    // The fixture has no company context, so every save comes back with a
+    // warning: its appearing is the sign the save finished.
+    await expect(page.getByText(SAVED)).toBeVisible();
+    await page.reload();
+    await expect(chat.getByRole('combobox', { name: 'Model' })).toHaveValue(
+      'test-model',
+    );
+
+    // The role drops its own model for the company's.
+    await page.goto(`/company/${fixture.companyId}#admin/roles`);
+    await page.getByRole('button', { name: 'Writer', exact: true }).click();
+    // The only dialog open; its name is the role's.
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: /Provider$/ }).press('Enter');
+    await page.getByRole('option', { name: /Use the company’s model/ }).click();
+    await dialog.getByRole('button', { name: SAVE, exact: true }).click();
+    // The role has no knowledge domains, so it is warned about too.
+    await expect(dialog.getByText(SAVED)).toBeVisible();
+    // The heading's close button and the form's both say Close.
+    await dialog
+      .getByRole('button', { name: 'Close', exact: true })
+      .first()
+      .click();
+
+    // Clearing the company's model leaves the role with whatever the app has.
+    await page.goto(`/company/${fixture.companyId}#admin/models`);
+    await chat.getByRole('button', { name: /Provider$/ }).press('Enter');
+    await page
+      .getByRole('option', { name: /^Use the app default|^None/ })
+      .click();
+    await page.getByRole('button', { name: SAVE, exact: true }).click();
+    if (appDefault === null) {
+      const confirm = page.getByRole('alertdialog');
+      await expect(confirm).toContainText('Writer');
+      await confirm.getByRole('button', { name: SAVE_ANYWAY }).click();
+      await page.goto(`/company/${fixture.companyId}#admin/roles`);
+      await expect(
+        page.getByRole('row', { name: /Writer/ }).getByText(NO_MODEL),
+      ).toBeVisible();
+    } else {
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    }
   });
 
   test('the Knowledge section shows the company-wide documents', async ({
