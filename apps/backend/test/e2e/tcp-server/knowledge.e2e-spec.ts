@@ -376,6 +376,28 @@ describe('KnowledgeController (e2e)', () => {
         .post(`/api/company/no-such-company/knowledge/reindex`)
         .set('Authorization', `Bearer ${makeTestJwt()}`)
         .expect(404));
+
+    it('POST /api/role/:roleId/knowledge/reindex returns 401 without a token', () =>
+      request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge/reindex`)
+        .expect(401));
+
+    it('POST /api/role/:roleId/knowledge/reindex returns 202 for a known role', () =>
+      request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge/reindex`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(202)
+        .expect((res) => {
+          expect(res.body).toEqual({ reindexing: true });
+        }));
+
+    it('POST /api/role/:roleId/knowledge/reindex returns 404 for an unknown role', () =>
+      request(app.getHttpServer())
+        .post(
+          '/api/role/00000000-0000-0000-0000-000000000000/knowledge/reindex',
+        )
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(404));
   });
 
   describe('status', () => {

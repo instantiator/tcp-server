@@ -115,4 +115,41 @@ describe('CompanyDbService.list', () => {
     expect(companyFind).not.toHaveBeenCalled();
     expect(userFind).not.toHaveBeenCalled();
   });
+
+  describe('memberTypes', () => {
+    it('keeps the strongest of several rows in one company', async () => {
+      const delta = (
+        await companyRepo.save({
+          slug: 'delta',
+          name: 'delta',
+          description: 'delta',
+          mcpServerList: [],
+        })
+      ).id;
+      for (const [identifier, memberType] of [
+        ['sub-3', 'member'],
+        ['third@example.com', 'creator'],
+      ] as const) {
+        await companyUserRepo.save(
+          companyUserRepo.create({
+            companyId: delta,
+            identifier,
+            name: null,
+            memberType,
+            roles: [],
+            knowledgeDomains: [],
+          }),
+        );
+      }
+
+      const types = await service.memberTypes(['sub-3', 'third@example.com']);
+      expect(types.get(delta)).toBe('creator');
+    });
+
+    it('returns an empty map for no identifiers without querying', async () => {
+      const userFind = jest.spyOn(companyUserRepo, 'find');
+      await expect(service.memberTypes([])).resolves.toEqual(new Map());
+      expect(userFind).not.toHaveBeenCalled();
+    });
+  });
 });

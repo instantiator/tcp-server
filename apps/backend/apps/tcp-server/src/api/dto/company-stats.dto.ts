@@ -1,4 +1,4 @@
-import type { CompanyStats, TcpTaskStatus } from '@tcp/shared';
+import type { CompanyStats, MemberType, TcpTaskStatus } from '@tcp/shared';
 import { ApiProperty } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import { CreateCompanyDto } from './company.dto';
@@ -30,4 +30,12 @@ export class CompanyListItemDto extends CreateCompanyDto {
 
   @ApiProperty({ type: CompanyStatsDto })
   stats!: CompanyStatsDto;
+
+  @ApiProperty({
+    enum: ['creator', 'owner', 'member'],
+    nullable: true,
+    description:
+      "The caller's own membership; null on an administrator's ?all row for a company they don't belong to.",
+  })
+  memberType!: MemberType | null;
 }

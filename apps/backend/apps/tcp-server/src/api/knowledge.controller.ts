@@ -159,6 +159,26 @@ export class KnowledgeController {
     return result;
   }
 
+  /**
+   * Rebuilds one role's knowledge index only. Returns 202 — indexing happens
+   * asynchronously on the reindex worker.
+   *
+   * @throws {@link NotFoundException} when the role does not exist.
+   */
+  @ApiOperation({ summary: "Reindex one role's knowledge" })
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
+  @Post('role/:roleId/knowledge/reindex')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: KnowledgeReindexResponseDto })
+  async reindexRoleKnowledge(
+    @Param('roleId') roleId: UUID,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ reindexing: true }> {
+    await this.knowledge.reindexRole(roleId);
+    await this.reportEmbeddingWarnings({ kind: 'role', roleId }, res);
+    return { reindexing: true };
+  }
+
   /** Returns a role knowledge document's content. */
   @ApiOperation({ summary: 'Get an OKF document for a role' })
   @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })

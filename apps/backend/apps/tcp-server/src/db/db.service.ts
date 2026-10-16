@@ -2,6 +2,7 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
+  MemberType,
   TcpAgent,
   TcpCompany,
   TcpRole,
@@ -65,6 +66,11 @@ export class DbService {
    */
   listCompanies(identifiers?: string[]): Promise<TcpCompany[]> {
     return this.companies.list(identifiers);
+  }
+
+  /** The caller's member type per company — {@link CompanyDbService.memberTypes}. */
+  companyMemberTypes(identifiers: string[]): Promise<Map<UUID, MemberType>> {
+    return this.companies.memberTypes(identifiers);
   }
 
   /** Retrieves a company by UUID or slug — {@link CompanyDbService.get}. */

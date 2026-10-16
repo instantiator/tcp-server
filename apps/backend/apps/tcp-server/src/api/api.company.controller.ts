@@ -129,9 +129,11 @@ export class CompanyController {
     );
     // Stats accompany both modes — the administrative view wants them too.
     const stats = await this.stats.listStats(companies.map((c) => c.id));
+    const memberTypes = await this.db.companyMemberTypes(identifiers);
     return companies.map((company) => ({
       ...company,
       stats: stats.get(company.id) ?? emptyCompanyStats(),
+      memberType: memberTypes.get(company.id) ?? null,
     }));
   }
 

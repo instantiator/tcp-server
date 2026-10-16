@@ -50,7 +50,11 @@ describe('KnowledgeService', () => {
     getKnowledgeFile: jest.Mock;
     deleteKnowledgeFile: jest.Mock;
   };
-  let reindex: { bumpCompany: jest.Mock; isRebuilding: jest.Mock };
+  let reindex: {
+    bump: jest.Mock;
+    bumpCompany: jest.Mock;
+    isRebuilding: jest.Mock;
+  };
   let ragRetrieval: { retrieve: jest.Mock };
   let config: { get: jest.Mock };
   let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock; delete: jest.Mock };
@@ -71,6 +75,7 @@ describe('KnowledgeService', () => {
       deleteKnowledgeFile: jest.fn().mockResolvedValue(undefined),
     };
     reindex = {
+      bump: jest.fn().mockResolvedValue(undefined),
       bumpCompany: jest.fn().mockResolvedValue(undefined),
       isRebuilding: jest.fn().mockResolvedValue(false),
     };
@@ -274,6 +279,22 @@ describe('KnowledgeService', () => {
         NotFoundException,
       );
       expect(reindex.bumpCompany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reindexRole', () => {
+    it("bumps only the role's scope", async () => {
+      await service.reindexRole(role.id);
+      expect(reindex.bump).toHaveBeenCalledWith(company.id, role.id);
+      expect(reindex.bumpCompany).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException and bumps nothing for an unknown role', async () => {
+      roleRepo.findOneBy.mockResolvedValue(null);
+      await expect(service.reindexRole(randomUUID())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(reindex.bump).not.toHaveBeenCalled();
     });
   });
 

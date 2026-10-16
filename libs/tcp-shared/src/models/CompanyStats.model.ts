@@ -1,5 +1,6 @@
 import type { TcpTaskStatus } from './TcpTask.model';
 import type { TcpCompany } from './TcpCompany.model';
+import type { MemberType } from './CompanyUser.model';
 
 /**
  * The fixed per-company statistic set returned with `GET /api/company`
@@ -15,8 +16,15 @@ export interface CompanyStats {
   openEnquiries: number;
 }
 
-/** A company as `GET /api/company` returns it — the record plus its stats. */
-export type CompanyListItem = TcpCompany & { stats: CompanyStats };
+/**
+ * A company as `GET /api/company` returns it — the record plus its stats and
+ * the caller's own member type (`null` when an administrator's `?all` list
+ * includes a company they don't belong to).
+ */
+export type CompanyListItem = TcpCompany & {
+  stats: CompanyStats;
+  memberType: MemberType | null;
+};
 
 /** A zero-filled {@link CompanyStats}, for a company with nothing running. */
 export function emptyCompanyStats(): CompanyStats {

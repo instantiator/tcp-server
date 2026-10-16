@@ -31,7 +31,10 @@ function makeSummary(
 
 describe('KnowledgeController', () => {
   let knowledge: jest.Mocked<
-    Pick<KnowledgeService, 'store' | 'list' | 'queryRag' | 'embeddingWarnings'>
+    Pick<
+      KnowledgeService,
+      'store' | 'list' | 'queryRag' | 'embeddingWarnings' | 'reindexRole'
+    >
   >;
   let controller: KnowledgeController;
   const roleId = randomUUID();
@@ -42,6 +45,7 @@ describe('KnowledgeController', () => {
       list: jest.fn().mockResolvedValue([]),
       queryRag: jest.fn().mockResolvedValue([]),
       embeddingWarnings: jest.fn().mockResolvedValue([]),
+      reindexRole: jest.fn().mockResolvedValue(undefined),
     };
     controller = new KnowledgeController(
       knowledge as unknown as KnowledgeService,
@@ -307,6 +311,18 @@ describe('KnowledgeController', () => {
         'X-Tcp-Warnings',
         JSON.stringify([encodeURIComponent('No embedding config.')]),
       );
+    });
+  });
+
+  describe('reindexRoleKnowledge', () => {
+    it('delegates to the service and reports the reindex as started', async () => {
+      const result = await controller.reindexRoleKnowledge(
+        roleId,
+        fakeRes() as unknown as Response,
+      );
+
+      expect(knowledge.reindexRole).toHaveBeenCalledWith(roleId);
+      expect(result).toEqual({ reindexing: true });
     });
   });
 

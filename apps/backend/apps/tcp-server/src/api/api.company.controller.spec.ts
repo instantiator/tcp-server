@@ -49,6 +49,7 @@ const makeDbService = (): jest.Mocked<
     DbService,
     | 'listRoles'
     | 'listCompanies'
+    | 'companyMemberTypes'
     | 'getCompany'
     | 'findRoleByIdOrSlug'
     | 'setRole'
@@ -57,6 +58,7 @@ const makeDbService = (): jest.Mocked<
 > => ({
   listRoles: jest.fn().mockResolvedValue([]),
   listCompanies: jest.fn().mockResolvedValue([]),
+  companyMemberTypes: jest.fn().mockResolvedValue(new Map()),
   getCompany: jest.fn().mockResolvedValue(null),
   findRoleByIdOrSlug: jest.fn().mockResolvedValue(null),
   setRole: jest.fn(),
@@ -304,6 +306,19 @@ describe('CompanyController', () => {
       expect(result[0].stats).toEqual(populated);
       // A company the stats query returned nothing for still gets a stat set.
       expect(result[1].stats).toEqual(emptyCompanyStats());
+    });
+
+    it('carries the caller’s member type, or null when they have none', async () => {
+      const member = randomUUID();
+      const stranger = randomUUID();
+      db.listCompanies.mockResolvedValue([company(member), company(stranger)]);
+      db.companyMemberTypes.mockResolvedValue(new Map([[member, 'owner']]));
+
+      const result = await controller.listCompanies(fakeReq({ sub: 'alice' }));
+
+      expect(db.companyMemberTypes).toHaveBeenCalledWith(['alice']);
+      expect(result[0].memberType).toBe('owner');
+      expect(result[1].memberType).toBeNull();
     });
   });
 

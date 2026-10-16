@@ -1,4 +1,4 @@
-import { CompanyUser, TcpCompany, TcpRole } from '@tcp/shared';
+import { CompanyUser, MemberType, TcpCompany, TcpRole } from '@tcp/shared';
 import {
   BadRequestException,
   Injectable,
@@ -10,6 +10,13 @@ import { DeepPartial, In, Repository } from 'typeorm';
 import { TcpCompanyTemplate } from '../templates/TcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
 import { LlmDestinationPolicy, mergeLlmConfig } from './llm-destination-policy';
+
+/** Ranks member types so the strongest of several rows wins. */
+const MEMBER_RANK: Record<MemberType, number> = {
+  creator: 2,
+  owner: 1,
+  member: 0,
+};
 
 /** TypeORM operations for {@link TcpCompany}, behind {@link DbService}. */
 @Injectable()
@@ -169,6 +176,26 @@ export class CompanyDbService {
     return ids.length === 0
       ? []
       : this.companyRepo.find({ where: { id: In(ids) } });
+  }
+
+  /**
+   * Returns the caller's member type per company. A person can hold two rows
+   * in one company (one keyed by `sub`, one by email); the strongest wins.
+   */
+  async memberTypes(identifiers: string[]): Promise<Map<UUID, MemberType>> {
+    const types = new Map<UUID, MemberType>();
+    // `In([])` must not be reached.
+    if (identifiers.length === 0) return types;
+    const rows = await this.companyUserRepo.find({
+      where: { identifier: In(identifiers) },
+    });
+    for (const { companyId, memberType } of rows) {
+      const current = types.get(companyId);
+      if (!current || MEMBER_RANK[memberType] > MEMBER_RANK[current]) {
+        types.set(companyId, memberType);
+      }
+    }
+    return types;
   }
 
   /** Retrieves a company by its UUID or slug. Returns `null` if not found. */

@@ -198,6 +198,18 @@ export class KnowledgeService {
   }
 
   /**
+   * Bumps one role's knowledge scope, enqueuing a rebuild — rebuilds only that
+   * role's index, leaving the company's shared scope alone.
+   *
+   * @throws {@link NotFoundException} when the role does not exist.
+   */
+  async reindexRole(roleId: UUID): Promise<void> {
+    const { company, role } = await this.resolveScope({ kind: 'role', roleId });
+    if (!role) throw new NotFoundException(`Role ${roleId} not found`);
+    await this.reindex.bump(company.id, role.id);
+  }
+
+  /**
    * Runs a RAG similarity search, exactly as prompt assembly would, without
    * invoking any chat/LLM call. A role scope searches the role's chunks plus
    * the company's shared ones; a company scope searches the shared ones
