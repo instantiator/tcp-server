@@ -133,6 +133,10 @@ export class CompanyDbService {
           ...existing,
           ...company,
           llmConfig: mergeLlmConfig(existing.llmConfig, company.llmConfig),
+          embeddingConfig: mergeLlmConfig(
+            existing.embeddingConfig,
+            company.embeddingConfig,
+          ),
         }
       : company;
     // Only fields this write touches: an unrelated patch must not fail on a

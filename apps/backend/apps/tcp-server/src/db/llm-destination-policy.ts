@@ -72,3 +72,23 @@ export function mergeLlmConfig<T extends Partial<LlmConfig>>(
   if (moved && !patch.apiKey) delete merged.apiKey;
   return merged;
 }
+
+/**
+ * Whether saving `after` over `before` changes which embedding model makes
+ * the vectors. Vectors from two models can't be compared, so a change means
+ * the company's knowledge must be re-indexed. Clearing the config is not a
+ * change here: the company then falls back to the app default, which the
+ * caller can't see from this pair.
+ */
+export function embeddingModelChanged(
+  before: LlmConfig | null | undefined,
+  after: LlmConfig | null | undefined,
+): boolean {
+  if (!after) return false;
+  return (
+    !before ||
+    before.provider !== after.provider ||
+    before.model !== after.model ||
+    before.baseUrl !== after.baseUrl
+  );
+}

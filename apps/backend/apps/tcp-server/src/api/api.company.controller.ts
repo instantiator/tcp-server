@@ -62,6 +62,7 @@ import { SpendResumeService } from './spend-resume.service';
 import { UpdateRoleDto } from './dto/role.dto';
 import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
+import { embeddingModelChanged } from '../db/llm-destination-policy';
 import {
   computeCompanyWarnings,
   computeRoleWarnings,
@@ -182,6 +183,8 @@ export class CompanyController {
    * The `id` field is immutable and must not be included in the request body.
    * Soft data-quality warnings (e.g. blank `companyContext`) are reported via
    * the `X-Tcp-Warnings` response header — the update still succeeds.
+   * A new embedding model re-indexes the company's knowledge, since vectors
+   * from the old model can't be searched with the new one.
    */
   @ApiOperation({ summary: 'Partially update a company by ID or slug' })
   @ApiOkResponse({ type: CompanyResponseDto })
@@ -192,7 +195,16 @@ export class CompanyController {
     @Body() partial: UpdateCompanyDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<TcpCompany> {
+    const before = partial.embeddingConfig
+      ? await this.db.getCompany(id)
+      : null;
     const company = await this.api.setCompany(id, partial);
+    if (
+      partial.embeddingConfig &&
+      embeddingModelChanged(before?.embeddingConfig, company.embeddingConfig)
+    ) {
+      await this.knowledge.reindexCompany(company.id);
+    }
     setWarningsHeader(res, computeCompanyWarnings(company));
     return company;
   }

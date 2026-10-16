@@ -44,6 +44,8 @@ import { InternalController } from './internal.controller';
 import { InternalTaskController } from './internal-task.controller';
 import { KnowledgeController } from './knowledge.controller';
 import { McpServersController } from './mcp-servers.controller';
+import { LlmModelsController } from './llm-models.controller';
+import { LlmModelsService } from './llm-models.service';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
 import { StorageActionsController } from './storage-actions.controller';
@@ -125,6 +127,7 @@ import { TaskService } from './task.service';
     InternalTaskController,
     KnowledgeController,
     McpServersController,
+    LlmModelsController,
     RecordsController,
     RoleController,
     StorageActionsController,
@@ -138,6 +141,7 @@ import { TaskService } from './task.service';
   ],
   providers: [
     ApiService,
+    LlmModelsService,
     ToolFootprintService,
     RecordsCleanupService,
     RecordsApiService,
