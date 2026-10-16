@@ -1,0 +1,18 @@
+/* The knowledge panel. Theme tokens only (ADR-026); its tables are the shared `.tcp-table`. */
+.knowledge-panel__status,
+.knowledge-panel__upload,
+.knowledge-panel__query {
+  margin-block-end: var(--tcp-space-md);
+}
+
+.knowledge-panel__actions,
+.knowledge-panel__uploading {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+/* A passage keeps its own line breaks, so lists and paragraphs read as written. */
+.knowledge-panel__passage {
+  white-space: pre-wrap;
+}

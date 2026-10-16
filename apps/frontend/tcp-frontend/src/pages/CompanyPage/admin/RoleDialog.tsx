@@ -30,6 +30,7 @@ import { focusFirstInvalid } from '../../../components/Field/focusFirstInvalid';
 import { LoadingState } from '../../../components/LoadingState/LoadingState';
 import { t } from '../../../strings';
 import './RoleDialog.css';
+import { KnowledgePanel } from './KnowledgePanel';
 
 /** The announcer channel for this dialog; this component is its one writer. */
 const CHANNEL = 'role-dialog';
@@ -445,7 +446,12 @@ const RoleEditor = ({
           </form>
         </TabPanel>
         <TabPanel id="knowledge" className="react-aria-TabPanel">
-          <p>{t('admin.placeholder')}</p>
+          {saved !== null && (
+            <KnowledgePanel
+              scope={{ kind: 'role', roleId: saved.id }}
+              headingLevel={3}
+            />
+          )}
         </TabPanel>
       </Tabs>
     </Dialog>
