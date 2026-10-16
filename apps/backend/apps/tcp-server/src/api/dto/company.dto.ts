@@ -1,5 +1,6 @@
 import type { UUID } from 'crypto';
 import type { McpServerToggles } from '@tcp/shared';
+import { ApiProperty } from '@nestjs/swagger';
 import { IsMcpServerToggles } from './is-mcp-server-toggles.validator';
 import {
   IsArray,
@@ -90,15 +91,19 @@ export class UpdateCompanyDto {
   @IsNotEmpty()
   description?: string;
 
+  /** The company's default model; `null` clears it. */
+  @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
   @IsOptional()
   @ValidateNested()
   @Type(() => LlmConfigDto)
-  llmConfig?: LlmConfigDto;
+  llmConfig?: LlmConfigDto | null;
 
+  /** The company's embedding model; `null` clears it. */
+  @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
   @IsOptional()
   @ValidateNested()
   @Type(() => LlmConfigDto)
-  embeddingConfig?: LlmConfigDto;
+  embeddingConfig?: LlmConfigDto | null;
 
   @IsOptional()
   @IsString()

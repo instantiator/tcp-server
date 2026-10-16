@@ -27,11 +27,13 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
+import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import {
   CompanyListItem,
   CompanySpend,
   emptyCompanyStats,
+  resolveEnvLlmConfig,
   TcpCompany,
   TcpRole,
   WireEvent,
@@ -64,7 +66,9 @@ import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
 import { embeddingModelChanged } from '../db/llm-destination-policy';
 import {
+  computeCompanyNoModelWarning,
   computeCompanyWarnings,
+  computeNoModelWarning,
   computeRoleWarnings,
   setWarningsHeader,
 } from './validation-warnings';
@@ -86,6 +90,7 @@ export class CompanyController {
     private readonly spendReport: SpendReportService,
     private readonly recordsCleanup: RecordsCleanupService,
     private readonly knowledge: KnowledgeService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -205,7 +210,15 @@ export class CompanyController {
     ) {
       await this.knowledge.reindexCompany(company.id);
     }
-    setWarningsHeader(res, computeCompanyWarnings(company));
+    const envLlm = resolveEnvLlmConfig(this.config);
+    setWarningsHeader(res, [
+      ...computeCompanyWarnings(company),
+      ...computeCompanyNoModelWarning(
+        company,
+        await this.db.listRoles(company.id),
+        envLlm,
+      ),
+    ]);
     return company;
   }
 
@@ -294,7 +307,10 @@ export class CompanyController {
       { ...partial, companyId: company.id },
       isUUID(slug) ? { id: slug } : { slug },
     );
-    setWarningsHeader(res, computeRoleWarnings(role));
+    setWarningsHeader(res, [
+      ...computeRoleWarnings(role),
+      ...computeNoModelWarning(role, company, resolveEnvLlmConfig(this.config)),
+    ]);
     return role;
   }
 

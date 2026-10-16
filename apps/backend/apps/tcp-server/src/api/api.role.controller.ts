@@ -1,4 +1,5 @@
-import { TcpRole } from '@tcp/shared';
+import { resolveEnvLlmConfig, TcpRole } from '@tcp/shared';
+import { ConfigService } from '@nestjs/config';
 import {
   Body,
   Controller,
@@ -31,7 +32,11 @@ import { DbService } from '../db/db.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { KnowledgeService } from './knowledge.service';
 import { RoleResponseDto } from './dto/entity-response.dto';
-import { computeRoleWarnings, setWarningsHeader } from './validation-warnings';
+import {
+  computeNoModelWarning,
+  computeRoleWarnings,
+  setWarningsHeader,
+} from './validation-warnings';
 
 /**
  * REST controller for {@link TcpRole} create, read, and update operations.
@@ -50,7 +55,17 @@ export class RoleController {
   constructor(
     private readonly db: DbService,
     private readonly knowledge: KnowledgeService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** Soft warnings for a saved role, including whether it ends up with no model. */
+  private async warningsFor(role: TcpRole): Promise<string[]> {
+    const company = await this.db.getCompany(role.companyId);
+    return [
+      ...computeRoleWarnings(role),
+      ...computeNoModelWarning(role, company, resolveEnvLlmConfig(this.config)),
+    ];
+  }
 
   /**
    * Creates a new role for the given company. Soft data-quality warnings
@@ -66,7 +81,7 @@ export class RoleController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<TcpRole> {
     const role = await this.db.setRole(body);
-    setWarningsHeader(res, computeRoleWarnings(role));
+    setWarningsHeader(res, await this.warningsFor(role));
     return role;
   }
 
@@ -87,7 +102,7 @@ export class RoleController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<TcpRole> {
     const role = await this.db.setRole(partial, { id });
-    setWarningsHeader(res, computeRoleWarnings(role));
+    setWarningsHeader(res, await this.warningsFor(role));
     return role;
   }
 

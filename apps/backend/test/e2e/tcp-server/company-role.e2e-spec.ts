@@ -361,6 +361,46 @@ describe('CompanyController (e2e)', () => {
       company = await companyRepo.findOneByOrFail({ slug: 'llm-co' });
     });
 
+    describe('PUT /api/company/:id with null configs', () => {
+      it('clears llmConfig', async () => {
+        await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ llmConfig: null })
+          .expect(200);
+
+        const res = await request(app.getHttpServer())
+          .get(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(200);
+        expect((res.body as TcpCompany).llmConfig).toBeNull();
+      });
+
+      it('clears embeddingConfig', async () => {
+        await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            embeddingConfig: {
+              provider: 'openai',
+              model: 'text-embedding-3-small',
+            },
+          })
+          .expect(200);
+        await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ embeddingConfig: null })
+          .expect(200);
+
+        const res = await request(app.getHttpServer())
+          .get(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(200);
+        expect((res.body as TcpCompany).embeddingConfig).toBeNull();
+      });
+    });
+
     describe('with a role that inherits llmConfig', () => {
       beforeEach(async () => {
         await request(app.getHttpServer())

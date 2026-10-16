@@ -96,3 +96,35 @@ export function computeEmbeddingConfigWarning(
       'Set embeddingConfig on the company, or EMBEDDING_PROVIDER/EMBEDDING_MODEL env vars.',
   ];
 }
+
+/**
+ * Warns when a role would have no model at all (its own, its company's, or the
+ * app's `LLM_*` env defaults): every task it is given would fail.
+ */
+export function computeNoModelWarning(
+  role: Pick<TcpRole, 'llmConfig'>,
+  company: Pick<TcpCompany, 'llmConfig'> | null,
+  envFallback: LlmConfig | null | undefined,
+): string[] {
+  if (role.llmConfig || company?.llmConfig || envFallback) return [];
+  return [
+    'This role has no model: neither it, its company nor the app sets one. Its tasks will fail.',
+  ];
+}
+
+/**
+ * Warns, on a company save, about roles left without a model because neither
+ * the company nor the app sets a default (see {@link computeNoModelWarning}).
+ */
+export function computeCompanyNoModelWarning(
+  company: Pick<TcpCompany, 'llmConfig'>,
+  roles: Pick<TcpRole, 'name' | 'llmConfig'>[],
+  envFallback: LlmConfig | null | undefined,
+): string[] {
+  if (company.llmConfig || envFallback) return [];
+  const bare = roles.filter((r) => !r.llmConfig).map((r) => r.name);
+  if (bare.length === 0) return [];
+  return [
+    `No model for ${bare.length} role(s): ${bare.join(', ')}. Their tasks will fail. Set a company model, or one per role.`,
+  ];
+}

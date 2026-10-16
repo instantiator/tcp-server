@@ -709,6 +709,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/llm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** List the models a local or custom server offers */
+        post: operations["LlmModelsController_list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/llm-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the application's default models */
+        get: operations["LlmDefaultsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company/{companyId}/records/tables": {
         parameters: {
             query?: never;
@@ -2001,16 +2035,16 @@ export interface components {
             versionRetentionDays?: number | null;
             timezone?: string | null;
             companyContext?: string | null;
-            embeddingConfig?: Record<string, never> | null;
+            embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
             runConfig?: Record<string, never> | null;
             plannerRoleId?: string | null;
             nextTaskShortcodeIndex: number;
         };
         UpdateCompanyDto: {
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
+            embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
             name?: string;
             description?: string;
-            llmConfig?: components["schemas"]["LlmConfigDto"];
-            embeddingConfig?: components["schemas"]["LlmConfigDto"];
             companyContext?: string;
             systemPromptTemplate?: string;
             mcpServerList?: string[];
@@ -2321,6 +2355,32 @@ export interface components {
             usage: string;
             /** @description Whether this deployment has the server configured (its URL is set). */
             available: boolean;
+        };
+        ListLlmModelsDto: {
+            /** @description A local or custom catalogue provider id. */
+            provider: string;
+            /** @description The server address, including `/v1`. */
+            baseUrl: string;
+            /** @description A key just typed. Without one, a key already saved for this provider and address is used. */
+            apiKey?: string;
+            /**
+             * Format: uuid
+             * @description A role of this company whose saved key may be used, as well as the company's own.
+             */
+            roleId?: string;
+        };
+        LlmModelsResponseDto: {
+            models: string[];
+        };
+        LlmDefaultDto: {
+            contextWindow?: number;
+            provider: string;
+            model: string;
+        };
+        LlmDefaultsDto: {
+            chat: components["schemas"]["LlmDefaultDto"] | null;
+            embedding: components["schemas"]["LlmDefaultDto"] | null;
+            embeddingDimension: number;
         };
         RecordFieldSchemaDto: {
             /** @enum {string} */
@@ -4043,6 +4103,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpServerResponseDto"][];
+                };
+            };
+        };
+    };
+    LlmModelsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListLlmModelsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelsResponseDto"];
+                };
+            };
+        };
+    };
+    LlmDefaultsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmDefaultsDto"];
                 };
             };
         };

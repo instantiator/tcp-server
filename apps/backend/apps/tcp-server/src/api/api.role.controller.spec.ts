@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { TcpRole } from '@tcp/shared';
@@ -30,7 +31,7 @@ function makeRole(overrides: Partial<TcpRole> = {}): TcpRole {
 }
 
 describe('RoleController', () => {
-  let db: jest.Mocked<Pick<DbService, 'setRole' | 'getRole'>>;
+  let db: jest.Mocked<Pick<DbService, 'setRole' | 'getRole' | 'getCompany'>>;
   let knowledge: jest.Mocked<Pick<KnowledgeService, 'deleteRole'>>;
   let controller: RoleController;
 
@@ -38,11 +39,13 @@ describe('RoleController', () => {
     db = {
       setRole: jest.fn(),
       getRole: jest.fn(),
+      getCompany: jest.fn().mockResolvedValue(null),
     };
     knowledge = { deleteRole: jest.fn().mockResolvedValue(true) };
     controller = new RoleController(
       db as unknown as DbService,
       knowledge as unknown as KnowledgeService,
+      new ConfigService(),
     );
   });
 

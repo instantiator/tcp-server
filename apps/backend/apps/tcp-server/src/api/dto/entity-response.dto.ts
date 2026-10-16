@@ -185,6 +185,10 @@ export class CompanyResponseDto extends OmitType(TcpCompany, [
   /** Its model, with `apiKey` masked as `***`; see {@link RoleResponseDto.llmConfig}. */
   @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
   declare llmConfig?: LlmConfigDto | null;
+
+  /** Its embedding model, masked like {@link llmConfig}; `null` when unset. */
+  @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
+  declare embeddingConfig?: LlmConfigDto | null;
 }
 
 /** {@link TcpRole} minus its unloaded `company` relation. */
