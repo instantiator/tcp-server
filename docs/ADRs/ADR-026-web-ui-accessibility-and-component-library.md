@@ -187,3 +187,13 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **One tray layout, `TrayPanel`.** A title bar (heading and Close), a fixed section (icon actions, then the description), and a scrolling body, with Follow floating at the bottom right. Every panel (task, agent, role, archive) uses it.
 - **Tray actions are round icon buttons with tooltips**, each named for what it acts on ("Pause task 002", "Listen in to Cat assistant, assignment 4"), per WCAG 2.4.6 and 2.5.3. `TaskControls` draws the same controls as text in the task dialog and as icons in the tray.
 - **`ExpandableText`'s `ellipsis` variant became `icon`**: a chevron button after the text. While expanded, it sticks to the bottom of the scrolling description, so the way back is always in view.
+
+## Amendment as implemented (002.00, phase 04) <a id="amendment-as-implemented-p04-002-00"></a>
+
+[002.00](../prompts/phase%2004%20-%20utility/002.00.01.plan%20-%20web%20ui%20roles,%20knowledge%20and%20company%20users.md) added the company's Admin and Data tabs. The decisions above stand.
+
+- **The first data tables.** Roles and users use React Aria's `Table`: sorting puts `aria-sort` on the header, and the arrow beside it is hidden from assistive technology because it says the same thing. Roles adds row selection with `CheckboxField slot="selection"`, the non-deprecated pair in React Aria 1.20. Tables with no sorting or selection (knowledge documents, search results, document links) are plain `<table class="tcp-table">`, because React Aria's `Table` would add nothing there. A selected row is marked by an outline as well as a colour (1.4.1).
+- **Side menus.** Data and Admin are a single-select `ListBox` beside the chosen section (`.tcp-side-menu`). Choosing an item moves no focus, as in the chat dialog. Data's menu groups tables under a `ListBoxSection` with a `Header`.
+- **The upload control is a native file input**, labelled and described before a file is picked (the accepted types and the 50 MB limit), as `CreateTaskDialog` already did. Cancel is a round button that aborts the request. `fetch` gives no byte progress, so the panel says what is uploading rather than how far along it is.
+- **Tabs inside a dialog.** The role dialog has Details and Knowledge tabs. Knowledge is disabled until the role is saved; React Aria marks it `aria-disabled`, and the reason is visible text under the tab list rather than a tooltip, because a disabled tab can't be focused to show one.
+- **Destructive completion.** After a role or a document is deleted, focus goes to the table, or to the next document's name, or to the heading when nothing is left. Each change is announced on its own channel (`roles`, `knowledge`).

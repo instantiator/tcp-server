@@ -208,7 +208,7 @@ Every write also records an audit event carrying `originators: { user, agent, ta
 
 ## Managing knowledge documents
 
-Knowledge documents are uploaded via tcp-cli, scoped to either a role (`knowledge/{role_slug}/`) or a company's shared knowledge (`knowledge/shared/`). The server chunks, embeds, and indexes them for RAG retrieval automatically.
+Knowledge documents are uploaded via tcp-cli or the web client (company page, **Admin** tab: a role's dialog has a Knowledge tab, and **Admin → Knowledge** holds the company's shared documents). Uploads are limited to 50 MB; a larger file gets `413`. A document belongs to either a role (`knowledge/{role_slug}/`) or a company's shared knowledge (`knowledge/shared/`). The server chunks, embeds, and indexes them for RAG retrieval automatically.
 
 > **Migration note (010.2.1):** the knowledge folder layout moved from name-based (`knowledge/{role_name}/`) to slug-based (`knowledge/{role_slug}/`), and the `AllowSharedKnowledgeChunks` migration truncates the `knowledge_chunk` table (existing chunks referenced the old paths and can no longer be resolved). Any knowledge documents previously uploaded must be re-uploaded via `store-knowledge` after this migration runs — the underlying MinIO objects are untouched, only their RAG index is cleared.
 
@@ -228,6 +228,8 @@ To force a rebuild of every scope of a company immediately (rather than waiting 
 # → POST /api/company/:companyId/knowledge/reindex (202 Accepted)
 ```
 
+One role's scope can be rebuilt alone with `POST /api/role/:roleId/knowledge/reindex` (also 202). The web client's **Rebuild index** button uses these two routes.
+
 To check a scope's indexing status (document/chunk counts, size, generation, last successful rebuild, and whether one is in progress), use:
 
 ```bash
@@ -245,6 +247,10 @@ an LLM call — query the RAG index directly:
 ./tcp-cli.sh query-knowledge -r <roleId> -q "remote work policy"
 # → GET /api/role/:roleId/knowledge/query?q=... (role chunks + company shared chunks)
 ```
+
+`GET /api/company/:companyId/knowledge/query?q=...` searches the shared chunks only. The web client's test search uses both.
+
+Deleting a role (either delete route) removes its knowledge files from storage first, then the role row, then its index state. The files are keyed by role slug, so without this a new role with the same slug would inherit them. If storage fails, the role is left intact.
 
 ```bash
 # Upload a document to a role's knowledge base
