@@ -244,7 +244,7 @@
     },
     "CompanyListItem": {
       "additionalProperties": false,
-      "description": "A company as `GET /api/company` returns it — the record plus its stats.",
+      "description": "A company as `GET /api/company` returns it — the record plus its stats and the caller's own member type (`null` when an administrator's `?all` list includes a company they don't belong to).",
       "properties": {
         "companyContext": {
           "description": "Optional company context injected as prompt part 2 at agent start. Describes the company environment: agent roster, shared storage layout, company name and description, and any company-wide behavioural guidelines.\n\nWhen null, part 2 is omitted from the agent prompt.",
@@ -302,6 +302,16 @@
             }
           ],
           "description": "MCP servers switched on (`true`) or off (`false`) for this company's agents, by registry name. A role's own toggle wins; a server neither mentions is on. Resolved via  {@link  resolveMcpServerList  } ."
+        },
+        "memberType": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemberType"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "description": "Human-readable display name for the company.",
@@ -380,6 +390,7 @@
         "description",
         "id",
         "mcpServerList",
+        "memberType",
         "name",
         "nextTaskShortcodeIndex",
         "slug",
