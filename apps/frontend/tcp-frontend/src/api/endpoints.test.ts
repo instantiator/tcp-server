@@ -18,10 +18,14 @@ import {
   useCreateRoleMutation,
   useDeleteKnowledgeMutation,
   useDeleteRoleMutation,
+  useLlmDefaults,
+  useLocalModelsQuery,
   useMcpServers,
+  useToolFootprintQuery,
   useReindexKnowledgeMutation,
   useRoleKnowledge,
   useTasks,
+  useUpdateCompanyMutation,
   useUpdateRoleMutation,
 } from './endpoints';
 
@@ -260,6 +264,72 @@ describe('the read hooks', () => {
     expect(new URL(requestMade().url).pathname).toBe('/api/mcp-servers');
   });
 
+  it('useLlmDefaults requests GET /api/system/llm-defaults', async () => {
+    respondWith({ chat: null, embedding: null, embeddingDimension: 768 });
+
+    const { result } = renderHook(() => useLlmDefaults(), {
+      wrapper: wrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(new URL(requestMade().url).pathname).toBe(
+      '/api/system/llm-defaults',
+    );
+  });
+
+  it('useLocalModelsQuery sends nothing until it has a server to ask', () => {
+    renderHook(() => useLocalModelsQuery('company-1', null), {
+      wrapper: wrapper(queryClient),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('useLocalModelsQuery POSTs a typed key in the body, never in the cache key', async () => {
+    respondWith({ models: ['gemma'] });
+    const query = {
+      provider: 'lm-studio',
+      baseUrl: 'http://localhost:1234/v1',
+      apiKey: 'typed-key',
+    };
+
+    const { result } = renderHook(
+      () => useLocalModelsQuery('company-1', query),
+      { wrapper: wrapper(queryClient) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const request = requestMade();
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(
+      '/api/company/company-1/llm/models',
+    );
+    expect(await request.json()).toEqual(query);
+    const keys = queryClient
+      .getQueryCache()
+      .getAll()
+      .map((q) => JSON.stringify(q.queryKey));
+    expect(keys.join()).not.toContain('typed-key');
+  });
+
+  it('useToolFootprintQuery waits for a slug, then asks for the mode', async () => {
+    respondWith({ mode: 'implement', servers: [], total: 0 });
+
+    const { result, rerender } = renderHook(
+      ({ slug }: { slug?: string }) =>
+        useToolFootprintQuery('company-1', slug, 'implement'),
+      { wrapper: wrapper(queryClient), initialProps: {} },
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    rerender({ slug: 'writer' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const url = new URL(requestMade().url);
+    expect(url.pathname).toBe(
+      '/api/company/company-1/roles/by-slug/writer/tool-footprint',
+    );
+    expect(url.search).toBe('?mode=implement');
+  });
+
   it('surfaces a failed request as an ApiError, not a hang or a silent success', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ statusCode: 500, message: 'boom' }), {
@@ -346,6 +416,25 @@ describe('the role and knowledge mutations', () => {
     const request = requestMade();
     expect(request.method).toBe('PUT');
     expect(new URL(request.url).pathname).toBe('/api/role/r1');
+  });
+
+  it('useUpdateCompanyMutation PUTs /api/company/{id}, and can clear a model', async () => {
+    respondWith({ id: 'c1', llmConfig: null });
+
+    const { result } = renderHook(() => useUpdateCompanyMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: 'c1',
+        body: { llmConfig: null },
+      });
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('PUT');
+    expect(new URL(request.url).pathname).toBe('/api/company/c1');
+    expect(await request.json()).toEqual({ llmConfig: null });
   });
 
   it('useDeleteRoleMutation DELETEs /api/role/{id}', async () => {

@@ -334,6 +334,68 @@ export const useMcpServers = () =>
     queryFn: () => unwrap(api.GET('/api/mcp-servers')),
   });
 
+/** The app's default models (env config), for the picker's fallback labels. */
+export const useLlmDefaults = () =>
+  useQuery({
+    queryKey: queryKeys.llmDefaults(),
+    queryFn: () => unwrap(api.GET('/api/system/llm-defaults')),
+  });
+
+/** What a local or custom model server offers. */
+export type LocalModelsQuery = Schemas['ListLlmModelsDto'];
+
+/**
+ * The models a local or custom server lists, fetched through tcp-server (the
+ * browser can't reach `host.docker.internal`, and the saved key stays there).
+ * A POST, so a typed key travels in the body. Disabled for `null`, and not
+ * retried: a server that isn't running won't be on the next try either. Bump
+ * `revision` to ask again.
+ */
+export const useLocalModelsQuery = (
+  companyId: string,
+  query: LocalModelsQuery | null,
+  revision = 0,
+) =>
+  useQuery({
+    queryKey: queryKeys.localModels(
+      companyId,
+      query?.provider ?? '',
+      query?.baseUrl ?? '',
+      query?.roleId,
+      revision,
+    ),
+    queryFn: () =>
+      unwrap(
+        api.POST('/api/company/{companyId}/llm/models', {
+          params: { path: { companyId } },
+          // `query` is non-null whenever the query is enabled.
+          body: query ?? { provider: '', baseUrl: '' },
+        }),
+      ),
+    enabled: query !== null,
+    retry: false,
+  });
+
+/** What a role's tool schemas cost per turn in `mode`. */
+export const useToolFootprintQuery = (
+  companyId: string,
+  slug: string | undefined,
+  mode: 'implement' | 'plan' | 'qa' | 'chat' | 'consultee' | 'finalise',
+) =>
+  useQuery({
+    queryKey: queryKeys.toolFootprint(companyId, slug ?? '', mode),
+    queryFn: () =>
+      unwrap(
+        api.GET(
+          '/api/company/{companyId}/roles/by-slug/{slug}/tool-footprint',
+          {
+            params: { path: { companyId, slug: slug ?? '' }, query: { mode } },
+          },
+        ),
+      ),
+    enabled: slug !== undefined,
+  });
+
 // The write half of the file: one mutation hook per REST route that changes
 // something, mirroring the read half above.
 
@@ -589,6 +651,34 @@ export const useUpdateRoleMutation = () =>
       if (!response.ok || data === undefined) throw apiError(response, error);
 
       return { role: data, warnings: readWarnings(response) };
+    },
+  });
+
+/** Edits a company. Soft warnings come back beside it, as for a role. */
+export const useUpdateCompanyMutation = () =>
+  useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Schemas['UpdateCompanyDto'];
+    }) => {
+      let result;
+      try {
+        result = await api.PUT('/api/company/{id}', {
+          params: { path: { id } },
+          body,
+        });
+      } catch (cause) {
+        // The request never landed — same reasoning as `unwrap`'s catch.
+        throw networkError(cause);
+      }
+
+      const { data, error, response } = result;
+      if (!response.ok || data === undefined) throw apiError(response, error);
+
+      return { company: data, warnings: readWarnings(response) };
     },
   });
 

@@ -57,6 +57,9 @@ const VALID_SCOPES = [
  * version would only ever have checked whatever it happened to find.
  */
 const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
+  llmDefaults: queryKeys.llmDefaults(),
+  localModels: queryKeys.localModels('c', 'lm-studio', 'http://x/v1'),
+  toolFootprint: queryKeys.toolFootprint('c', 'writer', 'implement'),
   companies: queryKeys.companies(),
   company: queryKeys.company('company-1'),
   agents: queryKeys.agents(),
