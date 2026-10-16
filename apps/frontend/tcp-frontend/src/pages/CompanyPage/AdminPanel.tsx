@@ -6,6 +6,7 @@ import {
   type AdminSection,
 } from './admin-sections';
 import { KnowledgePanel } from './admin/KnowledgePanel';
+import { LanguageModelsAdmin } from './admin/LanguageModelsAdmin';
 import { RolesAdmin } from './admin/RolesAdmin';
 import { UsersAdmin } from './admin/UsersAdmin';
 import { DataProtectionPanel } from './DataProtectionPanel';
@@ -62,6 +63,8 @@ export const AdminPanel = ({
         />
       ) : section === 'users' ? (
         <UsersAdmin companyId={companyId} />
+      ) : section === 'models' ? (
+        <LanguageModelsAdmin companyId={companyId} />
       ) : (
         <DataProtectionPanel companyId={companyId} companySlug={companySlug} />
       )}
