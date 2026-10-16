@@ -166,6 +166,21 @@ export class CompanyPrimingService {
           payload: notificationPayload(notice, 'replay'),
         },
       })),
+      // Records hold no live state to replay, so this only tells the client
+      // to look again: any open table may have changed while it was away.
+      {
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId,
+          role: 'system',
+          agentId: null,
+          assignmentId: null,
+          taskId: null,
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'record', reason: 'replay' },
+        },
+      },
     ];
   }
 }

@@ -5,6 +5,7 @@ import {
   TcpCompany,
   TcpRole,
   type NewTable,
+  type WireEvent,
 } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -15,6 +16,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
+import { consumeSse } from '../helpers/consume-sse';
 import { makeTestJwt } from '../helpers/test-jwt';
 
 const ORDERS: NewTable = {
@@ -504,4 +506,32 @@ describe('Records API (e2e)', () => {
   ] as const)('refuses %s %s to a non-member', (method, path) =>
     as(bobJwt)[method](path).expect(403),
   );
+
+  describe('live signal (001.05)', () => {
+    // Priming sends the company, then a record re-check; the third event is
+    // the change itself, cut down to the table and the action.
+    it('tells the company stream which table changed, and nothing more', async () => {
+      await records.createTable(companyId, { ...ORDERS, name: 'live' }, null);
+      const events$ = consumeSse<WireEvent>(
+        app,
+        `/api/company/${companyId}/events`,
+        { Authorization: `Bearer ${aliceJwt}` },
+        3,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await alice()
+        .post('/tables/live/rows')
+        .send({ data: { order_id: 'L1', qty: 1, note: 'Ann Lee' } })
+        .expect(201);
+
+      const payloads = (await events$).map((e) =>
+        e.type === 'audit' ? e.event.payload : {},
+      );
+      expect(payloads).toEqual([
+        expect.objectContaining({ entity: 'company' }),
+        { entity: 'record', reason: 'replay' },
+        { entity: 'record', action: 'add_row', table: 'live' },
+      ]);
+    });
+  });
 });

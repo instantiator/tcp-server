@@ -200,3 +200,7 @@ Clear and drop record how many rows went, not the rows themselves. Drop keeps th
 ## Amendment as implemented (001.04, phase 04) <a id="amendment-as-implemented-p04-001-04"></a>
 
 Data protection ([ADR-036](ADR-036-customer-data-protection.md)) added `state_change` events with `source: records`: `delete_rows`, `set_retention`, `retention_sweep` (role `system`), and `do_not_store_add`/`_update`/`_remove`. They carry ids, counts, table and field names, **never row values or list entries**, because the audit log outlives an erasure. A refused agent write is a `tool_call` with `outcome: do_not_store` and the field names. A person storing data despite the list adds `doNotStoreOverride: [fields]`. A system halt is a `state_change` with `entity: system`.
+
+## Amendment as implemented (001.05, phase 04) <a id="amendment-as-implemented-p04-001-05"></a>
+
+[001.05](../prompts/phase%2004%20-%20utility/001.05.01.plan%20-%20live%20record%20updates.md) lets records audits feed the web UI. Every `state_change` with `source: 'records'`, from agents, people and the retention sweep alike, now also reaches the company stream. It goes as `{entity: 'record', action, table}` only. The persisted row, and what the agent stream carries, are unchanged. See [ADR-025](ADR-025-browser-event-stream-consumption.md#amendment-as-implemented-p04-001-05).

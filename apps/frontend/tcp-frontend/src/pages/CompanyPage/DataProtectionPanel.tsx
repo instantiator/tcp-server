@@ -5,23 +5,35 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type SubmitEvent,
 } from 'react';
 import { Button } from 'react-aria-components';
 import { ApiError } from '../../api/errors';
+import type { RowChanges } from '../../api/hooks';
 import type { RecordSearchResult, TimedRecord } from '../../api/dtos';
 import {
   downloadRecordSelection,
   useDeleteRecordsAcross,
+  useLiveRecordSearchChanges,
   useRecordSearch,
+  useReloadRecordSearch,
   useUpdateRecord,
+  type LiveRecordSearchChanges,
 } from '../../api/hooks';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { TextField } from '../../components/Field/TextField';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
 import { DeleteRowsDialog } from '../../components/RecordSheet/DeleteRowsDialog';
+import { OutOfDateNotice } from '../../components/RecordSheet/OutOfDateNotice';
+import type { StaleRow } from '../../components/RecordSheet/RecordSheet';
+import {
+  TABLE_WORDS,
+  describeChanges,
+  type ChangeWords,
+} from '../../components/RecordSheet/describeChanges';
 import {
   RECORDS_CHANNEL,
   announceRecords,
@@ -41,6 +53,13 @@ const RecordSheet = lazy(
 const ICO_FEE_URL = 'https://ico.org.uk/for-organisations/data-protection-fee/';
 
 const NO_MARKS: ReadonlySet<string> = new Set();
+
+/** How a search words its changes: a row may just no longer match. */
+const SEARCH_WORDS: ChangeWords = {
+  changed: TABLE_WORDS.changed,
+  deleted: 'dataProtection.outOfDate.deleted',
+  added: 'dataProtection.outOfDate.added',
+};
 
 export interface DataProtectionPanelProps {
   readonly companyId: string;
@@ -119,6 +138,9 @@ const RecordSearch = ({
   readonly onSearch: (text: string) => void;
 }) => {
   const search = useRecordSearch(companyId, q);
+  const changes = useLiveRecordSearchChanges(companyId, q, search.data);
+  const reloadSearch = useReloadRecordSearch(companyId, q);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const deleteAcross = useDeleteRecordsAcross(companyId);
   const [tooShort, setTooShort] = useState(false);
   const [selected, setSelected] = useState<
@@ -186,7 +208,10 @@ const RecordSearch = ({
 
   return (
     <section aria-labelledby="data-protection-search">
-      <h2 id="data-protection-search">{t('dataProtection.search.heading')}</h2>
+      {/* Focusable only from code: where focus goes after a reload. */}
+      <h2 id="data-protection-search" ref={headingRef} tabIndex={-1}>
+        {t('dataProtection.search.heading')}
+      </h2>
       <form className="data-protection__search" onSubmit={submit}>
         <TextField
           label={t('dataProtection.search.label')}
@@ -218,6 +243,13 @@ const RecordSearch = ({
           <SearchResults
             companyId={companyId}
             result={search.data}
+            changes={changes}
+            onReload={() => {
+              reloadSearch();
+              announceRecords('records.announce.reloaded', { table: q });
+              // The Reload button goes with the notice (ADR-027).
+              headingRef.current?.focus();
+            }}
             q={q}
             selectedCount={count}
             onFound={onFound}
@@ -253,6 +285,8 @@ const RecordSearch = ({
 const SearchResults = ({
   companyId,
   result,
+  changes,
+  onReload,
   q,
   selectedCount,
   onFound,
@@ -263,6 +297,9 @@ const SearchResults = ({
 }: {
   readonly companyId: string;
   readonly result: RecordSearchResult;
+  /** What has changed elsewhere since the search ran (001.05). */
+  readonly changes: LiveRecordSearchChanges;
+  readonly onReload: () => void;
   readonly q: string;
   readonly selectedCount: number;
   readonly onFound: (result: RecordSearchResult) => void;
@@ -280,6 +317,13 @@ const SearchResults = ({
   }
   return (
     <>
+      {changes.any && (
+        <OutOfDateNotice
+          message={`${t('records.outOfDate.intro')} ${describeChanges(changes, SEARCH_WORDS)}. ${t('records.outOfDate.hint')}`}
+          announcement="dataProtection.announce.outOfDate"
+          onReload={onReload}
+        />
+      )}
       {result.truncated && (
         <p className="table-view__notice">
           {t('dataProtection.search.truncated')}
@@ -313,6 +357,7 @@ const SearchResults = ({
           key={group.definition.name}
           companyId={companyId}
           group={group}
+          changes={changes.byTable.get(group.definition.name)}
           onSelect={(rows) => onSelect(group.definition.name, rows)}
         />
       ))}
@@ -324,10 +369,12 @@ const SearchResults = ({
 const SearchGroup = ({
   companyId,
   group,
+  changes,
   onSelect,
 }: {
   readonly companyId: string;
   readonly group: RecordSearchResult['groups'][number];
+  readonly changes: RowChanges | undefined;
   readonly onSelect: (rows: readonly TimedRecord[]) => void;
 }) => {
   const table = group.definition.name;
@@ -335,6 +382,15 @@ const SearchGroup = ({
   const { guard, dialog } = useDoNotStoreGuard();
   const headingId = useId();
   const usageId = useId();
+  /** Rows changed elsewhere: marked, and not editable until a reload. */
+  const staleRows = useMemo(
+    () =>
+      new Map<string, StaleRow>([
+        ...[...(changes?.changed ?? [])].map((id) => [id, 'changed'] as const),
+        ...[...(changes?.deleted ?? [])].map((id) => [id, 'deleted'] as const),
+      ]),
+    [changes],
+  );
 
   const onEdit = (row: TimedRecord, field: string, value: unknown) => {
     guard((confirmDoNotStore) =>
@@ -384,6 +440,7 @@ const SearchGroup = ({
           onUndoKey={() => undefined}
           describedBy={usageId}
           onSelectionChange={onSelect}
+          staleRows={staleRows}
         />
       </Suspense>
       {dialog}

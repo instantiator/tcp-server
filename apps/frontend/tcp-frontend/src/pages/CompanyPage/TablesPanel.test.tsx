@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WireEvent } from '@tcp/shared/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecordTableRows } from '../../api/dtos';
+import { RECORD_CHANGE_WINDOW_MS } from '../../api/record-changes';
+import { applyEvent } from '../../events/cache';
 import { t, tCount } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
@@ -48,18 +51,40 @@ const Harness = ({ initial }: { readonly initial: string | null }) => {
   );
 };
 
-const renderPanel = (initial: string | null = null) =>
+const newClient = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+const renderPanel = (initial: string | null = null, client = newClient()) =>
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={client}>
       <main>
         <Harness initial={initial} />
       </main>
     </QueryClientProvider>,
   );
+
+/** A `record` signal as the company stream sends it (001.05). */
+const recordEvent = (companyId: string, table: string): WireEvent => ({
+  type: 'audit',
+  event: {
+    timestamp: '2026-10-15T10:00:00.000Z',
+    companyId,
+    role: 'agent',
+    agentId: null,
+    assignmentId: null,
+    taskId: null,
+    eventType: 'state_change',
+    payload: { entity: 'record', action: 'update', table },
+  },
+});
+
+/** Hears a record change, and lets its gathering window close. */
+const hear = async (queryClient: QueryClient, event: WireEvent) => {
+  act(() => applyEvent(queryClient, event));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(RECORD_CHANGE_WINDOW_MS);
+  });
+};
 
 describe('TablesPanel', () => {
   beforeEach(() => {
@@ -127,5 +152,70 @@ describe('TablesPanel', () => {
     expect(
       screen.getByRole('button', { name: t('records.downloadAll') }),
     ).toBeDisabled();
+  });
+
+  describe('when tables change elsewhere (001.05)', () => {
+    beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+    afterEach(() => vi.useRealTimers());
+
+    it('keeps the counts current, and lists new tables and drops deleted ones', async () => {
+      const client = newClient();
+      renderPanel(null, client);
+      await screen.findByRole('option', { name: /^stock/ });
+
+      respondByRoute([
+        [
+          new RegExp(`${BASE}/tables$`),
+          {
+            body: [
+              { name: 'leads', purpose: '', records: 4, updatedAt: '' },
+              { name: 'orders', purpose: '', records: 2, updatedAt: '' },
+            ],
+          },
+        ],
+      ]);
+      await hear(client, recordEvent('c1', 'leads'));
+
+      await waitFor(() =>
+        expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(
+          [
+            `leads${tCount('records.count', 4)}`,
+            `orders${tCount('records.count', 2)}`,
+          ],
+        ),
+      );
+    });
+
+    it('keeps a table open, saying so, when it is deleted elsewhere', async () => {
+      const client = newClient();
+      renderPanel('orders', client);
+      await screen.findByRole('heading', { level: 2, name: /^orders/ });
+
+      respondByRoute([
+        [
+          new RegExp(`${BASE}/tables/orders$`),
+          { status: 404, body: { message: 'no such table' } },
+        ],
+        [
+          new RegExp(`${BASE}/tables$`),
+          {
+            body: [{ name: 'stock', purpose: '', records: 12, updatedAt: '' }],
+          },
+        ],
+      ]);
+      await hear(client, recordEvent('c1', 'orders'));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('option', { name: /^orders/ })).toBeNull(),
+      );
+      expect(
+        await screen.findByRole('group', {
+          name: t('records.outOfDate.label'),
+        }),
+      ).toHaveTextContent(t('records.outOfDate.dropped'));
+      expect(
+        screen.getByRole('heading', { level: 2, name: /^orders/ }),
+      ).toBeInTheDocument();
+    });
   });
 });

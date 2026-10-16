@@ -16,7 +16,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
-import { consumeSse } from '../helpers/consume-sse';
+import { consumeCompanySse, consumeSse } from '../helpers/consume-sse';
 import { makeTestJwt } from '../helpers/test-jwt';
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
@@ -115,7 +115,7 @@ describe('Company/Task SSE events (e2e)', () => {
       authHeaders,
       2,
     );
-    const companyEvents$ = consumeSse<WireEvent>(
+    const companyEvents$ = consumeCompanySse(
       app,
       `/api/company/${company.id}/events`,
       authHeaders,
@@ -265,7 +265,7 @@ describe('Company/Task SSE events (e2e)', () => {
         }),
       );
 
-      const events = await consumeSse<WireEvent>(
+      const events = await consumeCompanySse(
         app,
         `/api/company/${company.id}/events`,
         { Authorization: `Bearer ${jwt}` },
@@ -315,7 +315,7 @@ describe('Company/Task SSE events (e2e)', () => {
 
       // Priming: company + agent. Then the pause writes an agent row and an
       // enquiry row; the reply writes the enquiry's close. Five in all.
-      const events$ = consumeSse<WireEvent>(
+      const events$ = consumeCompanySse(
         app,
         `/api/company/${company.id}/events`,
         { Authorization: `Bearer ${jwt}` },
@@ -403,7 +403,7 @@ describe('Company/Task SSE events (e2e)', () => {
 
       // Priming: company + task. Cancelling then writes the task's own row
       // and one per assignment.
-      const events$ = consumeSse<WireEvent>(
+      const events$ = consumeCompanySse(
         app,
         `/api/company/${company.id}/events`,
         { Authorization: `Bearer ${jwt}` },
@@ -454,7 +454,7 @@ describe('Company/Task SSE events (e2e)', () => {
       // assignment (linked to its agent), agent (queued — job dispatched). A
       // simulated `running` write (below) stands in for the worker, which
       // this suite never actually runs.
-      const events$ = consumeSse<WireEvent>(
+      const events$ = consumeCompanySse(
         app,
         `/api/company/${company.id}/events`,
         { Authorization: `Bearer ${jwt}` },
@@ -519,7 +519,7 @@ describe('Company/Task SSE events (e2e)', () => {
       // Priming: company + task (planning) + agent (idle — the planner,
       // still queued). Cancelling then writes: the plan assignment
       // (cancelled), its agent (cancelled — the fix), the task (cancelled).
-      const events$ = consumeSse<WireEvent>(
+      const events$ = consumeCompanySse(
         app,
         `/api/company/${company.id}/events`,
         { Authorization: `Bearer ${jwt}` },

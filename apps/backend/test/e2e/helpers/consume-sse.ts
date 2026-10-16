@@ -1,6 +1,7 @@
 import http from 'http';
 import type { AddressInfo } from 'net';
 import type { INestApplication } from '@nestjs/common';
+import type { WireEvent } from '@tcp/shared';
 
 /**
  * Opens a raw HTTP GET to an SSE endpoint on a *listening* Nest app
@@ -82,4 +83,32 @@ export function consumeSse<T>(
       }
     });
   });
+}
+
+/** The record re-check every company stream primes last (001.05). */
+const isRecordCheck = (event: WireEvent): boolean =>
+  event.type === 'audit' &&
+  event.event.payload.entity === 'record' &&
+  event.event.payload.reason === 'replay';
+
+/**
+ * {@link consumeSse} for a company stream, for tests that aren't about
+ * records: reads one more event to cover the primed record re-check, and
+ * drops it, so `count` stays the number of events the test cares about.
+ */
+export async function consumeCompanySse(
+  app: INestApplication,
+  path: string,
+  headers: Record<string, string>,
+  count: number,
+  timeoutMs?: number,
+): Promise<WireEvent[]> {
+  const events = await consumeSse<WireEvent>(
+    app,
+    path,
+    headers,
+    count + 1,
+    timeoutMs,
+  );
+  return events.filter((event) => !isRecordCheck(event));
 }

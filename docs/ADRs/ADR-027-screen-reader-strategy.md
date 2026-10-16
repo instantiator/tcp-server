@@ -340,3 +340,17 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **Markdown headings are all `h4`.** An agent's `# Title` sits below the chat view's `h3`, so it never breaks the dialog's outline, and heading navigation still finds it.
 - **Tool entries are tables with row headers** (Tool name, Status, Content), and their full JSON is a native `<details>`, like reasoning.
 - **Chat list rows are named by what sets them apart:** the role, a hidden comma, then the detail line ("Implementing · Task 001 · Finished", or a chat's start time). A listened-in row's task request is its description.
+
+## Amendment as implemented (001.05, phase 04) <a id="amendment-as-implemented-p04-001-05"></a>
+
+[001.05](../prompts/phase%2004%20-%20utility/001.05.01.plan%20-%20live%20record%20updates.md) made record tables live without moving anything under the reader. One row is added to the [per-surface policy](#per-surface-policy):
+
+| Surface                                  | Exposure                                                                                                  | Announcement                                                                                       | Politeness |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------- |
+| Record sheet or search changed elsewhere | A labelled group ("Out of date") with counts and a Reload button; changed rows marked on their first cell | Once when the notice appears ("orders has changed elsewhere…"); again only if the table is deleted | `polite`   |
+
+- **Nothing is replaced until Reload.** The rows on screen are the snapshot the person opened, so the sheet's position-based sort never moves a row.
+- **A row changed or deleted elsewhere cannot be edited.** Its key cell carries an icon and hidden words ("changed elsewhere, so it cannot be edited"), so the reason is heard on arriving at the row. Delete is turned off for it. The version check (409 `stale`) stays as the backstop.
+- **Later changes are not announced.** The notice keeps count, for anyone who wants the detail.
+- **Reload removes the notice, and the button with it,** so focus moves to the sheet's first cell, or to the search heading. It never falls to the page body.
+- **A table deleted elsewhere stays open and readable,** read-only, with no Reload and none of the write actions. It does not vanish from under its reader, even from the Tables tab.

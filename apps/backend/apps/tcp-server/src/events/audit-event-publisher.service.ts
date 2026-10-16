@@ -1,4 +1,4 @@
-import { AuditEvent, AuditWireEvent } from '@tcp/shared';
+import { AuditEvent, AuditEventType, AuditWireEvent } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { AgentEventService } from './agent-event.service';
 import { CompanyEventService } from './company-event.service';
@@ -38,6 +38,31 @@ const COMPANY_CHANNEL_ENTITIES = new Set([
 ]);
 
 /**
+ * The company-stream copy of a records change (001.05): which table changed
+ * and how, and nothing else. The audit row keeps the before and after values,
+ * which are customer data; the browser only needs to know to look again, so
+ * they never go on the stream. `undefined` for anything that isn't a records
+ * change.
+ */
+export function toRecordSignal(
+  wire: AuditWireEvent,
+): AuditWireEvent | undefined {
+  const { source, action, table } = wire.payload;
+  if (source !== 'records' || wire.eventType !== AuditEventType.StateChange) {
+    return undefined;
+  }
+  return {
+    ...wire,
+    payload: {
+      entity: 'record',
+      action,
+      // Do-not-store changes name no table: the signal still refreshes the list.
+      ...(typeof table === 'string' ? { table } : {}),
+    },
+  };
+}
+
+/**
  * The single live-publish point for audit events. Every write flows through
  * here after it is persisted (see `AuditService.write`), so the live stream
  * and history are one source of truth (`docs/prompts/010.5.1` A.7).
@@ -47,7 +72,8 @@ const COMPANY_CHANNEL_ENTITIES = new Set([
  * - task channel: rows with a `taskId` whose `payload.entity` is `task` or
  *   `assignment`;
  * - company channel: rows whose `payload.entity` is in
- *   {@link COMPANY_CHANNEL_ENTITIES}.
+ *   {@link COMPANY_CHANNEL_ENTITIES}, plus records changes cut down by
+ *   {@link toRecordSignal}.
  */
 @Injectable()
 export class AuditEventPublisher {
@@ -70,6 +96,10 @@ export class AuditEventPublisher {
     }
     if (typeof entity === 'string' && COMPANY_CHANNEL_ENTITIES.has(entity)) {
       this.companyEvents.emit(wire.companyId, { type: 'audit', event: wire });
+    }
+    const signal = toRecordSignal(wire);
+    if (signal) {
+      this.companyEvents.emit(wire.companyId, { type: 'audit', event: signal });
     }
   }
 }

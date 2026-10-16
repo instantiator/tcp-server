@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { WireEvent } from '@tcp/shared/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   DoNotStoreEntry,
@@ -8,6 +9,8 @@ import type {
   RecordTableDefinition,
   TimedRecord,
 } from '../../api/dtos';
+import { RECORD_CHANGE_WINDOW_MS } from '../../api/record-changes';
+import { applyEvent } from '../../events/cache';
 import { t, tCount } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
@@ -41,10 +44,14 @@ const definition = (name: string, fields: string[]): RecordTableDefinition => ({
   },
 });
 
-const row = (id: string, data: Record<string, unknown>): TimedRecord => ({
+const row = (
+  id: string,
+  data: Record<string, unknown>,
+  version = 1,
+): TimedRecord => ({
   id,
   data,
-  version: 1,
+  version,
   createdAt: NOW,
   updatedAt: NOW,
 });
@@ -92,13 +99,11 @@ const bodiesTo = async (path: RegExp, method: string) => {
   return found;
 };
 
-const renderPanel = () =>
+const renderPanel = (
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) =>
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={client}>
       <DataProtectionPanel companyId="c1" companySlug="acme" />
     </QueryClientProvider>,
   );
@@ -116,6 +121,29 @@ const rowIn = (grid: string, key: string) =>
     if (found === undefined) throw new Error(`no row ${key} yet`);
     return found;
   });
+
+/** A `record` signal as the company stream sends it (001.05). */
+const recordEvent = (companyId: string, table: string): WireEvent => ({
+  type: 'audit',
+  event: {
+    timestamp: '2026-10-15T10:00:00.000Z',
+    companyId,
+    role: 'agent',
+    agentId: null,
+    assignmentId: null,
+    taskId: null,
+    eventType: 'state_change',
+    payload: { entity: 'record', action: 'update', table },
+  },
+});
+
+/** Hears a record change, and lets its gathering window close. */
+const hear = async (queryClient: QueryClient, event: WireEvent) => {
+  act(() => applyEvent(queryClient, event));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(RECORD_CHANGE_WINDOW_MS);
+  });
+};
 
 describe('DataProtectionPanel', () => {
   beforeEach(() => {
@@ -245,6 +273,85 @@ describe('DataProtectionPanel', () => {
       { rows: [{ id: 'c1', version: 1 }] },
       { rows: [{ id: 'o2', version: 1 }] },
     ]);
+  });
+
+  describe('when the results change elsewhere (001.05)', () => {
+    beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+    afterEach(() => vi.useRealTimers());
+
+    it('says so, marks the changed row, and runs the search again on Reload', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      renderPanel(client);
+      await user.type(
+        screen.getByRole('textbox', { name: t('dataProtection.search.label') }),
+        'Ann',
+      );
+      await user.click(
+        screen.getByRole('button', { name: t('dataProtection.search.submit') }),
+      );
+      const orders = t('dataProtection.search.sheet', { table: 'orders' });
+      await rowIn(orders, 'A1');
+
+      // A1 changed, A2 no longer matches, and a new contact matches.
+      const now: RecordSearchResult = {
+        groups: [
+          {
+            definition: definition('contacts', ['email']),
+            rows: [
+              row('c2', { email: 'ann.lee@example.com' }),
+              row('c1', { email: 'ann@example.com' }),
+            ],
+          },
+          {
+            definition: definition('orders', ['order_id', 'customer']),
+            rows: [row('o1', { order_id: 'A1', customer: 'Ann Lee' }, 2)],
+          },
+        ],
+        truncated: false,
+      };
+      respondByRoute([
+        [/\/search$/, { body: now }],
+        [/\/do-not-store$/, { body: [ENTRY] }],
+      ]);
+      await hear(client, recordEvent('c1', 'orders'));
+
+      const notice = await screen.findByRole('group', {
+        name: t('records.outOfDate.label'),
+      });
+      expect(notice).toHaveTextContent(
+        '1 row changed, 1 row no longer matches, 1 new match',
+      );
+      // The mark is part of the key cell's text: words, not colour.
+      expect(
+        await rowIn(orders, `A1${t('records.changedElsewhere')}`),
+      ).toBeInTheDocument();
+
+      await user.click(
+        within(notice).getByRole('button', {
+          name: t('records.outOfDate.reload'),
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('group', { name: t('records.outOfDate.label') }),
+        ).toBeNull(),
+      );
+      expect(
+        screen.getByRole('heading', {
+          name: t('dataProtection.search.heading'),
+        }),
+      ).toHaveFocus();
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('grid', { name: orders })).queryAllByRole(
+            'row',
+          ),
+        ).toHaveLength(2),
+      );
+    });
   });
 
   describe('the do-not-store list', () => {

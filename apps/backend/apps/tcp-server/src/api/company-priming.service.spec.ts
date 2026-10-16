@@ -96,9 +96,11 @@ describe('CompanyPrimingService', () => {
     );
   });
 
-  it('primes exactly one event for a company with nothing running', async () => {
+  // The record event carries no state: it tells the client to re-check any
+  // open table, since changes made while the stream was down were missed.
+  it('primes the company and a record re-check when nothing is running', async () => {
     const events = await service.prime(companyId);
-    expect(entities(events)).toEqual(['company']);
+    expect(entities(events)).toEqual(['company', 'record']);
   });
 
   describe('with every list populated', () => {
@@ -116,7 +118,7 @@ describe('CompanyPrimingService', () => {
       events = await service.prime(companyId);
     });
 
-    it('primes all six groups in list order', () => {
+    it('primes all six groups in list order, then the record re-check', () => {
       expect(entities(events)).toEqual([
         'company',
         'task',
@@ -124,12 +126,14 @@ describe('CompanyPrimingService', () => {
         'assignment',
         'enquiry',
         'notification',
+        'record',
       ]);
     });
 
     it('replays only active notifications, with the row as their summary', () => {
       expect(notifications.listForCompany).toHaveBeenCalledWith(companyId);
-      const replayed = events.at(-1);
+      // Second to last: the record re-check always comes after it.
+      const replayed = events.at(-2);
       expect(replayed?.type === 'audit' && replayed.event.payload).toEqual({
         entity: 'notification',
         newStatus: 'active',
@@ -205,6 +209,7 @@ describe('CompanyPrimingService', () => {
         'Analyst',
         'Analyst',
         'Analyst',
+        'system',
         'system',
       ]);
     });

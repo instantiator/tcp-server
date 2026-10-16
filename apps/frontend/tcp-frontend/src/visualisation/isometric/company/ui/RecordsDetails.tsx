@@ -5,7 +5,7 @@ import {
   downloadAllRecordTables,
   downloadRecordTableCsv,
   useLiveCompanyState,
-  useRecordTables,
+  useLiveRecordTables,
 } from '../../../../api/hooks';
 import { Dialog } from '../../../../components/Dialog/Dialog';
 import { RecordTableActions } from '../../../../components/RecordSheet/RecordTableActions';
@@ -35,7 +35,7 @@ export const RecordsDetails = ({
   headingId,
   portalContainer,
 }: RecordsDetailsProps) => {
-  const tables = useRecordTables(companyId);
+  const tables = useLiveRecordTables(companyId);
   const companyQuery = useLiveCompanyState(companyId);
   const [open, setOpen] = useState<string | null>(null);
   const heading = t('records.tray.heading');

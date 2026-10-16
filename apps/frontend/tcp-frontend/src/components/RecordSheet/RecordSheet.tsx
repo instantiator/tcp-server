@@ -18,6 +18,7 @@ import {
   type CellFocusedEvent,
   type CellKeyDownEvent,
   type ColDef,
+  type EditableCallbackParams,
   type GridApi,
   type GridReadyEvent,
   type IRowNode,
@@ -26,7 +27,7 @@ import {
 } from 'ag-grid-community';
 import { AgGridReact, type CustomCellRendererProps } from 'ag-grid-react';
 import { fieldOrder } from '@tcp/shared/client';
-import { Pencil, Plus } from 'lucide-react';
+import { CircleSlash, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import type { RecordTableDefinition, TimedRecord } from '../../api/dtos';
 import { t } from '../../strings';
@@ -103,16 +104,25 @@ const booleanText = (value: unknown): string =>
       ? t('records.boolean.no')
       : '';
 
+/** How a row on screen has changed elsewhere since it was read (001.05). */
+export type StaleRow = 'changed' | 'deleted';
+
 /** A cell's text plus its marks. Context carries the marks, so they refresh without new column definitions. */
 interface SheetContext {
   readonly editedCells: ReadonlySet<string>;
   readonly addedRows: ReadonlySet<string>;
+  readonly staleRows: ReadonlyMap<string, StaleRow>;
   readonly firstField: string;
 }
 
+/** No rows changed elsewhere. */
+const NO_STALE_ROWS: ReadonlyMap<string, StaleRow> = new Map();
+
 /**
- * A cell with a mark when this session changed it: an icon for sight and
- * hidden words for a screen reader, so the mark is never colour alone.
+ * A cell with a mark when this session changed it, or when its row changed
+ * elsewhere and so can't be edited: an icon for sight and hidden words for a
+ * screen reader, so the mark is never colour alone. The row's first cell
+ * carries the "elsewhere" mark, so it is heard on arriving at the row.
  */
 const MarkedCell = (
   props: CustomCellRendererProps<TimedRecord, unknown, SheetContext>,
@@ -121,10 +131,9 @@ const MarkedCell = (
   const field = colDef?.colId ?? '';
   const edited =
     data !== undefined && context.editedCells.has(`${data.id}:${field}`);
-  const added =
-    data !== undefined &&
-    field === context.firstField &&
-    context.addedRows.has(data.id);
+  const first = data !== undefined && field === context.firstField;
+  const added = first && context.addedRows.has(data.id);
+  const stale = first ? context.staleRows.get(data.id) : undefined;
   const text =
     valueFormatted ??
     (typeof value === 'string' || typeof value === 'number'
@@ -133,13 +142,26 @@ const MarkedCell = (
   return (
     <span className="record-sheet__cell">
       {text}
-      {(edited || added) && (
-        <span className="record-sheet__mark">
-          <Icon icon={added ? Plus : Pencil} />
+      {stale !== undefined ? (
+        <span className="record-sheet__mark record-sheet__mark--stale">
+          <Icon icon={stale === 'deleted' ? CircleSlash : RefreshCw} />
           <span className="visually-hidden">
-            {t(added ? 'records.added' : 'records.changed')}
+            {t(
+              stale === 'deleted'
+                ? 'records.deletedElsewhere'
+                : 'records.changedElsewhere',
+            )}
           </span>
         </span>
+      ) : (
+        (edited || added) && (
+          <span className="record-sheet__mark">
+            <Icon icon={added ? Plus : Pencil} />
+            <span className="visually-hidden">
+              {t(added ? 'records.added' : 'records.changed')}
+            </span>
+          </span>
+        )
       )}
     </span>
   );
@@ -171,6 +193,13 @@ export interface RecordSheetProps {
   readonly onSelectionChange?: (rows: TimedRecord[]) => void;
   /** Fields shown but never edited, such as who added an entry. */
   readonly readOnlyFields?: ReadonlySet<string>;
+  /**
+   * Rows changed or deleted elsewhere since they were read (001.05): marked,
+   * and not editable until the sheet is reloaded.
+   */
+  readonly staleRows?: ReadonlyMap<string, StaleRow>;
+  /** Nothing can be edited: the table was deleted elsewhere. */
+  readonly readOnly?: boolean;
   /** Shows only the rows with this text in any cell. */
   readonly quickFilter?: string;
   /** The grid's accessible name, where "{table} records" would be wrong. */
@@ -202,6 +231,8 @@ const RecordSheet = ({
   readOnlyFields,
   quickFilter,
   label,
+  staleRows = NO_STALE_ROWS,
+  readOnly = false,
 }: RecordSheetProps) => {
   const apiRef = useRef<GridApi<TimedRecord> | null>(null);
   const fields = useMemo(() => fieldOrder(definition), [definition]);
@@ -213,6 +244,10 @@ const RecordSheet = ({
   const onEditRef = useRef(onEdit);
   onEditRef.current = onEdit;
 
+  // Read at edit time, so a row changing elsewhere locks without new columns.
+  const editableRef = useRef((id: string) => !readOnly && !staleRows.has(id));
+  editableRef.current = (id: string) => !readOnly && !staleRows.has(id);
+
   const columnDefs = useMemo((): ColDef<TimedRecord>[] => {
     const required = new Set(definition.schema.required ?? []);
     const columns = fields.map((field): ColDef<TimedRecord> => {
@@ -221,7 +256,10 @@ const RecordSheet = ({
       const isDate = schema.type === 'string' && schema.format === 'date';
       return {
         colId: field,
-        editable: !readOnlyFields?.has(field),
+        editable: readOnlyFields?.has(field)
+          ? false
+          : ({ data }: EditableCallbackParams<TimedRecord>) =>
+              data !== undefined && editableRef.current(data.id),
         headerName: definition.primaryKey.includes(field)
           ? t('records.column.key', { field })
           : field,
@@ -313,9 +351,10 @@ const RecordSheet = ({
     (): SheetContext => ({
       editedCells,
       addedRows,
+      staleRows,
       firstField: fields[0] ?? '',
     }),
-    [editedCells, addedRows, fields],
+    [editedCells, addedRows, staleRows, fields],
   );
 
   // New marks: redraw the cells, which read them from the context.

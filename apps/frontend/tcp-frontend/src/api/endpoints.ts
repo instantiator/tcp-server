@@ -560,8 +560,9 @@ export const useResumeCompanyMutation = (companyId: string) =>
       ),
   });
 
-// Company record tables. Static (`record` is a STATIC_ENTITY): nothing streams
-// them, so they refetch on mount, on window focus and after a mutation.
+// Company record tables. The company stream says when a table changes
+// (001.05): the summaries then refetch, but an open table or search never
+// does by itself — it is compared with a fresher copy instead (ADR-027).
 
 const recordsBase = (companyId: string) =>
   `/api/company/${encodeURIComponent(companyId)}/records`;
@@ -577,6 +578,14 @@ export const useRecordTables = (companyId: string) =>
       ),
   });
 
+/** Reads one table's definition and rows. */
+export const fetchRecordTable = (companyId: string, table: string) =>
+  unwrap(
+    api.GET('/api/company/{companyId}/records/tables/{table}', {
+      params: { path: { companyId, table } },
+    }),
+  );
+
 /** One table's definition and rows; idle while `table` is `null` (none chosen). */
 export const useRecordTable = (companyId: string, table: string | null) =>
   useQuery({
@@ -584,12 +593,7 @@ export const useRecordTable = (companyId: string, table: string | null) =>
     enabled: table !== null,
     // A focus refetch re-sorts the rows under a user who is mid-read (ADR-027).
     refetchOnWindowFocus: false,
-    queryFn: () =>
-      unwrap(
-        api.GET('/api/company/{companyId}/records/tables/{table}', {
-          params: { path: { companyId, table: table ?? '' } },
-        }),
-      ),
+    queryFn: () => fetchRecordTable(companyId, table ?? ''),
   });
 
 /**
@@ -778,14 +782,17 @@ export const useRecordSearch = (companyId: string, q: string) =>
     enabled: q !== '',
     // Like a table: a focus refetch would move rows under a reader.
     refetchOnWindowFocus: false,
-    queryFn: () =>
-      unwrap(
-        api.POST('/api/company/{companyId}/records/search', {
-          params: { path: { companyId } },
-          body: { q },
-        }),
-      ),
+    queryFn: () => fetchRecordSearch(companyId, q),
   });
+
+/** Runs a search across every table: see {@link useRecordSearch}. */
+export const fetchRecordSearch = (companyId: string, q: string) =>
+  unwrap(
+    api.POST('/api/company/{companyId}/records/search', {
+      params: { path: { companyId } },
+      body: { q },
+    }),
+  );
 
 /** The company's do-not-store list. */
 export const useDoNotStoreList = (companyId: string) =>

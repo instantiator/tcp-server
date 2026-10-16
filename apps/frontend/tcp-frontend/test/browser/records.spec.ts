@@ -340,3 +340,110 @@ test.describe('record tables', () => {
     await expect(page.getByText(NO_TABLES)).toBeVisible();
   });
 });
+
+/* Literals copied from `strings.ts` (001.05). */
+const OUT_OF_DATE = 'Out of date';
+const RELOAD = 'Reload';
+const CHANGED_ELSEWHERE = '(changed elsewhere, so it cannot be edited)';
+const DROPPED =
+  'This table was deleted elsewhere. You can still read it here, but it cannot be changed.';
+const ADD_ROW = 'Add a row to orders';
+
+/** Changes and deletes made through the API: someone else, to this page. */
+const elsewhere = (request: APIRequestContext, fixture: Fixture) => {
+  const headers = { Authorization: `Bearer ${fixture.token}` };
+  const base = `/api/company/${fixture.companyId}/records/tables/orders`;
+  return {
+    update: async (key: string, changes: Record<string, unknown>) => {
+      const table = await request.get(base, { headers });
+      const { rows } = (await table.json()) as {
+        rows: { id: string; version: number; data: { order_id: string } }[];
+      };
+      const target = rows.find((r) => r.data.order_id === key);
+      expect(target).toBeDefined();
+      const res = await request.patch(`${base}/rows/${target?.id ?? ''}`, {
+        headers,
+        data: { changes, version: target?.version },
+      });
+      expect(res.status()).toBe(200);
+    },
+    add: async (data: Record<string, unknown>) => {
+      const res = await request.post(`${base}/rows`, {
+        headers,
+        data: { data },
+      });
+      expect(res.status()).toBe(201);
+    },
+    drop: async () => {
+      const res = await request.delete(base, { headers });
+      expect(res.ok()).toBe(true);
+    },
+  };
+};
+
+test.describe('a record table changed elsewhere (001.05)', () => {
+  let fixture: Fixture;
+
+  test.beforeEach(async ({ request }) => {
+    fixture = await makeFixture(request);
+  });
+
+  test.afterEach(async ({ request }) => {
+    await dropFixture(request, fixture);
+  });
+
+  test('says so, locks the changed row, and shows the change on Reload', async ({
+    page,
+    request,
+  }) => {
+    await openOrders(page, fixture.companyId);
+    await elsewhere(request, fixture).update('A1', { qty: 9 });
+
+    const notice = page.getByRole('group', { name: OUT_OF_DATE });
+    await expect(notice).toContainText('1 row changed');
+    // The old value stays until Reload; the row says why it won't edit.
+    await expect(cell(page, 'A1', 1)).toHaveText('2');
+    await expect(cell(page, 'A1', 0)).toContainText(CHANGED_ELSEWHERE);
+    await cell(page, 'A1', 1).click();
+    await expect(cell(page, 'A1', 1).locator('input')).toHaveCount(0);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    await notice.getByRole('button', { name: RELOAD }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(cell(page, 'A1', 1)).toHaveText('9');
+    await expect(cell(page, 'A1', 0)).not.toContainText(CHANGED_ELSEWHERE);
+  });
+
+  test('keeps the Tables tab counts current', async ({ page, request }) => {
+    await openOrders(page, fixture.companyId);
+    const option = page
+      .getByRole('listbox', { name: TABLES_LIST })
+      .getByRole('option', { name: /^orders/ });
+    await expect(option).toContainText('2 records');
+
+    await elsewhere(request, fixture).add({ order_id: 'A3', qty: 1 });
+    await expect(option).toContainText('3 records');
+    await expect(page.getByRole('group', { name: OUT_OF_DATE })).toContainText(
+      '1 row added',
+    );
+  });
+
+  test('keeps a table deleted elsewhere open, read-only', async ({
+    page,
+    request,
+  }) => {
+    await openOrders(page, fixture.companyId);
+    await elsewhere(request, fixture).drop();
+
+    await expect(page.getByRole('group', { name: OUT_OF_DATE })).toHaveText(
+      DROPPED,
+    );
+    await expect(page.getByRole('button', { name: ADD_ROW })).toBeDisabled();
+    await expect(cell(page, 'A1', 1)).toHaveText('2');
+    await expect(
+      page
+        .getByRole('listbox', { name: TABLES_LIST })
+        .getByRole('option', { name: /^orders/ }),
+    ).toHaveCount(0);
+  });
+});

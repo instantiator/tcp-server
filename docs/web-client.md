@@ -591,6 +591,12 @@ about the system, not an oversight: `query-keys.ts` names `role`,
 `useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
 prefix and answer once, refetching only when asked.
 
+`record` is live with one difference: its events never patch what is on
+screen. `applyEvent` hands them to `recordChanged`, which refetches the table
+summaries and reads open tables into a separate `latest` key for comparison.
+So `useRecordTable` stays an unprefixed snapshot beside
+`useLiveRecordTableChanges` (001.05).
+
 `useCompanies` has no prefix for a different reason. Its entity _is_ live, but
 only per-company channels exist — there is no company-list stream. Patching
 it from whichever company the current page happens to be subscribed to would
@@ -1022,8 +1028,9 @@ the CSV format). There are two ways in, and both show the same view.
   in the chat dialog: a single-select list of tables (name and record count)
   with **Download all** above it, and the table view beside it. Below 40rem the
   two stack. `#tables/<name>` in the URL keeps the open table across a reload.
-  The tab has no badge, because tables are not live. It is not force-mounted,
-  so AG Grid loads only when the tab opens.
+  The tab has no badge: a change elsewhere shows in the open sheet instead
+  (see **Live updates** below). It is not force-mounted, so AG Grid loads only
+  when the tab opens.
 - **The filing cabinet** stands in the archive room, beside the bookshelf. One
   selectable zone covers each piece (`SELECTABLE_FURNITURE`): the bookshelf
   selects `archive`, the cabinet selects `records`. Clicking it, or choosing it
@@ -1083,13 +1090,26 @@ The lazy chunk is about 971 kB (272 kB gzipped).
   sheet. Deleting a table moves focus back to the list (in the tab) or to the
   tray heading (in the cabinet). Delete row acts on the focused cell's row and
   is named for it, e.g. "Delete row 3: order 1001".
-- **No live updates.** Records are not on the SSE stream. A table loads when it
-  opens; **Reload** in the More menu fetches it again; the summaries refetch
-  when the window regains focus. The version check stops edits overwriting each
-  other. See [outstanding-issues.md](outstanding-issues.md#record-tables-are-not-live).
+- **Live updates (001.05).** The company stream says which table changed,
+  never the rows. The tray's and the tab's counts refetch, and new and deleted
+  tables come and go; they are ordered by name, so nothing moves. An open
+  table, or the data protection search, is read again in the background
+  (`latest` key) and compared by row id and version. The rows on screen are
+  never replaced. Instead:
+  - a notice says what changed ("1 row changed, 2 rows added"), with
+    **Reload**, and one polite announcement is made when it appears;
+  - rows changed or deleted elsewhere are marked on their key cell (an icon and
+    hidden words) and cannot be edited or deleted until the reload;
+  - a table deleted elsewhere stays open and readable, but read-only.
 
-Components import hooks from `src/api/hooks.ts` as usual (`useRecordTables`,
-`useRecordTable`, `useAddRecord`, `useUpdateRecord` and so on). Add, edit and
+  A person's own edits patch both copies, so they never read as made
+  elsewhere. The version check stays as the backstop. See
+  [ADR-027](ADRs/ADR-027-screen-reader-strategy.md#amendment-as-implemented-p04-001-05)
+  and [outstanding-issues.md](outstanding-issues.md#live-record-tables-re-read-whole-tables).
+
+Components import hooks from `src/api/hooks.ts` as usual
+(`useLiveRecordTables`, `useRecordTable`, `useLiveRecordTableChanges`,
+`useAddRecord`, `useUpdateRecord` and so on). Add, edit and
 delete patch the cached table in place and invalidate only the summaries.
 Downloads go through `getBlob` in `client.ts`, so they carry the token and the
 401 policy, and are named by `recordsDownloadName` from `@tcp/shared`.

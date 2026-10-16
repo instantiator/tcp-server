@@ -191,4 +191,33 @@ test.describe('data protection', () => {
     // Still open, so the person can change what they typed.
     await expect(add).toBeVisible();
   });
+
+  test('search results changed elsewhere say so, and run again on Reload (001.05)', async ({
+    page,
+    request,
+  }) => {
+    await gotoSignedIn(page, `/company/${fixture.companyId}#data-protection`);
+    await page
+      .getByRole('textbox', { name: SEARCH_FIELD, exact: true })
+      .fill('ann');
+    await page.getByRole('button', { name: SEARCH, exact: true }).click();
+    const results = page.getByRole('grid', { name: RESULTS });
+    await expect(results.getByRole('row', { name: /Ann Lee/ })).toBeVisible();
+
+    // Another Ann is added elsewhere.
+    const added = await request.post(
+      `/api/company/${fixture.companyId}/records/tables/customers/rows`,
+      {
+        headers: { Authorization: `Bearer ${fixture.token}` },
+        data: { data: { email: 'ann.ray@example.com', name: 'Ann Ray' } },
+      },
+    );
+    expect(added.status()).toBe(201);
+
+    const notice = page.getByRole('group', { name: 'Out of date' });
+    await expect(notice).toContainText('1 new match');
+    await notice.getByRole('button', { name: 'Reload' }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(results.getByRole('row', { name: /Ann Ray/ })).toBeVisible();
+  });
 });

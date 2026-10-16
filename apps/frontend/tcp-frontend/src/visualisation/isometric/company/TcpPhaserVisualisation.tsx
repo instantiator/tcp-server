@@ -165,12 +165,15 @@ export default function TcpPhaserVisualisation({
     // the stage to fill the window, and its own 500ms parent check misses
     // that change: the canvas stayed at the stage's fixed height (005.01).
     // The dock appearing or full screen changes the stage the same way, with
-    // no window resize. Watching the parent catches every case. jsdom has no
-    // ResizeObserver.
+    // no window resize. Watching the parent catches every case. `refresh()`
+    // alone reuses the parent size Phaser cached, so a shrinking stage (the
+    // tabs above wrapping once their badges arrive) kept the old height:
+    // `getParentBounds()` re-reads it first. jsdom has no ResizeObserver.
     const observer =
       typeof ResizeObserver === 'undefined'
         ? null
         : new ResizeObserver(() => {
+            game.scale.getParentBounds();
             game.scale.refresh();
           });
     observer?.observe(parent);
