@@ -568,19 +568,44 @@ is its security boundary.
 **Act when:** an agent is seen changing records in plan or qa mode. Then pass the
 mode to the records server and refuse the write tools there.
 
-## Record tables cannot have columns added or renamed
+## Record table unique keys cannot be changed
 
-People can clear and delete a whole table (001.03), but nobody can add, rename
-or retype a column, in the web UI or through a tool. A wrong first schema has to
-be worked around: make a new table, export, and append the rows back.
+001.06 lets people change a table's primary key, and agents widen it, but a
+table's other unique keys stay as they were made. A column in a unique key
+can't be deleted, and nothing can take it out of the key.
 
-A user has now asked for it (2026-10-12): on the dev server, an agent made a
-`feedings` table with no column for which animal was fed, and could not add one.
+**Act when:** an agent or a person asks to add, change or drop a unique key,
+or to delete a column that is in one. `set_primary_key`'s rebuild of
+`record_key` rows already does the work; it needs a key name and a UI.
 
-**Act when:** now — planned in
-[001.06](prompts/phase%2004%20-%20utility/001.06.01.plan%20-%20record%20table%20schema%20changes.md):
-agents may add and rename columns, and asking to delete one returns advice to
-ask a user; people get a column editor in the sheet. Key fields are protected.
+## Record table columns cannot be retyped
+
+A column keeps the type it was made with. Changing a text column to a number
+means adding a new column, copying the values with `update`, and deleting the
+old one.
+
+**Act when:** the first person or agent asks for it. Converting existing
+values needs a rule for ones that don't convert.
+
+## Agents can't delete a column or narrow a key
+
+Both are placebos for agents (001.06). `alter_table` answers with advice to ask
+a person through `request_user_input`, and the person does it in the Columns
+dialog. Deleting a column removes a value from every record, and a narrower key
+can make different records count as the same one.
+
+**Act when:** 003.01 (action approval) lands. Make each an approval request
+carrying the exact change, which the platform runs when the person approves.
+
+## Changing a record table's key reads every record
+
+`RecordsService.rekey` reads a table's records into memory to check for missing
+values and clashes, and computes each key in JavaScript, because Postgres's
+`jsonb` text differs from `JSON.stringify`. The table is locked while it runs.
+
+**Act when:** changing the key of a table over 10,000 records takes more than
+2 seconds. Page through the records, or compute keys in SQL with a matching
+encoding.
 
 ## No template table schemas for records
 

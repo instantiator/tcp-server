@@ -1062,7 +1062,8 @@ the CSV format). There are two ways in, and both show the same view.
 
 `src/components/RecordSheet/` holds `TableView`, shared by the dialog and the
 tab. Its header has the title, **Download**, **Add row**, **Delete row**,
-**Undo** and a **More actions** menu: Append CSV, Reload, Clear and Delete.
+**Undo** and a **More actions** menu: Append CSV, Reload, Columns, Retention,
+Clear and Delete.
 Clear and Delete each ask first, say how many records go, and offer
 **Download a copy first**. Append CSV opens a small dialog with a file input
 (a menu item cannot hold one). The rows that stop an append are listed in it,
@@ -1100,12 +1101,29 @@ The lazy chunk is about 971 kB (272 kB gzipped).
     **Reload**, and one polite announcement is made when it appears;
   - rows changed or deleted elsewhere are marked on their key cell (an icon and
     hidden words) and cannot be edited or deleted until the reload;
-  - a table deleted elsewhere stays open and readable, but read-only.
+  - a table deleted elsewhere stays open and readable, but read-only;
+  - a table whose columns or key changed elsewhere (001.06) says so and is
+    read-only until Reload, since an edit could name a column that has gone.
+    In the search view only that table's group is locked.
 
   A person's own edits patch both copies, so they never read as made
   elsewhere. The version check stays as the backstop. See
   [ADR-027](ADRs/ADR-027-screen-reader-strategy.md#amendment-as-implemented-p04-001-05)
   and [outstanding-issues.md](outstanding-issues.md#live-record-tables-re-read-whole-tables).
+
+- **Columns (001.06).** **Columns…** in the More menu opens a dialog listing
+  each column in `fieldOrder`, with its type in words, whether it is in the key
+  and whether it is required. Each column has its own **Rename** and
+  **Delete** button, named for it. A key column's Delete is disabled, with the
+  reason in visible text beside it (and as its description). **Add column**
+  takes a name, a type (text, number, whole number, yes or no, date), an
+  optional value for the rows already there and **Required**, which is enabled
+  only once every row will get a value. **Change key** offers the text and
+  whole-number columns as checkboxes; when the rows stop it (missing values,
+  clashes), the server's reason is shown and linked to the group. Delete asks
+  first, with the row count and **Download a copy first**, focus on No. A
+  change closes the dialog, reloads the table (clearing undo, whose entries
+  name old columns) and is announced; focus returns to the More menu.
 
 Components import hooks from `src/api/hooks.ts` as usual
 (`useLiveRecordTables`, `useRecordTable`, `useLiveRecordTableChanges`,
