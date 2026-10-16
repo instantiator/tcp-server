@@ -851,7 +851,7 @@ Admin → Roles and the knowledge panel let every member of a company delete rol
 
 The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with back-off, for every error. A 404 for something just deleted is retried for about 7 seconds. In 002.00 that made "Delete table" seem slow; `useDropRecordTable` now forgets the dropped table's queries, which fixed that case only.
 
-**Act when:** another "slow after a delete" or "waits after a 403" symptom appears. Set `retry` to skip 4xx answers (`ApiError.status` 400–499) app-wide.
+**Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy%20%28draft%29.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
 
 ## A deleted default planner can't be replaced in the browser
 
