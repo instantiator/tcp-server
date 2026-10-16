@@ -577,6 +577,34 @@ describe('RoleController (e2e)', () => {
       });
     });
 
+    describe('PUT /api/role/:id', () => {
+      it("clears the role's own model with llmConfig: null, so it uses the company's", async () => {
+        const created = await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: 'tuned',
+            name: 'tuned',
+            description: 'Has its own model.',
+            llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(201);
+        const role = created.body as TcpRole;
+
+        await request(app.getHttpServer())
+          .put(`/api/role/${role.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ llmConfig: null })
+          .expect(200)
+          .expect((res) => {
+            expect((res.body as TcpRole).llmConfig).toBeNull();
+          });
+      });
+    });
+
     describe('DELETE /api/role/:id', () => {
       it('returns 204 and removes the role', async () => {
         const created = await request(app.getHttpServer())

@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { McpServerToggles } from '@tcp/shared';
 import { IsMcpServerToggles } from './is-mcp-server-toggles.validator';
@@ -94,10 +95,12 @@ export class UpdateRoleDto {
   @IsMcpServerToggles()
   mcpServerToggles?: McpServerToggles | null;
 
+  /** The role's own model; `null` clears it, so the role uses the company's. */
+  @ApiProperty({ type: LlmConfigDto, nullable: true, required: false })
   @IsOptional()
   @ValidateNested()
   @Type(() => LlmConfigDto)
-  llmConfig?: LlmConfigDto;
+  llmConfig?: LlmConfigDto | null;
 
   @IsOptional()
   @IsString()

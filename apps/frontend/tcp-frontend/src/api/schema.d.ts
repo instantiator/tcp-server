@@ -1992,7 +1992,7 @@ export interface components {
             slug: string;
             name: string;
             description: string;
-            llmConfig?: Record<string, never> | null;
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             systemPromptTemplate?: string | null;
             mcpServerList: string[];
             mcpServerToggles?: {
@@ -2028,7 +2028,7 @@ export interface components {
             slug: string;
             name: string;
             description: string;
-            llmConfig?: Record<string, never> | null;
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             systemPromptTemplate?: string | null;
             rolePrompt?: string | null;
             knowledgeDomains: string[];
@@ -2040,6 +2040,7 @@ export interface components {
             queryIndex: number;
         };
         UpdateRoleDto: {
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             slug?: string;
             name?: string;
             description?: string;
@@ -2049,7 +2050,6 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
-            llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
         ResumeResultDto: {
