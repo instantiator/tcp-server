@@ -701,6 +701,19 @@ test.describe('company visualisation', () => {
         )
         .toBeLessThan(2);
 
+      // Content above growing after boot shrinks the stage, and the canvas
+      // must shrink with it. In CI the tab badges arrive late and wrap the
+      // tabs onto a second line; the canvas used to keep its old height,
+      // since Phaser's refresh() reuses the parent size it cached.
+      await page.addStyleTag({
+        content: '[role=tablist] { padding-block-end: 24px !important; }',
+      });
+      await expect
+        .poll(async () =>
+          Math.abs((await stageHeight()) - (await canvasHeight())),
+        )
+        .toBeLessThan(2);
+
       // A short window: the fixed height is the floor, and the page scrolls.
       await page.setViewportSize({ width: 1280, height: 400 });
       await expect
