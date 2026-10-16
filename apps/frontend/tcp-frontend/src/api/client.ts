@@ -131,18 +131,27 @@ export const expectAccepted = async (
  * `Content-Type` is deliberately unset: the browser writes it, including the
  * multipart boundary, which cannot be guessed here.
  */
-export const postFile = async (path: string, file: File): Promise<void> => {
-  await postFileForJson(path, file);
+export const postFile = async (
+  path: string,
+  file: File,
+  signal?: AbortSignal,
+): Promise<void> => {
+  await postFileForJson(path, file, signal);
 };
 
-/** {@link postFile}, for a route that answers with a JSON body; the caller validates it. */
+/**
+ * {@link postFile}, for a route that answers with a JSON body; the caller
+ * validates it. A `signal` lets the upload be cancelled; the aborted request
+ * rejects with the browser's own `AbortError`, not an `ApiError`.
+ */
 export const postFileForJson = async (
   path: string,
   file: File,
+  signal?: AbortSignal,
 ): Promise<unknown> => {
   const body = new FormData();
   body.append('file', file);
-  const response = await send(path, { method: 'POST', body });
+  const response = await send(path, { method: 'POST', body, signal });
   return response.json().catch(() => null);
 };
 
@@ -186,6 +195,9 @@ const send = async (path: string, init: RequestInit): Promise<Response> => {
       headers,
     });
   } catch (cause) {
+    // A cancelled request is the caller's own doing, not a network failure.
+    if (cause instanceof DOMException && cause.name === 'AbortError')
+      throw cause;
     throw networkError(cause);
   }
 

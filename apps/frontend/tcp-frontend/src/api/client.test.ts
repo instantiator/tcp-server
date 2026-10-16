@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleUnauthorized } from '../auth/unauthorized';
 import { getUserManager } from '../auth/user-manager';
 
-import { api, unwrap } from './client';
+import { api, postFileForJson, unwrap } from './client';
 import { ApiError } from './errors';
 
 // The real policy navigates the page, which jsdom cannot do and which would
@@ -251,5 +251,22 @@ describe('the API client', () => {
     const request = fetchMock.mock.calls[0]?.[0];
     expect(request).toBeInstanceOf(Request);
     expect(new URL((request as Request).url).pathname).toBe('/api/company');
+  });
+
+  it('rejects an aborted upload with the browser AbortError, not an ApiError', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    fetchMock.mockRejectedValueOnce(
+      new DOMException('The operation was aborted.', 'AbortError'),
+    );
+
+    const failure = await postFileForJson(
+      '/api/role/r1/knowledge',
+      new File(['x'], 'a.md'),
+      controller.signal,
+    ).catch((error: unknown) => error);
+
+    expect(failure).not.toBeInstanceOf(ApiError);
+    expect(failure).toMatchObject({ name: 'AbortError' });
   });
 });

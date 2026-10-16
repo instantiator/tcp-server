@@ -207,8 +207,31 @@ export const useCompanyUsers = (companyId: string) =>
       ),
   });
 
-export const useRoleKnowledge = (roleId: string) =>
+/** Whose knowledge: one role's, or the company's shared. */
+export type KnowledgeScope =
+  | { readonly kind: 'role'; readonly roleId: string }
+  | { readonly kind: 'company'; readonly companyId: string };
+
+/** The knowledge route for a scope; only the upload path needs it, as it cannot go through `api`. */
+const knowledgeBase = (scope: KnowledgeScope): string =>
+  scope.kind === 'role'
+    ? `/api/role/${encodeURIComponent(scope.roleId)}/knowledge`
+    : `/api/company/${encodeURIComponent(scope.companyId)}/knowledge`;
+
+type Schemas = components['schemas'];
+
+/** What a knowledge read takes beyond its ids: a wrapper's polling and gating. */
+type KnowledgeReadOptions<T> = Pick<
+  UseQueryOptions<T>,
+  'refetchInterval' | 'enabled'
+>;
+
+export const useRoleKnowledge = (
+  roleId: string,
+  options: KnowledgeReadOptions<Schemas['KnowledgeDocumentResponseDto'][]> = {},
+) =>
   useQuery({
+    ...options,
     queryKey: queryKeys.roleKnowledge(roleId),
     queryFn: () =>
       unwrap(
@@ -218,8 +241,12 @@ export const useRoleKnowledge = (roleId: string) =>
       ),
   });
 
-export const useRoleKnowledgeStatus = (roleId: string) =>
+export const useRoleKnowledgeStatus = (
+  roleId: string,
+  options: KnowledgeReadOptions<Schemas['KnowledgeStatusResponseDto']> = {},
+) =>
   useQuery({
+    ...options,
     queryKey: queryKeys.roleKnowledgeStatus(roleId),
     queryFn: () =>
       unwrap(
@@ -229,8 +256,13 @@ export const useRoleKnowledgeStatus = (roleId: string) =>
       ),
   });
 
-export const useRoleKnowledgeSearch = (roleId: string, query: string) =>
+export const useRoleKnowledgeSearch = (
+  roleId: string,
+  query: string,
+  options: KnowledgeReadOptions<Schemas['KnowledgeChunkResponseDto'][]> = {},
+) =>
   useQuery({
+    ...options,
     queryKey: queryKeys.roleKnowledgeSearch(roleId, query),
     queryFn: () =>
       unwrap(
@@ -240,8 +272,12 @@ export const useRoleKnowledgeSearch = (roleId: string, query: string) =>
       ),
   });
 
-export const useCompanyKnowledge = (companyId: string) =>
+export const useCompanyKnowledge = (
+  companyId: string,
+  options: KnowledgeReadOptions<Schemas['KnowledgeDocumentResponseDto'][]> = {},
+) =>
   useQuery({
+    ...options,
     queryKey: queryKeys.companyKnowledge(companyId),
     queryFn: () =>
       unwrap(
@@ -251,8 +287,21 @@ export const useCompanyKnowledge = (companyId: string) =>
       ),
   });
 
-export const useCompanyKnowledgeStatus = (companyId: string) =>
+/**
+ * The company's shared index and each role's. Generic in what `select` picks,
+ * so a wrapper can read one part while `refetchInterval` still sees the whole.
+ */
+export const useCompanyKnowledgeStatus = <
+  TData = Schemas['CompanyKnowledgeStatusResponseDto'],
+>(
+  companyId: string,
+  options: Pick<
+    UseQueryOptions<Schemas['CompanyKnowledgeStatusResponseDto'], Error, TData>,
+    'refetchInterval' | 'enabled' | 'select'
+  > = {},
+) =>
   useQuery({
+    ...options,
     queryKey: queryKeys.companyKnowledgeStatus(companyId),
     queryFn: () =>
       unwrap(
@@ -260,6 +309,29 @@ export const useCompanyKnowledgeStatus = (companyId: string) =>
           params: { path: { companyId } },
         }),
       ),
+  });
+
+export const useCompanyKnowledgeSearch = (
+  companyId: string,
+  query: string,
+  options: KnowledgeReadOptions<Schemas['KnowledgeChunkResponseDto'][]> = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.companyKnowledgeSearch(companyId, query),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/knowledge/query', {
+          params: { path: { companyId }, query: { q: query } },
+        }),
+      ),
+  });
+
+/** The MCP servers a role can be given, and which this deployment has configured. */
+export const useMcpServers = () =>
+  useQuery({
+    queryKey: queryKeys.mcpServers(),
+    queryFn: () => unwrap(api.GET('/api/mcp-servers')),
   });
 
 // The write half of the file: one mutation hook per REST route that changes
@@ -417,6 +489,119 @@ export const useUploadMaterialMutation = () =>
   useMutation({
     mutationFn: ({ id, file }: { id: string; file: File }) =>
       postFile(`/api/task/${id}/materials`, file),
+  });
+
+/**
+ * Uploads one file to a role's or the company's knowledge. The `signal` lets
+ * the caller cancel it.
+ *
+ * Goes through {@link postFile} rather than {@link api} for the same reason as
+ * {@link useUploadMaterialMutation}: a `File` cannot travel through the
+ * generated body type.
+ */
+export const useUploadKnowledgeMutation = (scope: KnowledgeScope) =>
+  useMutation({
+    mutationFn: ({ file, signal }: { file: File; signal?: AbortSignal }) =>
+      postFile(knowledgeBase(scope), file, signal),
+  });
+
+/**
+ * Deletes one knowledge file, with the role's or the company's route per scope.
+ * `expectAccepted`, not `unwrap`: the route answers 204 with no body.
+ */
+export const useDeleteKnowledgeMutation = (scope: KnowledgeScope) =>
+  useMutation({
+    mutationFn: (filename: string) =>
+      scope.kind === 'role'
+        ? expectAccepted(
+            api.DELETE('/api/role/{roleId}/knowledge/{filename}', {
+              params: { path: { roleId: scope.roleId, filename } },
+            }),
+          )
+        : expectAccepted(
+            api.DELETE('/api/company/{companyId}/knowledge/{filename}', {
+              params: { path: { companyId: scope.companyId, filename } },
+            }),
+          ),
+  });
+
+/**
+ * Rebuilds a knowledge index. `unwrap`, not `expectAccepted`: the route
+ * answers `202` but with `{ reindexing: true }` as its body.
+ */
+export const useReindexKnowledgeMutation = (scope: KnowledgeScope) =>
+  useMutation({
+    mutationFn: () =>
+      scope.kind === 'role'
+        ? unwrap(
+            api.POST('/api/role/{roleId}/knowledge/reindex', {
+              params: { path: { roleId: scope.roleId } },
+            }),
+          )
+        : unwrap(
+            api.POST('/api/company/{companyId}/knowledge/reindex', {
+              params: { path: { companyId: scope.companyId } },
+            }),
+          ),
+  });
+
+/** Creates a role. Soft warnings come back beside it, as for {@link useCreateTaskMutation}. */
+export const useCreateRoleMutation = () =>
+  useMutation({
+    mutationFn: async (body: Schemas['CreateRoleDto']) => {
+      let result;
+      try {
+        result = await api.POST('/api/role', { body });
+      } catch (cause) {
+        // The request never landed — same reasoning as `unwrap`'s catch.
+        throw networkError(cause);
+      }
+
+      const { data, error, response } = result;
+      if (!response.ok || data === undefined) throw apiError(response, error);
+
+      return { role: data, warnings: readWarnings(response) };
+    },
+  });
+
+/** Edits a role. Soft warnings come back beside it, as for {@link useCreateRoleMutation}. */
+export const useUpdateRoleMutation = () =>
+  useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Schemas['UpdateRoleDto'];
+    }) => {
+      let result;
+      try {
+        result = await api.PUT('/api/role/{id}', {
+          params: { path: { id } },
+          body,
+        });
+      } catch (cause) {
+        // The request never landed — same reasoning as `unwrap`'s catch.
+        throw networkError(cause);
+      }
+
+      const { data, error, response } = result;
+      if (!response.ok || data === undefined) throw apiError(response, error);
+
+      return { role: data, warnings: readWarnings(response) };
+    },
+  });
+
+/**
+ * Deletes a role, and its knowledge files with it. `expectAccepted`, not
+ * `unwrap`: the route answers 204 with no body.
+ */
+export const useDeleteRoleMutation = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      expectAccepted(
+        api.DELETE('/api/role/{id}', { params: { path: { id } } }),
+      ),
   });
 
 /**

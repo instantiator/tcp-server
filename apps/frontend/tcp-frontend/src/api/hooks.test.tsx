@@ -28,6 +28,10 @@ import {
   useLiveEnquiryState,
   useLiveNotifications,
   useDeleteChat,
+  useDeleteRole,
+  useKnowledgeList,
+  useKnowledgeStatus,
+  useUploadKnowledge,
   useLiveTaskState,
   useRoleState,
   useTranscriptSearch,
@@ -677,5 +681,127 @@ describe('STATIC_ENTITIES never refetch on a live event', () => {
     expect(
       requestedUrls().filter((url) => knowledgeRoute.test(url)).length,
     ).toBe(knowledgeRequestsBefore);
+  });
+});
+
+describe('role and knowledge writes', () => {
+  /** Seeds one cached query under each key and reports which were invalidated. */
+  const seed = (queryClient: QueryClient) => {
+    const keys = {
+      role: ['role', 'list', { companyId: COMPANY_ID }],
+      knowledge: ['knowledge', 'list', { scope: 'role', roleId: 'r1' }],
+      company: ['company', 'detail', COMPANY_ID],
+    } as const;
+    for (const key of Object.values(keys)) queryClient.setQueryData(key, []);
+    return (name: keyof typeof keys) =>
+      queryClient.getQueryState(keys[name])?.isInvalidated;
+  };
+
+  it('useDeleteRole invalidates role, knowledge and company queries', async () => {
+    respondWithJson(200, { id: 'r1' });
+    const { result, queryClient } = renderHookWithClient(() => useDeleteRole());
+    const invalidated = seed(queryClient);
+
+    await act(async () => {
+      await result.current.mutateAsync('r1');
+    });
+
+    expect(invalidated('role')).toBe(true);
+    expect(invalidated('knowledge')).toBe(true);
+    expect(invalidated('company')).toBe(true);
+  });
+
+  it('useUploadKnowledge invalidates knowledge queries only', async () => {
+    respondWithJson(200, {});
+    const { result, queryClient } = renderHookWithClient(() =>
+      useUploadKnowledge({ kind: 'role', roleId: 'r1' }),
+    );
+    const invalidated = seed(queryClient);
+
+    await act(async () => {
+      await result.current.mutateAsync({ file: new File(['x'], 'a.md') });
+    });
+
+    expect(invalidated('knowledge')).toBe(true);
+    expect(invalidated('role')).toBe(false);
+  });
+});
+
+describe('the scoped knowledge reads', () => {
+  const status = (indexing: boolean) => ({
+    lastIndexedAt: null,
+    lastError: null,
+    lastErrorAt: null,
+    documentCount: 1,
+    totalBytes: 1,
+    chunkCount: 1,
+    generation: 1,
+    indexing,
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('makes no company request for a role-scope list', async () => {
+    respondByRoute([[/\/api\/role\/r1\/knowledge$/, { body: [] }]]);
+
+    const { result } = renderHookWithClient(() =>
+      useKnowledgeList({ kind: 'role', roleId: 'r1' }),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(requestedUrls().some((url) => url.includes('/api/company'))).toBe(
+      false,
+    );
+  });
+
+  it('returns the shared part of a company status', async () => {
+    respondByRoute([
+      [
+        /\/api\/company\/c1\/knowledge\/status/,
+        { body: { shared: status(false), roles: [] } },
+      ],
+    ]);
+
+    const { result } = renderHookWithClient(() =>
+      useKnowledgeStatus({ kind: 'company', companyId: 'c1' }),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual(status(false));
+  });
+
+  it('polls the status while indexing and stops once it is done', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Two answers while indexing, then done; the last one repeats.
+    const answers = [status(true), status(true), status(false)];
+    fetchMock.mockImplementation(() => {
+      const next = answers.length > 1 ? answers.shift() : answers[0];
+      return Promise.resolve(
+        new Response(JSON.stringify(next), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    const { result } = renderHookWithClient(() =>
+      useKnowledgeStatus({ kind: 'role', roleId: 'r1' }),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(3_000));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+    expect(result.current.data?.indexing).toBe(true);
+
+    await act(() => vi.advanceTimersByTimeAsync(3_000));
+    await waitFor(() => expect(result.current.data?.indexing).toBe(false));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    await act(() => vi.advanceTimersByTimeAsync(9_000));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

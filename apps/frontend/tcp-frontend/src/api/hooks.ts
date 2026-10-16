@@ -75,6 +75,18 @@ import {
   useUpdateTaskMutation,
   useCompany,
   useCompanyKnowledge,
+  useCompanyKnowledgeSearch,
+  useCompanyKnowledgeStatus,
+  useCreateRoleMutation,
+  useDeleteKnowledgeMutation,
+  useDeleteRoleMutation,
+  useReindexKnowledgeMutation,
+  useRoleKnowledge,
+  useRoleKnowledgeSearch,
+  useRoleKnowledgeStatus,
+  useUpdateRoleMutation,
+  useUploadKnowledgeMutation,
+  type KnowledgeScope,
   useAddRecordMutation,
   useAppendRecordsCsvMutation,
   useClearRecordTableMutation,
@@ -278,6 +290,151 @@ export const useCompanyKnowledgeList = (
   companyId: string,
 ): UseQueryResult<KnowledgeDocumentDTO[], Error> =>
   useCompanyKnowledge(companyId);
+
+/** How often knowledge status is asked while an index rebuild runs. */
+const KNOWLEDGE_POLL_MS = 3_000;
+
+/**
+ * The scope's documents. Both reads are called to keep the hook order fixed;
+ * the one for the other scope is disabled and never requests.
+ */
+export const useKnowledgeList = (scope: KnowledgeScope) => {
+  const role = useRoleKnowledge(scope.kind === 'role' ? scope.roleId : '', {
+    enabled: scope.kind === 'role',
+  });
+  const company = useCompanyKnowledge(
+    scope.kind === 'company' ? scope.companyId : '',
+    { enabled: scope.kind === 'company' },
+  );
+  return scope.kind === 'role' ? role : company;
+};
+
+/** Semantic search over the scope's knowledge; idle while the query is blank. */
+export const useKnowledgeSearch = (scope: KnowledgeScope, query: string) => {
+  const searching = query.trim() !== '';
+  const role = useRoleKnowledgeSearch(
+    scope.kind === 'role' ? scope.roleId : '',
+    query,
+    { enabled: scope.kind === 'role' && searching },
+  );
+  const company = useCompanyKnowledgeSearch(
+    scope.kind === 'company' ? scope.companyId : '',
+    query,
+    { enabled: scope.kind === 'company' && searching },
+  );
+  return scope.kind === 'role' ? role : company;
+};
+
+/**
+ * The scope's index status. Nothing streams a knowledge index (`knowledge` is
+ * a `STATIC_ENTITIES` kind), so it is polled while a rebuild runs, and not
+ * otherwise. For the company scope the answer is its shared index.
+ */
+export const useKnowledgeStatus = (scope: KnowledgeScope) => {
+  const role = useRoleKnowledgeStatus(
+    scope.kind === 'role' ? scope.roleId : '',
+    {
+      enabled: scope.kind === 'role',
+      refetchInterval: (query) =>
+        query.state.data?.indexing === true && KNOWLEDGE_POLL_MS,
+    },
+  );
+  const company = useCompanyKnowledgeStatus(
+    scope.kind === 'company' ? scope.companyId : '',
+    {
+      enabled: scope.kind === 'company',
+      select: (status) => status.shared,
+      refetchInterval: (query) =>
+        query.state.data?.shared.indexing === true && KNOWLEDGE_POLL_MS,
+    },
+  );
+  return scope.kind === 'role' ? role : company;
+};
+
+/**
+ * The success handler for a knowledge mutation: every knowledge cache refetches.
+ * The request itself stays described in `endpoints.ts`.
+ */
+const useKnowledgeInvalidation = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['knowledge'] });
+  };
+};
+
+/** Uploads a knowledge file; the lists and status refetch on success. */
+export const useUploadKnowledge = (scope: KnowledgeScope) => {
+  const upload = useUploadKnowledgeMutation(scope);
+  return useMutation({
+    mutationFn: (input: { file: File; signal?: AbortSignal }) =>
+      upload.mutateAsync(input),
+    onSuccess: useKnowledgeInvalidation(),
+  });
+};
+
+/** Deletes a knowledge file; the lists and status refetch on success. */
+export const useDeleteKnowledge = (scope: KnowledgeScope) => {
+  const remove = useDeleteKnowledgeMutation(scope);
+  return useMutation({
+    mutationFn: (filename: string) => remove.mutateAsync(filename),
+    onSuccess: useKnowledgeInvalidation(),
+  });
+};
+
+/**
+ * Starts a rebuild. The refetch shows the status as `indexing`, and
+ * {@link useKnowledgeStatus} polls from there until it finishes.
+ */
+export const useReindexKnowledge = (scope: KnowledgeScope) => {
+  const reindex = useReindexKnowledgeMutation(scope);
+  return useMutation({
+    mutationFn: () => reindex.mutateAsync(),
+    onSuccess: useKnowledgeInvalidation(),
+  });
+};
+
+/** Creates a role; the role lists refetch (nothing streams roles). */
+export const useCreateRole = () => {
+  const queryClient = useQueryClient();
+  const create = useCreateRoleMutation();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof create.mutateAsync>[0]) =>
+      create.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['role'] });
+    },
+  });
+};
+
+/** Edits a role; the role lists and details refetch (nothing streams roles). */
+export const useUpdateRole = () => {
+  const queryClient = useQueryClient();
+  const update = useUpdateRoleMutation();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof update.mutateAsync>[0]) =>
+      update.mutateAsync(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['role'] });
+    },
+  });
+};
+
+/**
+ * Deletes a role. Its knowledge files go with it, and a deleted planner clears
+ * the company's `plannerRoleId`, so all three caches are stale.
+ */
+export const useDeleteRole = () => {
+  const queryClient = useQueryClient();
+  const remove = useDeleteRoleMutation();
+  return useMutation({
+    mutationFn: (id: string) => remove.mutateAsync(id),
+    onSuccess: () => {
+      for (const queryKey of [['role'], ['knowledge'], ['company']]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+};
 
 /** Any combination of the three ids an assignment can be reached through. */
 export interface AssignmentFilter {
@@ -709,16 +866,15 @@ export const useLiveAgentState = ({
 // complete door and nothing has a reason to reach past it.
 export {
   useAgentHistory,
-  useCompanyKnowledgeStatus,
   useCompanyUsers,
+  useMcpServers,
   useRoleBySlug,
-  useRoleKnowledge,
-  useRoleKnowledgeSearch,
-  useRoleKnowledgeStatus,
   useSendMessageMutation as useSendMessage,
   useTaskHistory,
   useTranscriptSearch,
 } from './endpoints';
+
+export type { KnowledgeScope };
 
 export { useDoNotStoreList, useRecordSearch, useRecordTable };
 
