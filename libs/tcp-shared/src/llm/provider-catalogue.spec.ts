@@ -21,6 +21,12 @@ describe('PROVIDER_CATALOGUE', () => {
     }
   });
 
+  it('suggests its starter model first', () => {
+    for (const p of PROVIDER_CATALOGUE) {
+      if (p.chat) expect(p.chat.models[0]?.id).toBe(p.chat.starterModel);
+    }
+  });
+
   it('asks for every field its base URL needs', () => {
     for (const p of PROVIDER_CATALOGUE) {
       for (const [, field] of p.baseUrl.matchAll(/\{(\w+)\}/g)) {

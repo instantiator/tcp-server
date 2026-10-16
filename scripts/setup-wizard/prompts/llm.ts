@@ -10,7 +10,7 @@ import type { LlmProviderConfig } from '../types';
 import { promptWithHelp } from '../utils/prompt-with-help';
 import { validateModel } from '../utils/model-validator';
 import { lookupContextWindow } from '../utils/context-lookup';
-import { isHostLocal, toDockerHost } from '../utils/docker-host';
+import { isHostLocal, toDockerHost } from '@tcp/shared/llm/docker-host';
 import {
   DEFAULT_EMBEDDING_DIMENSION,
   RECOMMENDED_LOCAL_CONTEXT_WINDOW,

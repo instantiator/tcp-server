@@ -20,7 +20,7 @@ function isLocalHostname(hostname: string): boolean {
   );
 }
 
-/** Whether `url` points at the machine the wizard itself runs on. */
+/** Whether `url` points at the machine it is typed on, which a container can't reach as `localhost`. */
 export function isHostLocal(url: string): boolean {
   const hostname = parseHostname(url);
   return hostname !== undefined && isLocalHostname(hostname);

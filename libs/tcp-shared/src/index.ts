@@ -47,6 +47,7 @@ export * from './llm/rate-limit';
 export * from './llm/provider-error';
 export * from './llm/run-failure';
 export * from './llm/model-readiness';
+export * from './llm/docker-host';
 export * from './llm/base-url-policy';
 export * from './llm/build-agent-graph';
 export * from './llm/context-length-error';
