@@ -900,6 +900,53 @@ const strings = {
   'records.deleteRows.confirm': 'Delete rows',
   'records.announce.rowsDeleted': 'Rows deleted from {table}: {count}',
   'records.action.retention': 'Retention…',
+  'records.action.columns': 'Columns…',
+  'records.columns.heading': 'Columns of {table}',
+  'records.columns.key':
+    'Key: {fields}. No two rows may have the same values in all of these.',
+  'records.columns.inKey': 'in the key',
+  'records.columns.required': 'required',
+  'records.columns.rename': 'Rename {column}',
+  'records.columns.renameShort': 'Rename',
+  'records.columns.delete': 'Delete {column}',
+  'records.columns.deleteShort': 'Delete',
+  'records.columns.keyNoDelete':
+    'In a key, so it cannot be deleted. Take it out of the key first.',
+  'records.columns.add': 'Add column',
+  'records.columns.changeKey': 'Change key',
+  'records.columns.close': 'Close',
+  'records.columns.back': 'Back',
+  'records.columns.name': 'Column name',
+  'records.columns.nameHint':
+    'Lower-case letters, digits and underscores, starting with a letter, such as animal_name.',
+  'records.columns.nameMissing': 'Give the column a name.',
+  'records.columns.type': 'Type',
+  'records.columns.type.text': 'Text',
+  'records.columns.type.number': 'Number',
+  'records.columns.type.integer': 'Whole number',
+  'records.columns.type.boolean': 'Yes or no',
+  'records.columns.type.date': 'Date',
+  'records.columns.default': 'Value for rows already in the table (optional)',
+  'records.columns.defaultHint.one':
+    'The {count} row already in the table gets this value. Leave it empty to leave it blank.',
+  'records.columns.defaultHint.other':
+    'The {count} rows already in the table get this value. Leave it empty to leave them blank.',
+  'records.columns.requiredLabel': 'Required: every row must have a value',
+  'records.columns.requiredHint':
+    'A new column can be required only if every row gets a value, so give a value for the rows already in the table first.',
+  'records.columns.addSubmit': 'Add column',
+  'records.columns.newName': 'New name for {column}',
+  'records.columns.renameSubmit': 'Rename',
+  'records.columns.keyFields': 'Key fields',
+  'records.columns.keyHint':
+    'Every row needs a value in each key field, and no two rows may share them all. Only text, whole number and date columns can be in the key.',
+  'records.columns.keySubmit': 'Save key',
+  'records.columns.deleteHeading': 'Delete {column} from {table}?',
+  'records.columns.deleteMessage.one':
+    'Its value goes from the {count} row in the table. This cannot be undone.',
+  'records.columns.deleteMessage.other':
+    'Its value goes from all {count} rows in the table. This cannot be undone.',
+  'records.columns.deleteConfirm': 'Delete column',
   'records.retention.heading': 'How long {table} keeps its rows',
   'records.retention.when': 'Delete rows',
   'records.retention.never': 'Never: keep them until someone deletes them',
@@ -917,6 +964,11 @@ const strings = {
   'records.retention.summaryField':
     'Rows are deleted {days} days after {field}.',
   'records.announce.retentionSet': 'Retention saved for {table}',
+  'records.announce.columnAdded': 'Column added to {table}: {column}',
+  'records.announce.columnRenamed':
+    'Column renamed in {table}: {column} is now {newName}',
+  'records.announce.columnDeleted': 'Column deleted from {table}: {column}',
+  'records.announce.keyChanged': 'Key of {table} is now {fields}',
   'records.announce.saved': 'Saved: {field} of {row}',
   'records.announce.notSaved': 'Not saved: {message}',
   'records.announce.stale':

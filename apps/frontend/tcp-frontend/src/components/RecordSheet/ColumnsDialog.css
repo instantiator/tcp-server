@@ -1,0 +1,30 @@
+/* The Columns dialog (001.06): one line per column, its actions at the end. */
+.columns-dialog__list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.columns-dialog__column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+.columns-dialog__name {
+  font-weight: 600;
+}
+
+.columns-dialog__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.columns-dialog__reason {
+  flex-basis: 100%;
+  margin: 0;
+}
