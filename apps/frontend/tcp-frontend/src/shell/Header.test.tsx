@@ -2,11 +2,9 @@ import { vi } from 'vitest';
 
 vi.mock('../auth/sign-out', () => ({ startSignOut: vi.fn() }));
 
-// The account menu's other two destinations (008.06): `ProfileDialog` reads
-// `useAuth()` directly, so a minimal stub profile is enough for this file —
-// the claims themselves are `ProfileDialog.test.tsx`'s subject, not this
-// file's. `MembershipsDialog` reads `useCompanies`, which needs a real fetch
-// stub instead; see `installFetchMock` below.
+// `ProfileDialog` reads `useAuth()` directly, so a minimal stub profile is
+// enough for this file — the claims themselves are `ProfileDialog.test.tsx`'s
+// subject, not this file's.
 vi.mock('react-oidc-context', () => ({
   useAuth: () => ({
     user: {
@@ -94,7 +92,7 @@ describe('Header', () => {
     ).toBeNull();
   });
 
-  it('offers the three account destinations, by role and accessible name', async () => {
+  it('offers the two account destinations, with no separate memberships item, by role and accessible name', async () => {
     const user = userEvent.setup();
     renderHeader(SIGNED_IN);
 
@@ -105,9 +103,7 @@ describe('Header', () => {
     expect(
       screen.getByRole('menuitem', { name: t('header.account.profile') }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('menuitem', { name: t('header.account.memberships') }),
-    ).toBeInTheDocument();
+    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
     expect(
       screen.getByRole('menuitem', { name: t('header.account.signOut') }),
     ).toBeInTheDocument();
@@ -127,8 +123,8 @@ describe('Header', () => {
     await user.keyboard('{Enter}');
 
     // React Aria focuses the first item on open, so reaching sign-out — the
-    // third item — takes two more presses.
-    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    // second item — takes one more press.
+    await user.keyboard('{ArrowDown}{Enter}');
 
     expect(startSignOut).toHaveBeenCalledTimes(1);
   });
@@ -186,23 +182,6 @@ describe('Header', () => {
       ).toBeInTheDocument();
     });
 
-    it('opens the memberships dialog from "My company memberships"', async () => {
-      respondWithJson(200, []);
-      const user = userEvent.setup();
-      renderHeader(SIGNED_IN);
-
-      await openMenu(user);
-      await user.click(
-        screen.getByRole('menuitem', {
-          name: t('header.account.memberships'),
-        }),
-      );
-
-      expect(
-        screen.getByRole('dialog', { name: t('memberships.heading') }),
-      ).toBeInTheDocument();
-    });
-
     it('returns focus to the account button when the profile dialog closes', async () => {
       const user = userEvent.setup();
       renderHeader(SIGNED_IN);
@@ -214,28 +193,6 @@ describe('Header', () => {
       await user.click(
         screen.getByRole('menuitem', { name: t('header.account.profile') }),
       );
-      await user.click(screen.getByRole('button', { name: t('dialog.close') }));
-
-      await waitFor(() => {
-        expect(document.activeElement).toBe(accountButton);
-      });
-    });
-
-    it('returns focus to the account button when the memberships dialog closes', async () => {
-      respondWithJson(200, []);
-      const user = userEvent.setup();
-      renderHeader(SIGNED_IN);
-
-      const accountButton = screen.getByRole('button', {
-        name: t('header.account.label'),
-      });
-      await openMenu(user);
-      await user.click(
-        screen.getByRole('menuitem', {
-          name: t('header.account.memberships'),
-        }),
-      );
-      await screen.findByRole('dialog', { name: t('memberships.heading') });
       await user.click(screen.getByRole('button', { name: t('dialog.close') }));
 
       await waitFor(() => {

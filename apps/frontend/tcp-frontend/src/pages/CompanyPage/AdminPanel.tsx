@@ -5,7 +5,9 @@ import {
   isAdminSection,
   type AdminSection,
 } from './admin-sections';
+import { KnowledgePanel } from './admin/KnowledgePanel';
 import { RolesAdmin } from './admin/RolesAdmin';
+import { UsersAdmin } from './admin/UsersAdmin';
 import { DataProtectionPanel } from './DataProtectionPanel';
 
 export interface AdminPanelProps {
@@ -53,10 +55,15 @@ export const AdminPanel = ({
     <div>
       {section === 'roles' ? (
         <RolesAdmin companyId={companyId} />
-      ) : section === 'data-protection' ? (
-        <DataProtectionPanel companyId={companyId} companySlug={companySlug} />
+      ) : section === 'knowledge' ? (
+        <KnowledgePanel
+          scope={{ kind: 'company', companyId }}
+          headingLevel={2}
+        />
+      ) : section === 'users' ? (
+        <UsersAdmin companyId={companyId} />
       ) : (
-        <p>{t('admin.placeholder')}</p>
+        <DataProtectionPanel companyId={companyId} companySlug={companySlug} />
       )}
     </div>
   </div>

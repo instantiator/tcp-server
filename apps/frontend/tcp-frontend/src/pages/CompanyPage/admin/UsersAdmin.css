@@ -1,0 +1,6 @@
+/* Admin → Users. Theme tokens only (ADR-026); the table itself is the shared `.tcp-table`. */
+.users-admin__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tcp-space-xs);
+}

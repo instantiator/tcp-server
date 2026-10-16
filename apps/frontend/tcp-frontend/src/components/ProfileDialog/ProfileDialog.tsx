@@ -1,6 +1,11 @@
 import { useAuth } from 'react-oidc-context';
+import { Link } from 'react-router';
+import { useCompanies } from '../../api/hooks';
 import { Dialog } from '../Dialog/Dialog';
+import { EmptyState } from '../EmptyState/EmptyState';
+import { ErrorState } from '../ErrorState/ErrorState';
 import { LabelledValue } from '../LabelledValue/LabelledValue';
+import { LoadingState } from '../LoadingState/LoadingState';
 import { t } from '../../strings';
 import './ProfileDialog.css';
 
@@ -23,12 +28,21 @@ export interface ProfileDialogProps {
  * **Read-only is a scope decision (ADR-020), not an oversight.** Editing any
  * of this would need user-management endpoints that do not exist yet.
  *
+ * Below the claims is the list of companies the user can reach, each a link
+ * to open it, with the user's member type in it. `useCompanies({})` — the
+ * membership-scoped `GET /api/company`, with no `?all=true` — is the exact
+ * call `CompaniesPage` makes, so this reads the query cache that page already
+ * filled rather than firing a second request. A plain `<Link>`, matching
+ * `CompaniesPage.tsx`, is both the router's own navigation and something every
+ * assistive technology already understands.
+ *
  * **Nothing here is written anywhere durable.** No `localStorage`, no
  * `sessionStorage`, no query cache entry, no logging of a claim's value —
  * rendering is the only thing that happens to this data.
  */
 export const ProfileDialog = ({ onClose }: ProfileDialogProps) => {
   const { user } = useAuth();
+  const companies = useCompanies({});
   const profile = user?.profile;
 
   const name = profile?.name;
@@ -61,6 +75,52 @@ export const ProfileDialog = ({ onClose }: ProfileDialogProps) => {
           {t('profile.claims.none')}
         </p>
       )}
+
+      <h3>{t('profile.companies.heading')}</h3>
+      {companies.isPending && <LoadingState label={t('memberships.loading')} />}
+
+      {companies.isError && (
+        <ErrorState message={t('memberships.error')} channel="memberships" />
+      )}
+
+      {companies.data !== undefined &&
+        (companies.data.length === 0 ? (
+          <EmptyState heading={t('memberships.empty.heading')} headingLevel={4}>
+            <p>{t('memberships.empty.body')}</p>
+          </EmptyState>
+        ) : (
+          <>
+            <p className="profile-dialog__companies-intro">
+              {t('memberships.intro')}
+            </p>
+            {/*
+              Authoritative, not informational (002.05): this is the list of
+              companies the user CAN REACH. Anything absent from it answers
+              403, not "not listed here" — do not soften this wording back to
+              "companies you are listed in".
+            */}
+            <ul className="profile-dialog__companies">
+              {companies.data.map((company) => (
+                <li key={company.id} className="profile-dialog__company">
+                  <Link
+                    to={`/company/${company.id}`}
+                    // Closing on click, rather than closing only after the
+                    // navigation resolves: the dialog then unmounts, and React
+                    // Aria's `ModalOverlay` returns focus to whatever opened
+                    // it — the account button in `Header.tsx`, which is in the
+                    // header and survives the navigation. That is a deliberate,
+                    // present destination for focus, not `document.body`.
+                    onClick={onClose}
+                  >
+                    {company.name}
+                  </Link>
+                  {company.memberType !== null &&
+                    ` — ${t(`memberType.${company.memberType}`)}`}
+                </li>
+              ))}
+            </ul>
+          </>
+        ))}
 
       <p className="profile-dialog__read-only">{t('profile.readOnly')}</p>
     </Dialog>

@@ -1,9 +1,20 @@
 /*
  * Meaningful class names now, rules filled per theme later (ADR-026). The
- * label-above-value rows are the shared `LabelledValue`.
+ * label-above-value rows are the shared `LabelledValue`. The company list is a
+ * simple stacked list, matching `.companies-page__companies` in
+ * CompaniesPage.css.
  */
 .profile-dialog__claims-note {
 }
 
 .profile-dialog__read-only {
+}
+
+.profile-dialog__companies-intro {
+}
+
+.profile-dialog__companies {
+}
+
+.profile-dialog__company {
 }

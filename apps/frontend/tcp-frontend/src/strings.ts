@@ -32,7 +32,6 @@ const strings = {
 
   'header.account.label': 'Account',
   'header.account.profile': 'My profile',
-  'header.account.memberships': 'My company memberships',
   'header.account.signOut': 'Sign out',
   'header.system.label': 'System',
   'header.system.health': 'System health',
@@ -262,7 +261,6 @@ const strings = {
   'profile.claims.none':
     'Your sign-in provider did not send your name or email. An administrator can set OIDC_LOAD_USER_INFO to true to fetch them.',
   'profile.readOnly': 'Your details are managed by your sign-in provider.',
-  'memberships.heading': 'My company memberships',
   // Authoritative, not informational (002.05): membership is the access
   // control, and a company absent from this list refuses the user with a 403.
   'memberships.intro': 'The companies you have access to.',
@@ -748,7 +746,6 @@ const strings = {
   'admin.menu.users': 'Users',
   'admin.menu.knowledge': 'Knowledge',
   'admin.menu.dataProtection': 'Data protection',
-  'admin.placeholder': 'Not built yet.',
   // Admin → Roles (002.00): a sortable, filterable table of the company's
   // roles, with add, open and delete. Deleting confirms first, and says when
   // the company's default planner is among the roles going.
