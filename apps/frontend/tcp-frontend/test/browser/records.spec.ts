@@ -477,6 +477,7 @@ const makeFeedings = async (
   request: APIRequestContext,
   fixture: Fixture,
   extraColumn?: string,
+  counts?: [string, string],
 ) => {
   const headers = { Authorization: `Bearer ${fixture.token}` };
   const base = `/api/company/${fixture.companyId}/records/tables`;
@@ -491,6 +492,7 @@ const makeFeedings = async (
           feeding_date: { type: 'string', format: 'date' },
           feeding_time: { type: 'string' },
           note: { type: 'string' },
+          ...(counts ? { count: { type: 'string' } } : {}),
         },
         required: ['feeding_date', 'feeding_time'],
       },
@@ -499,8 +501,18 @@ const makeFeedings = async (
   });
   expect(created.status()).toBe(201);
   for (const data of [
-    { feeding_date: '2026-10-01', feeding_time: '08:00', note: 'first' },
-    { feeding_date: '2026-10-02', feeding_time: '08:00', note: 'second' },
+    {
+      feeding_date: '2026-10-01',
+      feeding_time: '08:00',
+      note: 'first',
+      ...(counts ? { count: counts[0] } : {}),
+    },
+    {
+      feeding_date: '2026-10-02',
+      feeding_time: '08:00',
+      note: 'second',
+      ...(counts ? { count: counts[1] } : {}),
+    },
   ]) {
     const added = await request.post(`${base}/feedings/rows`, {
       headers,
@@ -675,5 +687,92 @@ test.describe('column changes (001.06)', () => {
     await notice.getByRole('button', { name: RELOAD }).click();
     await expect(notice).toHaveCount(0);
     await expect(feedingHeader(page, 'animal')).toBeVisible();
+  });
+
+  test('a text column becomes whole numbers, blanking what will not convert', async ({
+    page,
+    request,
+  }) => {
+    await makeFeedings(request, fixture, undefined, ['12', 'lots']);
+    await openFeedings(page, fixture.companyId);
+    const dialog = await openColumns(page);
+    await dialog
+      .getByRole('button', { name: 'Change the type of count' })
+      .click();
+    // The radio input sits under its styled label, which takes the click.
+    await dialog.getByText('Whole number', { exact: true }).click();
+    await dialog.getByRole('button', { name: 'Change type' }).click();
+
+    const confirm = page.getByRole('alertdialog', {
+      name: 'Blank values in count?',
+    });
+    await expect(confirm).toContainText('"lots"');
+    await expect(
+      confirm.getByRole('button', { name: 'Download a copy first' }),
+    ).toBeVisible();
+    await expect(confirm.getByRole('button', { name: 'No' })).toBeFocused();
+    await confirm
+      .getByRole('button', { name: 'Blank them and change type' })
+      .click();
+
+    await expect(confirm).toBeHidden();
+    await expect(dialog).toBeHidden();
+    const countOf = (date: string) =>
+      feedingCell(page, date, 0)
+        .locator('xpath=..')
+        .locator('[col-id="count"]');
+    await expect(countOf('2026-10-01')).toHaveText('12');
+    await expect(countOf('2026-10-02')).toHaveText('');
+  });
+
+  test('a unique key is added, stops a clash and deletion, then is dropped', async ({
+    page,
+    request,
+  }) => {
+    await makeFeedings(request, fixture);
+    await openFeedings(page, fixture.companyId);
+    let dialog = await openColumns(page);
+    await dialog.getByRole('button', { name: 'Add unique key' }).click();
+    await dialog.getByText('note', { exact: true }).click();
+    await dialog.getByRole('button', { name: 'Add unique key' }).last().click();
+    await expect(dialog).toBeHidden();
+
+    dialog = await openColumns(page);
+    await expect(dialog).toContainText('Also unique:');
+    await expect(dialog).toContainText('note');
+    await expect(
+      dialog.getByRole('button', { name: 'Delete note' }),
+    ).toBeDisabled();
+
+    const clash = () =>
+      request.post(
+        `/api/company/${fixture.companyId}/records/tables/feedings/rows`,
+        {
+          headers: { Authorization: `Bearer ${fixture.token}` },
+          data: {
+            data: {
+              feeding_date: '2026-10-03',
+              feeding_time: '08:00',
+              note: 'first',
+            },
+          },
+        },
+      );
+    expect((await clash()).status()).toBe(409);
+
+    await dialog.getByRole('button', { name: 'Drop unique key note' }).click();
+    const confirm = page.getByRole('alertdialog', {
+      name: 'Drop the unique key on note?',
+    });
+    await confirm.getByRole('button', { name: 'Drop unique key' }).click();
+    await expect(confirm).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    dialog = await openColumns(page);
+    await expect(
+      dialog.getByRole('button', { name: 'Delete note' }),
+    ).toBeEnabled();
+    expect((await clash()).status()).toBe(201);
   });
 });

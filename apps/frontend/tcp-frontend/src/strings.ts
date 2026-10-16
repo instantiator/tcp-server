@@ -947,6 +947,29 @@ const strings = {
   'records.columns.deleteMessage.other':
     'Its value goes from all {count} rows in the table. This cannot be undone.',
   'records.columns.deleteConfirm': 'Delete column',
+  'records.columns.retype': 'Change the type of {column}',
+  'records.columns.retypeShort': 'Type',
+  'records.columns.retypeLabel': 'New type for {column}',
+  'records.columns.retypeHint':
+    'Each value is converted. Numbers written as text become numbers, anything can become text, and text already written as a date (YYYY-MM-DD) or as true or false keeps its meaning.',
+  'records.columns.retypeSubmit': 'Change type',
+  'records.columns.blankHeading': 'Blank values in {column}?',
+  'records.columns.blankMessage':
+    'If you go on, those values are removed from their rows and the rest are converted. This cannot be undone.',
+  'records.columns.blankConfirm': 'Blank them and change type',
+  'records.columns.uniqueKeys':
+    'Also unique: no two rows may have the same values in each of these.',
+  'records.columns.dropUnique': 'Drop unique key {fields}',
+  'records.columns.dropUniqueShort': 'Drop',
+  'records.columns.addUnique': 'Add unique key',
+  'records.columns.uniqueFields': 'Fields that must be unique together',
+  'records.columns.uniqueHint':
+    'Every row needs a value in each of these, and no two rows may share them all. Only text, whole number and date columns can be in a key.',
+  'records.columns.uniqueSubmit': 'Add unique key',
+  'records.columns.dropUniqueHeading': 'Drop the unique key on {fields}?',
+  'records.columns.dropUniqueMessage':
+    'Rows will no longer have to differ in {fields}, so the same thing could be recorded twice.',
+  'records.columns.dropUniqueConfirm': 'Drop unique key',
   'records.retention.heading': 'How long {table} keeps its rows',
   'records.retention.when': 'Delete rows',
   'records.retention.never': 'Never: keep them until someone deletes them',
@@ -969,6 +992,11 @@ const strings = {
     'Column renamed in {table}: {column} is now {newName}',
   'records.announce.columnDeleted': 'Column deleted from {table}: {column}',
   'records.announce.keyChanged': 'Key of {table} is now {fields}',
+  'records.announce.columnRetyped':
+    'Column type changed in {table}: {column} is now {type}',
+  'records.announce.uniqueKeyAdded': 'Unique key added to {table}: {fields}',
+  'records.announce.uniqueKeyDropped':
+    'Unique key dropped from {table}: {fields}',
   'records.announce.saved': 'Saved: {field} of {row}',
   'records.announce.notSaved': 'Not saved: {message}',
   'records.announce.stale':

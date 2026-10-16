@@ -25,6 +25,7 @@ import {
 import type {
   AddColumn,
   AppendRecordsCsvResult,
+  RetypeColumn,
   RecordTableRetention,
 } from './dtos';
 import type { components } from './schema';
@@ -827,6 +828,61 @@ export const useSetPrimaryKeyMutation = (companyId: string, table: string) =>
           params: { path: { companyId, table } },
           body: { fields },
         }),
+      ),
+  });
+
+/** Adds a unique key over `fields`; refused when rows lack a value or would clash. */
+export const useAddUniqueKeyMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (fields: string[]) =>
+      unwrap(
+        api.POST(
+          '/api/company/{companyId}/records/tables/{table}/unique-keys',
+          {
+            params: { path: { companyId, table } },
+            body: { fields },
+          },
+        ),
+      ),
+  });
+
+/** Drops the unique key over exactly `fields`. */
+export const useDropUniqueKeyMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (fields: readonly string[]) =>
+      unwrap(
+        api.DELETE(
+          '/api/company/{companyId}/records/tables/{table}/unique-keys/{key}',
+          { params: { path: { companyId, table, key: fields.join(',') } } },
+        ),
+      ),
+  });
+
+/**
+ * Changes a column's type; a `409` `unconvertible` names the values that
+ * won't convert, and `blankUnconvertible` confirms blanking them.
+ */
+export const useRetypeColumnMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: ({
+      column,
+      blankUnconvertible,
+      ...type
+    }: RetypeColumn & { column: string; blankUnconvertible?: boolean }) =>
+      unwrap(
+        api.PUT(
+          '/api/company/{companyId}/records/tables/{table}/columns/{column}/type',
+          {
+            params: {
+              path: { companyId, table, column },
+              query:
+                blankUnconvertible === true
+                  ? { blankUnconvertible }
+                  : undefined,
+            },
+            body: type,
+          },
+        ),
       ),
   });
 

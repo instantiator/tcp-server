@@ -55,7 +55,7 @@ const requestsTo = async (path: RegExp) => {
   return found;
 };
 
-const renderDialog = (records = 2) => {
+const renderDialog = (records = 2, definition = FEEDINGS) => {
   const onClose = vi.fn();
   const onChanged = vi.fn();
   render(
@@ -67,7 +67,7 @@ const renderDialog = (records = 2) => {
       <ColumnsDialog
         companyId="c1"
         companySlug="acme"
-        definition={FEEDINGS}
+        definition={definition}
         records={records}
         onClose={onClose}
         onChanged={onChanged}
@@ -433,5 +433,198 @@ describe('ColumnsDialog', () => {
         fields: 'feeding_date, feeding_time, note',
       },
     );
+  });
+
+  describe('types and unique keys', () => {
+    /** Opens Change type for `column` and picks `type`. */
+    const retypeTo = async (
+      user: ReturnType<typeof userEvent.setup>,
+      column: string,
+      type: string,
+    ) => {
+      await user.click(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.retype', { column }),
+        }),
+      );
+      await user.click(within(dialog()).getByRole('radio', { name: type }));
+      await user.click(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.retypeSubmit'),
+        }),
+      );
+    };
+
+    it('changes a column type, starting from its current one', async () => {
+      const user = userEvent.setup();
+      const { onClose } = renderDialog();
+      await user.click(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.retype', { column: 'portion' }),
+        }),
+      );
+      expect(
+        within(dialog()).getByRole('radio', {
+          name: t('records.columns.type.number'),
+        }),
+      ).toBeChecked();
+      // The same type is no change at all.
+      expect(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.retypeSubmit'),
+        }),
+      ).toBeDisabled();
+      await user.click(
+        within(dialog()).getByRole('radio', {
+          name: t('records.columns.type.integer'),
+        }),
+      );
+      await user.click(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.retypeSubmit'),
+        }),
+      );
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(await requestsTo(/\/columns\/portion\/type/)).toEqual([
+        {
+          method: 'PUT',
+          url: expect.not.stringContaining('blankUnconvertible') as unknown,
+          body: { type: 'integer' },
+        },
+      ]);
+      expect(announceRecords).toHaveBeenCalledWith(
+        'records.announce.columnRetyped',
+        {
+          table: 'feedings',
+          column: 'portion',
+          type: t('records.columns.type.integer'),
+        },
+      );
+    });
+
+    it("asks before blanking values that won't convert, quoting them, focusing No, then blanks on confirm", async () => {
+      const user = userEvent.setup();
+      const reason =
+        "1 value doesn't convert to a whole number in 'note', e.g. record r2: \"lots\". Changing the type blanks them";
+      respondByRoute([
+        [/blankUnconvertible=true/, { body: FEEDINGS }],
+        [
+          /\/columns\/note\/type$/,
+          { status: 409, body: { message: reason, code: 'unconvertible' } },
+        ],
+      ]);
+      const { onClose } = renderDialog();
+      await retypeTo(user, 'note', t('records.columns.type.integer'));
+
+      const ask = await screen.findByRole('alertdialog', {
+        name: t('records.columns.blankHeading', { column: 'note' }),
+      });
+      expect(ask).toHaveTextContent(reason);
+      expect(
+        within(ask).getByRole('button', { name: t('records.downloadFirst') }),
+      ).toBeInTheDocument();
+      expect(
+        within(ask).getByRole('button', { name: t('confirm.no') }),
+      ).toHaveFocus();
+      expect(onClose).not.toHaveBeenCalled();
+
+      await user.click(
+        within(ask).getByRole('button', {
+          name: t('records.columns.blankConfirm'),
+        }),
+      );
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(
+        requestedUrls().filter((u) => u.includes('blankUnconvertible=true')),
+      ).toHaveLength(1);
+    });
+
+    it('shows a refusal that blanking cannot fix, and stays open', async () => {
+      const user = userEvent.setup();
+      const reason = "'feeding_time' is in a key, so they can't be blanked";
+      respondByRoute([[/\/type$/, { status: 400, body: { message: reason } }]]);
+      const { onClose } = renderDialog();
+      await retypeTo(user, 'feeding_time', t('records.columns.type.integer'));
+      expect(await within(dialog()).findByText(reason)).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('adds a unique key from the columns that can be one', async () => {
+      const user = userEvent.setup();
+      const { onClose } = renderDialog();
+      await user.click(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.addUnique'),
+        }),
+      );
+      const group = within(dialog()).getByRole('group', {
+        name: t('records.columns.uniqueFields'),
+      });
+      expect(
+        within(group).queryAllByRole('checkbox', { checked: true }),
+      ).toEqual([]);
+      const save = within(dialog()).getByRole('button', {
+        name: t('records.columns.uniqueSubmit'),
+      });
+      expect(save).toBeDisabled();
+      await user.click(within(group).getByRole('checkbox', { name: 'note' }));
+      await user.click(save);
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(await requestsTo(/\/unique-keys$/)).toEqual([
+        {
+          method: 'POST',
+          url: expect.stringContaining('/unique-keys') as unknown,
+          body: { fields: ['note'] },
+        },
+      ]);
+      expect(announceRecords).toHaveBeenCalledWith(
+        'records.announce.uniqueKeyAdded',
+        { table: 'feedings', fields: 'note' },
+      );
+    });
+
+    it('lists unique keys, keeps their columns from being deleted, and drops one after asking', async () => {
+      const user = userEvent.setup();
+      const { onClose } = renderDialog(2, {
+        ...FEEDINGS,
+        uniqueKeys: [['note', 'feeding_date']],
+      });
+      expect(dialog()).toHaveTextContent(t('records.columns.uniqueKeys'));
+      expect(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.delete', { column: 'note' }),
+        }),
+      ).toBeDisabled();
+      await user.click(
+        within(dialog()).getByRole('button', {
+          name: t('records.columns.dropUnique', {
+            fields: 'note, feeding_date',
+          }),
+        }),
+      );
+      const ask = await screen.findByRole('alertdialog', {
+        name: t('records.columns.dropUniqueHeading', {
+          fields: 'note, feeding_date',
+        }),
+      });
+      expect(
+        within(ask).getByRole('button', { name: t('confirm.no') }),
+      ).toHaveFocus();
+      await user.click(
+        within(ask).getByRole('button', {
+          name: t('records.columns.dropUniqueConfirm'),
+        }),
+      );
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(await requestsTo(/\/unique-keys\//)).toEqual([
+        {
+          method: 'DELETE',
+          url: expect.stringContaining(
+            `/unique-keys/${encodeURIComponent('note,feeding_date')}`,
+          ) as unknown,
+          body: null,
+        },
+      ]);
+    });
   });
 });

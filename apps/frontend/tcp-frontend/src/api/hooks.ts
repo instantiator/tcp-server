@@ -84,6 +84,9 @@ import {
   useRenameColumnMutation,
   useDeleteColumnMutation,
   useSetPrimaryKeyMutation,
+  useAddUniqueKeyMutation,
+  useDropUniqueKeyMutation,
+  useRetypeColumnMutation,
   useRecordTable,
   useRecordTables,
   useUpdateRecordMutation,
@@ -918,6 +921,18 @@ export const useDeleteColumn = (companyId: string, table: string) =>
 /** Replaces the primary key; a `400` or `409` says which rows stop it. */
 export const useSetPrimaryKey = (companyId: string, table: string) =>
   useBulkRecordMutation(companyId, table, useSetPrimaryKeyMutation);
+
+/** Adds a unique key; a `400` or `409` says which rows stop it. */
+export const useAddUniqueKey = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useAddUniqueKeyMutation);
+
+/** Drops a unique key. */
+export const useDropUniqueKey = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useDropUniqueKeyMutation);
+
+/** Changes a column's type; a `409` `unconvertible` asks whether to blank what won't convert. */
+export const useRetypeColumn = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useRetypeColumnMutation);
 
 /**
  * Deletes chosen rows together, removing them from the cached table where
