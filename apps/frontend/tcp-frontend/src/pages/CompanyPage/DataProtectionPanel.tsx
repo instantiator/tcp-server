@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { Button } from 'react-aria-components';
 import { ApiError } from '../../api/errors';
-import type { RowChanges } from '../../api/hooks';
+import type { TableChanges } from '../../api/hooks';
 import type { RecordSearchResult, TimedRecord } from '../../api/dtos';
 import {
   downloadRecordSelection,
@@ -319,7 +319,11 @@ const SearchResults = ({
     <>
       {changes.any && (
         <OutOfDateNotice
-          message={`${t('records.outOfDate.intro')} ${describeChanges(changes, SEARCH_WORDS)}. ${t('records.outOfDate.hint')}`}
+          message={
+            changes.columnsChanged
+              ? t('dataProtection.outOfDate.columns')
+              : `${t('records.outOfDate.intro')} ${describeChanges(changes, SEARCH_WORDS)}. ${t('records.outOfDate.hint')}`
+          }
           announcement="dataProtection.announce.outOfDate"
           onReload={onReload}
         />
@@ -374,7 +378,7 @@ const SearchGroup = ({
 }: {
   readonly companyId: string;
   readonly group: RecordSearchResult['groups'][number];
-  readonly changes: RowChanges | undefined;
+  readonly changes: TableChanges | undefined;
   readonly onSelect: (rows: readonly TimedRecord[]) => void;
 }) => {
   const table = group.definition.name;
@@ -441,6 +445,7 @@ const SearchGroup = ({
           describedBy={usageId}
           onSelectionChange={onSelect}
           staleRows={staleRows}
+          readOnly={changes?.columnsChanged}
         />
       </Suspense>
       {dialog}

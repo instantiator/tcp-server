@@ -824,6 +824,8 @@ const strings = {
   'records.outOfDate.reload': 'Reload',
   'records.outOfDate.dropped':
     'This table was deleted elsewhere. You can still read it here, but it cannot be changed.',
+  'records.outOfDate.columns':
+    "This table's columns were changed elsewhere. It cannot be edited until you reload.",
   'records.deleteRow.stale':
     'Delete row: not available, {row} changed elsewhere',
   'records.boolean.yes': 'true',
@@ -931,10 +933,14 @@ const strings = {
   'records.announce.outOfDate':
     '{table} has changed elsewhere. Reload to see the changes.',
   'records.announce.droppedElsewhere': '{table} was deleted elsewhere.',
+  'records.announce.columnsChanged':
+    'The columns of {table} have changed elsewhere. Reload to see them.',
   'dataProtection.outOfDate.deleted.one': '{count} row no longer matches',
   'dataProtection.outOfDate.deleted.other': '{count} rows no longer match',
   'dataProtection.outOfDate.added.one': '{count} new match',
   'dataProtection.outOfDate.added.other': '{count} new matches',
+  'dataProtection.outOfDate.columns':
+    'The columns of a table here were changed elsewhere. Its rows cannot be edited until you reload.',
   'dataProtection.announce.outOfDate':
     'The search results have changed elsewhere. Reload to see the changes.',
 } as const;

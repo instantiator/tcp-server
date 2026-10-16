@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareRows } from './compareRows';
-import type { TimedRecord } from './dtos';
+import { compareRows, sameColumns } from './compareRows';
+import type { RecordTableDefinition, TimedRecord } from './dtos';
 
 const row = (id: string, version = 1): TimedRecord => ({
   id,
@@ -57,5 +57,67 @@ describe('compareRows', () => {
       deleted: new Set(),
       added: 0,
     });
+  });
+});
+
+describe('sameColumns', () => {
+  const orders = (extra: Partial<RecordTableDefinition> = {}) =>
+    ({
+      id: 'd1',
+      name: 'orders',
+      purpose: 'Orders',
+      primaryKey: ['order_id'],
+      uniqueKeys: [],
+      schema: {
+        properties: { order_id: { type: 'string' }, qty: { type: 'integer' } },
+        required: ['order_id', 'qty'],
+      },
+      retention: null,
+      ...extra,
+    }) satisfies RecordTableDefinition;
+
+  it('ignores key order, which jsonb does not keep', () => {
+    expect(
+      sameColumns(
+        orders(),
+        orders({
+          schema: {
+            required: ['order_id', 'qty'],
+            properties: {
+              qty: { type: 'integer' },
+              order_id: { type: 'string' },
+            },
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores retention and purpose, which change no cell', () => {
+    expect(
+      sameColumns(
+        orders(),
+        orders({
+          purpose: 'All orders',
+          retention: { days: 30, from: 'updated' },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('notices an added or renamed column, and a new key', () => {
+    const renamed = orders({
+      schema: {
+        properties: {
+          order_id: { type: 'string' },
+          amount: { type: 'integer' },
+        },
+        required: ['order_id', 'amount'],
+      },
+    });
+    expect(sameColumns(orders(), renamed)).toBe(false);
+    expect(
+      sameColumns(orders(), orders({ primaryKey: ['order_id', 'qty'] })),
+    ).toBe(false);
   });
 });

@@ -22,7 +22,11 @@ import {
   type ConversationListParams,
   type TaskListParams,
 } from './query-keys';
-import type { AppendRecordsCsvResult, RecordTableRetention } from './dtos';
+import type {
+  AddColumn,
+  AppendRecordsCsvResult,
+  RecordTableRetention,
+} from './dtos';
 import type { components } from './schema';
 import { readWarnings } from './warnings';
 
@@ -767,6 +771,61 @@ export const useSetRetentionMutation = (companyId: string, table: string) =>
         api.PUT('/api/company/{companyId}/records/tables/{table}/retention', {
           params: { path: { companyId, table } },
           body: { retention },
+        }),
+      ),
+  });
+
+/** Adds a column; every existing row gets `default`, when one is given (001.06). */
+export const useAddColumnMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: ({
+      confirmDoNotStore,
+      ...column
+    }: AddColumn & DoNotStoreConfirmation) =>
+      unwrap(
+        api.POST('/api/company/{companyId}/records/tables/{table}/columns', {
+          params: {
+            path: { companyId, table },
+            query:
+              confirmDoNotStore === true ? { confirmDoNotStore } : undefined,
+          },
+          body: column,
+        }),
+      ),
+  });
+
+/** Renames a column in the table and every row. */
+export const useRenameColumnMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: ({ column, newName }: { column: string; newName: string }) =>
+      unwrap(
+        api.PATCH(
+          '/api/company/{companyId}/records/tables/{table}/columns/{column}',
+          { params: { path: { companyId, table, column } }, body: { newName } },
+        ),
+      ),
+  });
+
+/** Deletes a column and its value from every row; a key column is refused. */
+export const useDeleteColumnMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (column: string) =>
+      unwrap(
+        api.DELETE(
+          '/api/company/{companyId}/records/tables/{table}/columns/{column}',
+          { params: { path: { companyId, table, column } } },
+        ),
+      ),
+  });
+
+/** Replaces the table's primary key; refused when rows would share a key or lack a value. */
+export const useSetPrimaryKeyMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (fields: string[]) =>
+      unwrap(
+        api.PUT('/api/company/{companyId}/records/tables/{table}/primary-key', {
+          params: { path: { companyId, table } },
+          body: { fields },
         }),
       ),
   });

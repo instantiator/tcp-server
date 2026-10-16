@@ -246,6 +246,59 @@ describe('TableView when the table changes elsewhere (001.05)', () => {
     );
   });
 
+  it('turns read-only, keeping Reload, once its columns change elsewhere (001.06)', async () => {
+    const queryClient = renderView();
+    await cellsOf('A1');
+    await virtual.clearSpokenPhraseLog();
+
+    // A person renamed qty to amount: every row is rewritten, and the columns differ.
+    const renamed: RecordTableRows = {
+      ...tableOf([
+        row('r2', { order_id: 'A2', amount: 5 }, 2),
+        row('r1', { order_id: 'A1', amount: 2 }, 2),
+      ]),
+    };
+    renamed.definition = {
+      ...renamed.definition,
+      schema: {
+        properties: {
+          order_id: { type: 'string' },
+          amount: { type: 'integer' },
+        },
+        required: ['order_id', 'amount'],
+      },
+    };
+    await hearChange(queryClient, renamed, 'alter_table');
+
+    const shown = await notice();
+    expect(shown).toHaveTextContent(t('records.outOfDate.columns'));
+    expect(
+      screen.getByRole('button', {
+        name: t('records.addRow', { table: 'orders' }),
+      }),
+    ).toBeDisabled();
+    // Nothing on screen moves or is renamed until the reader asks.
+    expect(shownKeys().map((k) => k?.slice(0, 2))).toEqual(['A2', 'A1']);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await spoken()).toEqual([
+      'polite: The columns of orders have changed elsewhere. Reload to see them.',
+    ]);
+
+    await userEvent.click(
+      within(shown).getByRole('button', {
+        name: t('records.outOfDate.reload'),
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('group', { name: t('records.outOfDate.label') }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByRole('columnheader', { name: /amount/ }),
+    ).toBeInTheDocument();
+  });
+
   it('turns read-only, with no reload, once the table is deleted elsewhere', async () => {
     const queryClient = renderView();
     await cellsOf('A1');
