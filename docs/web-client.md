@@ -581,6 +581,7 @@ this is how to use what it decided.
 | `useLocalModels(companyId, query, revision)`                                           | A local server's models; the key is never in the cache key       | No                                     |
 | `useToolFootprint(companyId, slug, mode)`                                              | Tokens a role's tool schemas take a turn                         | No                                     |
 | `useUpdateCompany()`                                                                   | Company writes, with warnings                                    | No                                     |
+| `useCreateCompany()`, `useDeleteCompany()`                                             | Create (409 on a taken slug) and delete a company                | No                                     |
 | `useTaskHistory(id)`                                                                   | A task's audit history                                           | No                                     |
 | `useTranscriptSearch(companyId, q)`                                                    | Agents whose transcripts contain `q` (from 2 characters)         | No                                     |
 
@@ -1154,11 +1155,18 @@ Downloads go through `getBlob` in `client.ts`, so they carry the token and the
 
 The Admin tab is the last tab on the company page. It uses the same menu and
 main-area layout as Data, with the shared `.tcp-side-menu` and `.tcp-table`
-classes in `styles/base.css`. The menu holds five sections, and the hash names
-the open one: `#admin/roles`, `#admin/models`, `#admin/users`,
+classes in `styles/base.css`. The menu holds six sections, and the hash names
+the open one: `#admin/company`, `#admin/roles`, `#admin/models`, `#admin/users`,
 `#admin/knowledge` and `#admin/data-protection` ([Data
 protection](#data-protection-00104) lives here now). The section list is in
-`admin-sections.ts`.
+`admin-sections.ts`. Company (002.02) is first, and is also what a bare or
+unknown `#admin` opens.
+
+- **Company** (002.02, `CompanyAdmin.tsx`) edits the company's name,
+  description, time zone, company context, system prompt template, version
+  retention and default planner. Save sends only the fields that changed, and
+  an emptied field is sent as `null`. Models stay in Language models. **Delete
+  company** asks first, then returns to `/companies`.
 
 - **Roles** is a React Aria `Table` with sorting, a name filter and multi-select
   delete. Delete asks first, and warns when the planner role is selected.
@@ -1203,6 +1211,17 @@ protection](#data-protection-00104) lives here now). The section list is in
   index** queues a rebuild. While indexing, status is polled every 3 s
   (`useKnowledgeStatus`). **Test search** shows the chunks a prompt would
   retrieve, with no LLM call.
+
+**Creating a company** (002.02): the Companies page has a **New company**
+button, in its header and in its empty state. It opens `CreateCompanyDialog`
+with name, slug (it follows the name until edited), description, time zone (the
+browser's, by default), company context, and the chat and embedding pickers.
+The picker takes no `companyId` there, so it offers suggestions but can't list
+a local server's models until the company exists. A taken slug comes back as a
+409 and is shown on the slug field. On success the page opens the new
+company's `#admin/roles`, since a company needs roles before it can run tasks.
+`TimezoneField` (`components/Field/`) is a `ComboBox` over
+`Intl.supportedValuesOf('timeZone')` plus `UTC`, which V8 leaves out.
 
 The **Profile** dialog lists your companies with your member type. The
 Memberships dialog and its Account menu item are gone, so the Account menu has

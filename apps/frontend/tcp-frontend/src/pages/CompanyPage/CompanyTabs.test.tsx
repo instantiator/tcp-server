@@ -1075,19 +1075,42 @@ describe('CompanyTabs', () => {
       );
     });
 
-    it('opens Admin on Roles for an unknown section, and writes a chosen section into the hash', async () => {
+    it('opens Admin on Company for no section, and for an unknown one, and writes a chosen section into the hash', async () => {
       respondActivity();
       const user = userEvent.setup();
       renderActivity('/#admin/nonsense');
 
       expect(
-        screen.getByRole('option', { name: t('admin.menu.roles') }),
+        screen.getByRole('option', { name: t('admin.menu.company') }),
       ).toHaveAttribute('aria-selected', 'true');
 
       await user.click(
         screen.getByRole('option', { name: t('admin.menu.users') }),
       );
       expect(screen.getByTestId('hash')).toHaveTextContent('#admin/users');
+    });
+
+    it('opens the Company section from #admin/company and from a bare #admin', async () => {
+      respondActivity();
+      renderActivity('/#admin');
+
+      expect(
+        screen.getByRole('option', { name: t('admin.menu.company') }),
+      ).toHaveAttribute('aria-selected', 'true');
+      expect(
+        await screen.findByRole('heading', {
+          name: t('admin.company.heading'),
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('opens the Company section from #admin/company', () => {
+      respondActivity();
+      renderActivity('/#admin/company');
+
+      expect(
+        screen.getByRole('option', { name: t('admin.menu.company') }),
+      ).toHaveAttribute('aria-selected', 'true');
     });
 
     it('opens the Language models section from #admin/models', async () => {

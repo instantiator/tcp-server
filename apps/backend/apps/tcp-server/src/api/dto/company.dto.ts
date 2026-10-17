@@ -105,13 +105,17 @@ export class UpdateCompanyDto {
   @Type(() => LlmConfigDto)
   embeddingConfig?: LlmConfigDto | null;
 
+  /** Prompt part 2 for every agent; `null` leaves it out. */
+  @ApiProperty({ type: String, nullable: true, required: false })
   @IsOptional()
   @IsString()
-  companyContext?: string;
+  companyContext?: string | null;
 
+  /** The default for roles without their own; `null` uses the built-in one. */
+  @ApiProperty({ type: String, nullable: true, required: false })
   @IsOptional()
   @IsString()
-  systemPromptTemplate?: string;
+  systemPromptTemplate?: string | null;
 
   @IsOptional()
   @IsArray()
@@ -130,12 +134,21 @@ export class UpdateCompanyDto {
   @Max(3650)
   versionRetentionDays?: number | null;
 
+  /** IANA zone name, for display; `null` clears it. */
+  @ApiProperty({ type: String, nullable: true, required: false })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))
   @IsIanaTimeZone()
-  timezone?: string;
+  timezone?: string | null;
 
+  /** The default planner, one of this company's roles; `null` clears it. */
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    required: false,
+  })
   @IsOptional()
   @IsUUID()
-  plannerRoleId?: UUID;
+  plannerRoleId?: UUID | null;
 }

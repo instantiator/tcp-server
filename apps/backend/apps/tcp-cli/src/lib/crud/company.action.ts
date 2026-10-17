@@ -44,7 +44,11 @@ export function listCompaniesAction(opts: GlobalOptions): Promise<void> {
   });
 }
 
-/** Creates or updates a company from JSON (`--input` or stdin). */
+/**
+ * Creates or updates a company from JSON (`--input` or stdin). A create
+ * replaces any company with the same slug (`?replace=true`), which the seed
+ * scripts rely on; the server allows that only for members and admins.
+ */
 export function setCompanyAction(
   opts: GlobalOptions,
   cmdOpts: EntityRefOpts & { input?: string },
@@ -68,7 +72,12 @@ export function setCompanyAction(
           `/api/company/${identifier}`,
           data,
         )
-      : await apiRequest<TcpCompany>(api, 'POST', '/api/company', data);
+      : await apiRequest<TcpCompany>(
+          api,
+          'POST',
+          '/api/company?replace=true',
+          data,
+        );
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });
 }

@@ -54,7 +54,12 @@ export interface LlmConfigPickerProps {
   /** The saved config, as the server returned it (key masked). */
   readonly saved: LlmConfig | null | undefined;
   readonly fallback: LlmFallback;
-  readonly companyId: string;
+  /**
+   * The company whose saved keys and address policy a local server's model
+   * list goes through. Absent while the company is being created: there is
+   * nothing to list through yet, so only the suggestions are offered.
+   */
+  readonly companyId?: string;
   /** A role whose saved key may be used to list a local server's models. */
   readonly roleId?: string;
   /** Tokens the role's tools take a turn, or `unsaved` for a new role. */
@@ -155,7 +160,12 @@ export const LlmConfigPicker = ({
   // rather than on every keystroke in the address or key fields.
   const [listing, setListing] = useState(() => listingOf(draft, roleId));
   const [revision, setRevision] = useState(0);
-  const models = useLocalModels(companyId, listing, revision);
+  const canList = companyId !== undefined;
+  const models = useLocalModels(
+    companyId ?? '',
+    canList ? listing : null,
+    revision,
+  );
 
   const choose = (key: Key | null): void => {
     const next = chooseProvider(
@@ -295,9 +305,11 @@ export const LlmConfigPicker = ({
                 slot="description"
                 className="react-aria-Text tcp-field__hint"
               >
-                {listError === undefined
-                  ? t('llm.model.hint')
-                  : t('llm.model.listFailed', { reason: listError })}
+                {listError !== undefined
+                  ? t('llm.model.listFailed', { reason: listError })
+                  : !canList && template !== undefined && !isRemote(template)
+                    ? t('llm.model.listAfterCreate')
+                    : t('llm.model.hint')}
               </Text>
               {errors.model !== undefined && (
                 <FieldError className="react-aria-FieldError tcp-field__error">
@@ -319,7 +331,7 @@ export const LlmConfigPicker = ({
                 </ListBox>
               </Popover>
             </ComboBox>
-            {!isRemote(template) && (
+            {canList && !isRemote(template) && (
               <RoundIconButton
                 icon={RefreshCw}
                 label={t('llm.model.refresh')}

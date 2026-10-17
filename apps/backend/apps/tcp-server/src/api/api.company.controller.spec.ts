@@ -150,6 +150,7 @@ describe('CompanyController', () => {
         'acme',
         'alice',
         'alice@example.com',
+        false,
       );
     });
 
@@ -168,6 +169,7 @@ describe('CompanyController', () => {
         'acme',
         'unknown',
         null,
+        false,
       );
     });
 

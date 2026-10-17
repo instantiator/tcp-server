@@ -153,10 +153,14 @@ export class ApiHelper {
     return data!;
   }
 
+  /**
+   * Creates a company, replacing any left by an earlier test or run: the
+   * suite reuses fixed slugs against a long-lived stack.
+   */
   async createTestCompany(name: string, slug: string) {
     const { data } = await this.invokeApi<TcpCompany, TcpCompany>({
       method: 'POST',
-      path: '/api/company',
+      path: '/api/company?replace=true',
       body: {
         name,
         slug,

@@ -226,6 +226,29 @@ a defaulting policy, `@RequirePermission()`, and a surface to set them — carri
 into `002.01` (company configuration view). Until then, **any member of a
 company may take any action within it**.
 
+<a id="amendments-as-implemented-00202"></a>
+
+## Amendments as implemented (002.02) — creating a company can't replace another
+
+_2026-10-17._ `POST /api/company` was "create or replace": it deleted any
+company with the same slug before creating the new one. The route is
+`@NoCompanyScope`, because any signed-in user may create a company, so **anyone
+could delete any company by posting its slug**. The web client's new create
+form would have made that easy to do by accident.
+
+- **An existing slug is now a 409.** Nothing is deleted.
+- **`?replace=true` keeps the old behaviour** for the people who could already
+  delete that company: its members and administrators. Anyone else gets 403.
+  The check is in the handler, because the route names no company to scope by.
+- **The database layer deletes the old slug only when asked to**, so a race
+  between the check and the save hits the slug's unique index instead of
+  deleting a company.
+- `tcp-cli set-company` sends `?replace=true`, so re-running a seed still
+  replaces its company. The web client never sends it.
+- A 409 tells the caller that a slug exists. Slugs are unique across the whole
+  system, so a create form has to say "taken" anyway; the company's id is still
+  never returned.
+
 ## Consequences
 
 - `JwtAuthGuard` is applied to every user-facing controller (see Implemented above)

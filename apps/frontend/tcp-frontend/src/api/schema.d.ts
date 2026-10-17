@@ -113,7 +113,7 @@ export interface paths {
         /** List the caller's companies, with per-company statistics */
         get: operations["CompanyController_listCompanies"];
         put?: never;
-        /** Create or replace a company */
+        /** Create a company, or replace one by slug */
         post: operations["CompanyController_postCompany"];
         delete?: never;
         options?: never;
@@ -2043,18 +2043,18 @@ export interface components {
         UpdateCompanyDto: {
             llmConfig?: components["schemas"]["LlmConfigDto"] | null;
             embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
+            companyContext?: string | null;
+            systemPromptTemplate?: string | null;
+            timezone?: string | null;
+            /** Format: uuid */
+            plannerRoleId?: string | null;
             name?: string;
             description?: string;
-            companyContext?: string;
-            systemPromptTemplate?: string;
             mcpServerList?: string[];
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
             versionRetentionDays?: number | null;
-            timezone?: string;
-            /** Format: uuid */
-            plannerRoleId?: string;
         };
         RoleResponseDto: {
             id: string;
@@ -3101,7 +3101,10 @@ export interface operations {
     };
     CompanyController_postCompany: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Replace an existing company with the same slug. Members of that company and administrators only; 403 for anyone else. Without it, an existing slug is a 409. */
+                replace?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

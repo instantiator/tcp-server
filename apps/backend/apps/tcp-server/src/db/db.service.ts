@@ -43,12 +43,14 @@ export class DbService {
     slug: string,
     creatorIdentifier: string,
     creatorName?: string | null,
+    replace = false,
   ): Promise<TcpCompany> {
     return this.companies.create(
       template,
       slug,
       creatorIdentifier,
       creatorName,
+      replace,
     );
   }
 

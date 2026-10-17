@@ -126,7 +126,7 @@ export const CompanyTabs = ({
       ? hashKey
       : DEFAULT_TAB;
   const [adminHash = ''] = hashRest;
-  const adminSection = isAdminSection(adminHash) ? adminHash : 'roles';
+  const adminSection = isAdminSection(adminHash) ? adminHash : 'company';
   const replaceHash = (next: string): void => {
     void navigate({ hash: next }, { replace: true });
   };

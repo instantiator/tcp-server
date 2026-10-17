@@ -155,6 +155,10 @@ LLM_CONTEXT_WINDOW=32768
 
 `scripts/test-data/companies/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
+> [!TIP]
+> You can also create a company in the web app: **New company** on the
+> Companies page. This walkthrough uses the CLI so each step can be copied.
+
 Pipe it into `tcp-cli.sh` with the `set-company` verb:
 
 ```bash

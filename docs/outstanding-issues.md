@@ -853,11 +853,11 @@ The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with bac
 
 **Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy%20%28draft%29.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
 
-## A deleted default planner can't be replaced in the browser
+## Creating a company doesn't list required secrets or offer a first task
 
-Deleting the company's default planner role (Admin → Roles warns about it) clears `plannerRoleId`. Tasks without their own planner then won't start, and only `tcp-cli` can set a new one.
+The prompt for 002.02 asked the create flow to list required secrets and offer a first task. A plain company has no roles, no planner and no services that need keys, so 002.02 opens Admin → Roles after creating instead.
 
-**Act when:** 002.02 (create and edit a company) lands; it should let a person choose the planner.
+**Act when:** 005.04 (create from template) is planned, or 003.00 (secrets) lands. Both are carried forward into the 005.04 prompt.
 
 ## App-level model defaults can only be changed in env files
 

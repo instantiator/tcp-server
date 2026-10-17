@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -144,23 +145,54 @@ export class CompanyController {
   }
 
   /**
-   * Creates or replaces a {@link TcpCompany}.
-   * If a company with the same slug already exists it is replaced.
+   * Creates a {@link TcpCompany}, or replaces one with the same slug when
+   * `?replace=true` is given. An existing slug without the flag is a 409, so a
+   * create form can't wipe a company by accident. Replacing deletes the old
+   * company and everything it owns, so it needs the same reach as deleting it:
+   * membership of that company, or administrator access.
    * The requesting user (from the bearer token's `sub` claim) is added as a
    * {@link CompanyUser} with `memberType: 'creator'`.
    */
-  @ApiOperation({ summary: 'Create or replace a company' })
+  @ApiOperation({ summary: 'Create a company, or replace one by slug' })
+  @ApiQuery({
+    name: 'replace',
+    required: false,
+    type: Boolean,
+    description:
+      'Replace an existing company with the same slug. Members of that company and administrators only; 403 for anyone else. Without it, an existing slug is a 409.',
+  })
   @ApiCreatedResponse({ type: CompanyResponseDto })
   @NoCompanyScope(
-    'any authenticated caller may create a company; becomes its creator',
+    'any authenticated caller may create a company; replacing one needs membership of it, checked in the handler',
   )
   @Post()
   async postCompany(
     @Body() body: CreateCompanyDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
+    @Query('replace') replaceFlag?: string,
   ): Promise<TcpCompany> {
     const { slug, ...template } = body;
+    // Only the exact string widens what this request may do; anything else
+    // is a plain create, the same rule as `?all` on the list route.
+    const replace = replaceFlag === 'true';
+    const existing = await this.db.getCompany(slug);
+    if (existing) {
+      if (!replace) {
+        throw new ConflictException(
+          `A company with slug '${slug}' already exists.`,
+        );
+      }
+      const identifiers = getCurrentUserIdentifiers(req);
+      if (
+        !this.membership.isAdmin(identifiers) &&
+        !(await this.membership.isMember(identifiers, existing.id))
+      ) {
+        throw new ForbiddenException(
+          'Replacing a company requires membership of it',
+        );
+      }
+    }
     const user = req.user as Record<string, unknown> | undefined;
     const creatorIdentifier =
       typeof user?.sub === 'string' ? user.sub : 'unknown';
@@ -176,6 +208,7 @@ export class CompanyController {
       slug,
       creatorIdentifier,
       creatorName,
+      replace,
     );
     setWarningsHeader(res, computeCompanyWarnings(company));
     return company;
