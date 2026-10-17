@@ -2,7 +2,7 @@ import type { LlmConfig } from '@tcp/shared/client';
 import { useState, type ReactNode, type SubmitEvent } from 'react';
 import { Button } from 'react-aria-components';
 import { announce } from '../../../announce/announcer';
-import type { CompanyDTO } from '../../../api/dtos';
+import type { CompanyDTO, RoleDTO } from '../../../api/dtos';
 import { ApiError } from '../../../api/errors';
 import {
   useCompanyRolesList,
@@ -44,31 +44,35 @@ export interface LanguageModelsAdminProps {
 
 /**
  * Admin → Language models (002.01): the company's chat and embedding models,
- * each chosen with the shared picker, saved together. Waits for the company
- * and the app defaults, so the form starts from the right drafts.
+ * each chosen with the shared picker, saved together. Waits for the company,
+ * the app defaults and the roles, so the form starts from the right drafts
+ * and the no-model check can't run against a roles list still loading.
  */
 export const LanguageModelsAdmin = ({
   companyId,
 }: LanguageModelsAdminProps) => {
   const company = useLiveCompanyState(companyId);
   const defaults = useLlmDefaults();
+  const roles = useCompanyRolesList(companyId);
 
   return (
     <section aria-labelledby="models-admin-heading">
       <h2 id="models-admin-heading">{t('admin.models.heading')}</h2>
-      {company.data && defaults.data ? (
+      {company.data && defaults.data && roles.data ? (
         <ModelsForm
           key={company.data.id}
           company={company.data}
           defaults={defaults.data}
+          roles={roles.data}
         />
-      ) : company.isError || defaults.isError ? (
+      ) : company.isError || defaults.isError || roles.isError ? (
         <ErrorState
           message={t('records.error.generic')}
           channel={CHANNEL}
           onRetry={() => {
             void company.refetch();
             void defaults.refetch();
+            void roles.refetch();
           }}
         />
       ) : (
@@ -105,11 +109,12 @@ const ModelGroup = ({
 const ModelsForm = ({
   company,
   defaults,
+  roles,
 }: {
   readonly company: CompanyDTO;
   readonly defaults: Defaults;
+  readonly roles: readonly RoleDTO[];
 }) => {
-  const roles = useCompanyRolesList(company.id);
   const updateCompany = useUpdateCompany();
   const { check, dialog } = useLocalAddressCheck();
 
@@ -188,7 +193,7 @@ const ModelsForm = ({
     const embeddingPatch = patchOf(embeddingDraft, company.embeddingConfig);
     if (chatPatch === undefined && embeddingPatch === undefined) return;
 
-    const bare = (roles.data ?? []).filter((role) => !role.llmConfig);
+    const bare = roles.filter((role) => !role.llmConfig);
     if (chatPatch === null && defaults.chat === null && bare.length > 0) {
       const yes = await ask({
         heading: t('admin.models.noModel.heading'),

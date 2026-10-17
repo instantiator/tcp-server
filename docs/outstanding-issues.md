@@ -858,3 +858,27 @@ The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with bac
 Deleting the company's default planner role (Admin → Roles warns about it) clears `plannerRoleId`. Tasks without their own planner then won't start, and only `tcp-cli` can set a new one.
 
 **Act when:** 002.02 (create and edit a company) lands; it should let a person choose the planner.
+
+## App-level model defaults can only be changed in env files
+
+The application's default chat and embedding models are the `LLM_*` and `EMBEDDING_*` env vars. The web picker (002.01) shows them read-only (`GET /api/system/llm-defaults`) as the fallback, but nothing in the browser or API can change them, and a change needs a restart.
+
+**Act when:** a deployment needs to change its default model without editing env files and restarting, or when [005.05](prompts/phase%2004%20-%20utility/005.05.00.prompt%20-%20single-user%20home%20install%20%28draft%29.md) (single-user home install) is planned, since a home user won't edit env files. Add an app settings store that overrides the env values, and an admin-only screen for it.
+
+## Suggested models go stale
+
+The provider catalogue's `chat.models` suggestions (`libs/tcp-shared/src/llm/provider-catalogue.ts`) were checked against models.dev on 2026-10-17. Providers retire and rename models, and nothing checks the list. Typing any model name still works.
+
+**Act when:** a suggested model is retired, or at the next catalogue check (see "Remote LLM providers are untested against a real key"). Re-check each list against models.dev and the provider's docs.
+
+## The model picker can't test a connection
+
+The picker lists a local server's models, but there is no "Test" button. `POST /api/model/check` is admin-only and needs the raw API key in the request, which the browser never has for a saved config.
+
+**Act when:** [006.04](prompts/phase%2004%20-%20utility/006.04.00.prompt%20-%20web%20ui%20model%20check%20%28draft%29.md) (web UI model check) is planned. Add a company-scoped check by reference (`{ roleId }` / `{ companyId }`) and a Test button on the picker.
+
+## Any member can change a company's models
+
+Admin → Language models and the role dialog let every member of a company change its models and API keys. Membership is the only access control (ADR-011).
+
+**Act when:** the permission flags land (phase 06 002.01). Gate model changes on `modify_company` / `define_agent_roles`.

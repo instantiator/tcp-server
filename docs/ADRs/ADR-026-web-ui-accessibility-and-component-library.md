@@ -197,3 +197,12 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **The upload control is a native file input**, labelled and described before a file is picked (the accepted types and the 50 MB limit), as `CreateTaskDialog` already did. Cancel is a round button that aborts the request. `fetch` gives no byte progress, so the panel says what is uploading rather than how far along it is.
 - **Tabs inside a dialog.** The role dialog has Details and Knowledge tabs. Knowledge is disabled until the role is saved; React Aria marks it `aria-disabled`, and the reason is visible text under the tab list rather than a tooltip, because a disabled tab can't be focused to show one.
 - **Destructive completion.** After a role or a document is deleted, focus goes to the table, or to the next document's name, or to the heading when nothing is left. Each change is announced on its own channel (`roles`, `knowledge`).
+
+## Amendment as implemented (002.01, phase 04) <a id="amendment-as-implemented-p04-002-01"></a>
+
+[002.01](../prompts/phase%2004%20-%20utility/002.01.01.plan%20-%20web%20ui%20llm%20provider%20picker.md) added the language model picker, used in the role dialog and in Admin → Language models. The decisions above stand.
+
+- **The first styled `Select` and `ComboBox`.** The provider is a React Aria `Select` whose list groups providers under `ListBoxSection` headings. Its first item, the inherit choice, names the model it falls back to, so a screen reader user hears what will run rather than "(none)". The model is a `ComboBox` that accepts any text, and each suggestion's note is its `description` slot.
+- **Secrets are never shown.** The API key is a password field that only holds what is typed. Its description says whether a saved key is kept or will be dropped, because the server drops a key when the address or provider changes. That warning sits on the field, before saving, rather than in a message afterwards.
+- **Two pickers on one page are named groups** (`role="group"`, labelled by their `h3`), so their fields of the same name ("Model", "Provider") can be told apart.
+- **Questions on save are one `ConfirmDialog` at a time**: first the localhost question, then "leave roles without a model?", then "re-index knowledge?". Each one stops the save on No.

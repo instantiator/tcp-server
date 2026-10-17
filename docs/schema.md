@@ -43,7 +43,9 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 
 #### `UpdateCompanyDto` — `PUT /api/company/:id`
 
-All fields optional. Non-null strings must be non-empty. Omitted fields are not changed; pass `null` to clear a nullable field (e.g. `llmConfig`).
+All fields optional. Non-null strings must be non-empty. Omitted fields are not changed; pass `null` to clear a nullable field. `llmConfig: null` and `embeddingConfig: null` clear the company's own models, so the app defaults apply.
+
+`llmConfig` and `embeddingConfig` both merge onto the stored config, and both keep the stored `apiKey` unless the provider or `baseUrl` changes. A new embedding provider, model or `baseUrl` re-indexes the company's knowledge, since vectors from two models can't be compared. The `X-Tcp-Warnings` header names any roles left with no model at all.
 
 #### `CreateRoleDto` — `POST /api/role`
 
@@ -58,7 +60,7 @@ All fields optional. Non-null strings must be non-empty. Omitted fields are not 
 | `llmConfig`            | `LlmConfigDto` | No       | Nested object                                                        |
 | `rolePrompt`           | `string`       | No       |                                                                      |
 
-`PUT /api/role/:id` (`UpdateRoleDto`) works the same way: omitted fields are not changed, and `llmConfig: null` clears the role's own model so it uses the company's again. Role and company responses type `llmConfig` as `LlmConfigDto | null`.
+`PUT /api/role/:id` (`UpdateRoleDto`) works the same way: omitted fields are not changed, and `llmConfig: null` clears the role's own model so it uses the company's again. Role and company responses type `llmConfig` (and the company's `embeddingConfig`) as `LlmConfigDto | null`. A role save warns, in `X-Tcp-Warnings`, when the role, its company and the app defaults all leave it without a model.
 
 #### `LlmConfigDto` — nested in company and role DTOs
 

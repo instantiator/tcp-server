@@ -577,6 +577,10 @@ this is how to use what it decided.
 | `useUploadKnowledge(scope)`, `useDeleteKnowledge(scope)`, `useReindexKnowledge(scope)` | Knowledge writes                                                 | No                                     |
 | `useRoleBySlug(companyId, slug)`                                                       | One role, by slug                                                | No                                     |
 | `useMcpServers()`                                                                      | The MCP servers a role's tools can name (`GET /api/mcp-servers`) | No                                     |
+| `useLlmDefaults()`                                                                     | The app's default models (`GET /api/system/llm-defaults`)        | No                                     |
+| `useLocalModels(companyId, query, revision)`                                           | A local server's models; the key is never in the cache key       | No                                     |
+| `useToolFootprint(companyId, slug, mode)`                                              | Tokens a role's tool schemas take a turn                         | No                                     |
+| `useUpdateCompany()`                                                                   | Company writes, with warnings                                    | No                                     |
 | `useTaskHistory(id)`                                                                   | A task's audit history                                           | No                                     |
 | `useTranscriptSearch(companyId, q)`                                                    | Agents whose transcripts contain `q` (from 2 characters)         | No                                     |
 
@@ -1150,20 +1154,44 @@ Downloads go through `getBlob` in `client.ts`, so they carry the token and the
 
 The Admin tab is the last tab on the company page. It uses the same menu and
 main-area layout as Data, with the shared `.tcp-side-menu` and `.tcp-table`
-classes in `styles/base.css`. The menu holds four sections, and the hash names
-the open one: `#admin/roles`, `#admin/users`, `#admin/knowledge` and
-`#admin/data-protection` ([Data protection](#data-protection-00104) lives
-here now). The section list is in `admin-sections.ts`.
+classes in `styles/base.css`. The menu holds five sections, and the hash names
+the open one: `#admin/roles`, `#admin/models`, `#admin/users`,
+`#admin/knowledge` and `#admin/data-protection` ([Data
+protection](#data-protection-00104) lives here now). The section list is in
+`admin-sections.ts`.
 
 - **Roles** is a React Aria `Table` with sorting, a name filter and multi-select
   delete. Delete asks first, and warns when the planner role is selected.
   **Add role** and each role's name open `RoleDialog`.
 - **The role dialog** has two tabs. **Details** is the form: name,
   description, prompt, and the tools, shown as Company default, On or Off for
-  each MCP server (`useMcpServers`). The model is read-only, with "Use the
-  company's model" to clear it (`llmConfig: null`). **Knowledge** holds the
+  each MCP server (`useMcpServers`), and the role's model in the picker
+  (below). **Knowledge** holds the
   role's documents. It is disabled until the role exists, and says why in text
   under the tab list.
+- **Language models** (002.01) is the company's chat and embedding models,
+  one picker each, saved together. Before sending, Save asks about a
+  `localhost` address. It also asks before leaving roles with no model at all
+  (when the app has no default either), and before an embedding change, which
+  re-indexes all knowledge.
+- **`LlmConfigPicker`** (`components/LlmConfigPicker/`) is a form section, not
+  a form: the host saves it with `patchOf(draft, saved)`. That returns
+  `undefined` when nothing changed, `null` to inherit, or otherwise the whole
+  config, since the server refuses a partial one.
+  - The provider is a `Select` grouped Online / On this machine / Other. Its
+    first item, inheriting, names the model it falls back to.
+  - A remote provider's address is shown, not edited, and region and resource
+    fill it. A local or custom one is typed.
+  - The model is a `ComboBox`: the catalogue's suggestions, plus what a local
+    server lists (`useLocalModels`, asked when the provider is chosen and on
+    Refresh), or any text.
+  - The API key is a password field holding only what was typed. It says
+    whether a saved key is kept or will be dropped.
+  - The context-window hint gives the role's tool footprint as a budget.
+  - Embeddings are checked against `EMBEDDING_DIMENSION`.
+  - `useLocalAddressCheck` offers `host.docker.internal` for a `localhost`
+    address on Save. Roles that end up with no model are marked "No model" in
+    Roles.
 - **Users** is a read-only table of the company's members, sortable by name
   and member type. The name filter falls back to the sign-in identifier when a
   member has no name.
