@@ -40,6 +40,10 @@ export type CompanyTemplatePreview =
   components['schemas']['CompanyTemplatePreviewDto'];
 /** One template in the gallery, with the source it came from. */
 export type GalleryTemplate = components['schemas']['GalleryTemplateDto'];
+/** A place the gallery reads templates from (002.03). */
+export type TemplateSourceDTO = components['schemas']['TemplateSourceDto'];
+/** A GitHub repository to add as a template source. */
+export type AddTemplateSource = components['schemas']['AddTemplateSourceDto'];
 /**
  * The importer's choices, sent as the `options` JSON field. The generated
  * schema types that field as a bare string, so the shape is written here from

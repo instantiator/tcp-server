@@ -246,6 +246,7 @@ describe('Header', () => {
       expect(
         screen.queryByRole('button', { name: t('header.system.label') }),
       ).toBeNull();
+      expect(screen.queryByText(t('header.system.templateSources'))).toBeNull();
     });
 
     it('is absent when the status call fails', async () => {
@@ -289,7 +290,33 @@ describe('Header', () => {
 
         expect(
           screen.getAllByRole('menuitem').map((i) => i.textContent),
-        ).toEqual([t('header.system.health'), t('header.system.shutdown')]);
+        ).toEqual([
+          t('header.system.health'),
+          t('header.system.templateSources'),
+          t('header.system.shutdown'),
+        ]);
+      });
+
+      it('opens the template sources dialog', async () => {
+        respondByRoute([
+          [/\/api\/system\/status/, { body: STATUS(true) }],
+          [/\/api\/template-source/, { body: [] }],
+        ]);
+        const user = userEvent.setup();
+        renderHeader(SIGNED_IN);
+
+        await user.click(await systemButton());
+        await user.click(
+          screen.getByRole('menuitem', {
+            name: t('header.system.templateSources'),
+          }),
+        );
+
+        expect(
+          await screen.findByRole('dialog', {
+            name: t('system.templateSources.heading'),
+          }),
+        ).toBeInTheDocument();
       });
 
       it('opens the shutdown dialog, and focus returns to the button on close', async () => {

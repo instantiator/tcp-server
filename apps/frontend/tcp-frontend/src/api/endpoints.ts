@@ -25,6 +25,7 @@ import {
 } from './query-keys';
 import type {
   AddColumn,
+  AddTemplateSource,
   AppendRecordsCsvResult,
   CompanyTemplatePreview,
   ImportCompanyOptions,
@@ -1375,3 +1376,30 @@ export const useImportCompanyMutation = () =>
 /** The path of a gallery template's zip download. */
 export const templateDownloadPath = (sourceId: string, name: string): string =>
   `/api/template/${encodeURIComponent(sourceId)}/${encodeURIComponent(name)}`;
+
+/** The path of a company's template export; model settings are left out when `models` is false. */
+export const companyExportPath = (companyId: string, models: boolean): string =>
+  `/api/company/${encodeURIComponent(companyId)}/export${models ? '' : '?models=false'}`;
+
+/** The sources the gallery reads templates from. Admin only. */
+export const useTemplateSourcesQuery = () =>
+  useQuery({
+    queryKey: queryKeys.templateSources(),
+    queryFn: () => unwrap(api.GET('/api/template-source')),
+  });
+
+/** Adds a GitHub repository as a source. A `409` means it is already listed. */
+export const useAddTemplateSourceMutation = () =>
+  useMutation({
+    mutationFn: (body: AddTemplateSource) =>
+      unwrap(api.POST('/api/template-source', { body })),
+  });
+
+/** Removes a source added here. `expectAccepted`: the route answers 204 with no body. */
+export const useRemoveTemplateSourceMutation = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      expectAccepted(
+        api.DELETE('/api/template-source/{id}', { params: { path: { id } } }),
+      ),
+  });

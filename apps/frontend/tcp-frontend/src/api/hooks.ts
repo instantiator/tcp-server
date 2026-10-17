@@ -33,6 +33,7 @@ import {
 import { useMemo } from 'react';
 
 import type {
+  AddTemplateSource,
   AgentDTO,
   AssignmentDTO,
   CompanySpendDTO,
@@ -81,6 +82,9 @@ import {
   useImportCompanyMutation,
   usePreviewTemplateMutation,
   templateDownloadPath,
+  companyExportPath,
+  useAddTemplateSourceMutation,
+  useRemoveTemplateSourceMutation,
   useCreateRoleMutation,
   useDeleteCompanyMutation,
   useDeleteKnowledgeMutation,
@@ -485,6 +489,39 @@ export const useDeleteCompany = () => {
       queryClient.removeQueries({ queryKey: queryKeys.company(id) });
       void queryClient.invalidateQueries({ queryKey: ['company'] });
     },
+  });
+};
+
+/** The gallery lists templates from every source, so a source change makes it stale too. */
+const useRefreshTemplateSources = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.templateSources(),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.templateGallery(),
+    });
+  };
+};
+
+/** Adds a GitHub repository as a template source. */
+export const useAddTemplateSource = () => {
+  const add = useAddTemplateSourceMutation();
+  const refresh = useRefreshTemplateSources();
+  return useMutation({
+    mutationFn: (body: AddTemplateSource) => add.mutateAsync(body),
+    onSuccess: refresh,
+  });
+};
+
+/** Removes a template source added in the app. */
+export const useRemoveTemplateSource = () => {
+  const remove = useRemoveTemplateSourceMutation();
+  const refresh = useRefreshTemplateSources();
+  return useMutation({
+    mutationFn: (id: string) => remove.mutateAsync(id),
+    onSuccess: refresh,
   });
 };
 
@@ -943,6 +980,7 @@ export {
   useSendMessageMutation as useSendMessage,
   useTaskHistory,
   useTemplateGalleryQuery as useTemplateGallery,
+  useTemplateSourcesQuery as useTemplateSources,
   useToolFootprintQuery as useToolFootprint,
   useTranscriptSearch,
 } from './endpoints';
@@ -1419,6 +1457,16 @@ export const downloadTemplate = async (
 ): Promise<void> => {
   const { blob } = await getBlob(templateDownloadPath(sourceId, name));
   saveBlob(blob, `${name}.zip`);
+};
+
+/** Downloads a company as a template zip, named by its slug; `includeModels` keeps its model settings. */
+export const downloadCompanyTemplate = async (
+  companyId: string,
+  slug: string,
+  includeModels: boolean,
+): Promise<void> => {
+  const { blob } = await getBlob(companyExportPath(companyId, includeModels));
+  saveBlob(blob, `${slug}.zip`);
 };
 
 /** Downloads one table as CSV, named in local time by the browser, not the server. */

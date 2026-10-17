@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { announce } from '../../../announce/announcer';
 import { t } from '../../../strings';
 import { expectNoA11yViolations } from '../../../test-support/axe';
@@ -307,6 +307,84 @@ describe('CompanyAdmin', () => {
       expect(
         screen.getByRole('button', { name: t('admin.company.delete') }),
       ).toHaveFocus();
+    });
+  });
+
+  describe('exporting as a template', () => {
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:x');
+      URL.revokeObjectURL = vi.fn();
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+        () => undefined,
+      );
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    const exportRoute = (status = 200) =>
+      [/\/api\/company\/c1\/export/, { status, body: 'zip' }] as const;
+
+    const exportUrls = () =>
+      fetchMock.mock.calls
+        .map(([input]) => String(input instanceof Request ? input.url : input))
+        .filter((url) => url.includes('/export'));
+
+    const pressExport = async (user: User) => {
+      await user.click(
+        await screen.findByRole('button', {
+          name: t('admin.company.export.button'),
+        }),
+      );
+    };
+
+    it('includes model settings by default, and says the keys are left out', async () => {
+      respondByRoute([exportRoute(), ...routes()]);
+      const user = userEvent.setup();
+      render_();
+      expect(
+        await screen.findByRole('checkbox', {
+          name: t('admin.company.export.models'),
+        }),
+      ).toBeChecked();
+      expect(
+        screen.getByText(t('admin.company.export.modelsHint')),
+      ).toBeVisible();
+
+      await pressExport(user);
+
+      await waitFor(() => expect(announce).toHaveBeenCalled());
+      const [url] = exportUrls();
+      expect(url).toMatch(/\/api\/company\/c1\/export$/);
+      expect(announce).toHaveBeenCalledWith({
+        channel: 'company',
+        change: 'admin.company.export.announce',
+      });
+    });
+
+    it('leaves model settings out when unchecked', async () => {
+      respondByRoute([exportRoute(), ...routes()]);
+      const user = userEvent.setup();
+      render_();
+      await user.click(
+        await screen.findByRole('checkbox', {
+          name: t('admin.company.export.models'),
+        }),
+      );
+      await pressExport(user);
+
+      await waitFor(() => expect(announce).toHaveBeenCalled());
+      expect(exportUrls()[0]).toMatch(/export\?models=false$/);
+    });
+
+    it('shows an error when the export fails', async () => {
+      respondByRoute([exportRoute(500), ...routes()]);
+      const user = userEvent.setup();
+      render_();
+      await pressExport(user);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        t('records.error.generic'),
+      );
+      expect(announce).not.toHaveBeenCalled();
     });
   });
 

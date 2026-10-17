@@ -1,6 +1,8 @@
 import { useRef, useState, type SubmitEvent } from 'react';
 import {
   Button,
+  CheckboxButton,
+  CheckboxField,
   Label,
   ListBox,
   ListBoxItem,
@@ -15,6 +17,7 @@ import { announce } from '../../../announce/announcer';
 import type { CompanyDTO, RoleDTO } from '../../../api/dtos';
 import { ApiError } from '../../../api/errors';
 import {
+  downloadCompanyTemplate,
   useCompanyRolesList,
   useDeleteCompany,
   useLiveCompanyState,
@@ -113,6 +116,8 @@ const CompanyForm = ({
   const [warnings, setWarnings] = useState<readonly string[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [deleteProblem, setDeleteProblem] = useState<string | null>(null);
+  const [includeModels, setIncludeModels] = useState(true);
+  const [exportProblem, setExportProblem] = useState<string | null>(null);
 
   const nameRef = useRef<HTMLElement | null>(null);
   const descriptionRef = useRef<HTMLElement | null>(null);
@@ -220,6 +225,15 @@ const CompanyForm = ({
       params: { name: saved.name },
     });
     void navigate('/companies');
+  };
+
+  const exportTemplate = (): void => {
+    setExportProblem(null);
+    downloadCompanyTemplate(saved.id, saved.slug, includeModels).then(
+      () =>
+        announce({ channel: CHANNEL, change: 'admin.company.export.announce' }),
+      () => setExportProblem(t('records.error.generic')),
+    );
   };
 
   const plannerOptions = [
@@ -332,6 +346,24 @@ const CompanyForm = ({
           </Button>
         </ButtonRow>
       </form>
+      <h3>{t('admin.company.export.heading')}</h3>
+      <p>{t('admin.company.export.intro')}</p>
+      <CheckboxField isSelected={includeModels} onChange={setIncludeModels}>
+        <CheckboxButton>{t('admin.company.export.models')}</CheckboxButton>
+        <Text slot="description" className="react-aria-Text tcp-field__hint">
+          {t('admin.company.export.modelsHint')}
+        </Text>
+      </CheckboxField>
+      <ButtonRow>
+        <Button className="react-aria-Button" onPress={exportTemplate}>
+          {t('admin.company.export.button')}
+        </Button>
+      </ButtonRow>
+      {exportProblem !== null && (
+        <p className="tcp-field__error" role="alert">
+          {exportProblem}
+        </p>
+      )}
       <h3>{t('admin.company.dangerHeading')}</h3>
       <ButtonRow>
         <Button

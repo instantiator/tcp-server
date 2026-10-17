@@ -36,6 +36,7 @@ const strings = {
   'header.system.label': 'System',
   'header.system.health': 'System health',
   'header.system.shutdown': 'Shut down or restart…',
+  'header.system.templateSources': 'Template sources',
 
   'breadcrumbs.label': 'Breadcrumb',
 
@@ -888,6 +889,7 @@ const strings = {
   'knowledge.column.size': 'Size',
   'knowledge.column.modified': 'Changed',
   'knowledge.column.actions': 'Actions',
+  'knowledge.license.column': 'Licence',
   'knowledge.delete': 'Delete {name}',
   'knowledge.deleteHeading': 'Delete {name}?',
   'knowledge.deleteMessage':
@@ -1371,6 +1373,48 @@ const strings = {
   'admin.company.deleteConfirm': 'Delete company',
   'admin.company.deleteFailed': 'The company wasn’t deleted: {message}',
   'admin.company.announce.deleted': '{name} deleted.',
+
+  // Exporting a company as a template (002.03).
+  'admin.company.export.heading': 'Export as template',
+  'admin.company.export.intro':
+    'Download this company as a zip that can be imported again.',
+  'admin.company.export.models': 'Include model settings',
+  'admin.company.export.modelsHint': 'API keys are never included.',
+  'admin.company.export.button': 'Export as template',
+  'admin.company.export.announce': 'Template downloaded.',
+
+  // The template sources dialog in the System menu (002.03).
+  'system.templateSources.heading': 'Template sources',
+  'system.templateSources.intro':
+    'The gallery shows templates from these places.',
+  'system.templateSources.loading': 'template sources',
+  'system.templateSources.error': 'The template sources could not be loaded.',
+  'system.templateSources.empty': 'No sources are listed.',
+  'system.templateSources.origin.builtin': 'Built in',
+  'system.templateSources.origin.config': 'Set in server config',
+  'system.templateSources.origin.user': 'Added here',
+  'system.templateSources.remove': 'Remove {name}',
+  'system.templateSources.removeHeading': 'Remove {name}?',
+  'system.templateSources.removeMessage':
+    'Its templates will leave the gallery.',
+  'system.templateSources.removeConfirm': 'Remove source',
+  'system.templateSources.removeFailed': 'The source wasn’t removed: {message}',
+  'system.templateSources.announce.removed': 'Removed {name}.',
+  'system.templateSources.add.heading': 'Add a GitHub repository',
+  'system.templateSources.add.name': 'Name',
+  'system.templateSources.add.repo': 'Repository',
+  'system.templateSources.add.repoHint':
+    'As owner/repo, such as acme/templates.',
+  'system.templateSources.add.ref': 'Branch or tag',
+  'system.templateSources.add.refHint': 'Leave empty for main.',
+  'system.templateSources.add.path': 'Folder',
+  'system.templateSources.add.pathHint': 'Leave empty for the repository root.',
+  'system.templateSources.add.submit': 'Add source',
+  'system.templateSources.add.nameRequired': 'Enter a name.',
+  'system.templateSources.add.repoInvalid':
+    'Use owner/repo, such as acme/templates.',
+  'system.templateSources.add.duplicate': 'That source is already listed.',
+  'system.templateSources.announce.added': 'Added {name}.',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */
