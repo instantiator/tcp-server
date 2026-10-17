@@ -257,6 +257,28 @@ describe('apiUpload', () => {
     expect(result).toEqual({ key: 'a/knowledge/b/c.md' });
   });
 
+  it('sends extra fields, and no file when data is null', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({}),
+    });
+
+    await apiUpload(
+      { baseUrl: 'http://localhost:3000', token: 'tok' },
+      '/api/company/import',
+      'x.zip',
+      null,
+      'application/zip',
+      { template: 'builtin/blank' },
+    );
+
+    const body = (fetchSpy.mock.calls[0] as [string, { body: FormData }])[1]
+      .body;
+    expect(body.get('template')).toBe('builtin/blank');
+    expect(body.has('file')).toBe(false);
+  });
+
   it('appends errors[].llmHint to the thrown message, so a validation-failure template reaches the user', async () => {
     fetchSpy.mockResolvedValue({
       ok: false,

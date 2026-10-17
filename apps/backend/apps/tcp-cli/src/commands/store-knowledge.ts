@@ -21,6 +21,9 @@ export function registerStoreKnowledge(program: Command): void {
       '-t, --target <filename>',
       'Filename to store as (defaults to the source filename)',
     )
+    .option('--license <id>', 'Licence of the document (e.g. CC-BY-4.0)')
+    .option('--source-url <url>', 'Where the document came from')
+    .option('--attribution <text>', 'Credit line the licence requires')
     .action(
       (cmdOpts: {
         role?: string;
@@ -31,6 +34,9 @@ export function registerStoreKnowledge(program: Command): void {
         companySlug?: string;
         source: string;
         target?: string;
+        license?: string;
+        sourceUrl?: string;
+        attribution?: string;
       }) => storeKnowledgeAction(getGlobalOptions(program), cmdOpts),
     );
 }

@@ -1,4 +1,7 @@
-import { validateSupportedFileType } from './store-knowledge.action';
+import {
+  provenanceFields,
+  validateSupportedFileType,
+} from './store-knowledge.action';
 
 describe('validateSupportedFileType', () => {
   it.each([
@@ -28,5 +31,14 @@ describe('validateSupportedFileType', () => {
     expect(validateSupportedFileType('README')).toMatch(
       /unsupported file type/,
     );
+  });
+});
+
+describe('provenanceFields', () => {
+  it('sends only the licence fields given, under the server field names', () => {
+    expect(provenanceFields({ license: 'MIT', sourceUrl: 'http://x' })).toEqual(
+      { license: 'MIT', source: 'http://x' },
+    );
+    expect(provenanceFields({})).toEqual({});
   });
 });
