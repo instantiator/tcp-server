@@ -210,6 +210,7 @@ Create or update a company. Reads JSON from `--input` or stdin.
 - **stdout**: the created/updated company as JSON
 - **stderr**: progress/errors, plus any data-quality warnings (see below)
 - Update (`PUT`) when `--company-id`/`--company-slug` is given, or the input JSON contains `id`; otherwise creates (`POST`)
+- A create sends `?replace=true`, so it replaces a company that already has the slug, as re-running a seed expects. The server allows that only if you are a member of that company or an administrator; anyone else gets 403 (002.02)
 
 | Flag                    | Alias | Description                                         |
 | ----------------------- | ----- | --------------------------------------------------- |

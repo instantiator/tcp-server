@@ -41,9 +41,11 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 | `timezone`             | `string`        | No       | IANA name; display/prompt-localization only, never storage              |
 | `versionRetentionDays` | `integer\|null` | No       | 1 to 3650; days old file versions are kept. `null` uses the app default |
 
+A slug that is already taken is a **409**. Add `?replace=true` to delete that company and create this one in its place. Only a member of the existing company or an administrator may do that; anyone else gets 403. `tcp-cli set-company` sends it; the web client never does (002.02). `plannerRoleId` can't be set on create, because a new company has no roles yet.
+
 #### `UpdateCompanyDto` — `PUT /api/company/:id`
 
-All fields optional. Non-null strings must be non-empty. Omitted fields are not changed; pass `null` to clear a nullable field. `llmConfig: null` and `embeddingConfig: null` clear the company's own models, so the app defaults apply.
+All fields optional. Non-null strings must be non-empty. Omitted fields are not changed; pass `null` to clear a nullable field. The nullable fields are `llmConfig`, `embeddingConfig`, `companyContext`, `systemPromptTemplate`, `timezone`, `versionRetentionDays`, `mcpServerToggles` and `plannerRoleId`. `plannerRoleId` must be one of the company's own roles (400 otherwise), and `null` leaves the company with no default planner. `llmConfig: null` and `embeddingConfig: null` clear the company's own models, so the app defaults apply.
 
 `llmConfig` and `embeddingConfig` both merge onto the stored config, and both keep the stored `apiKey` unless the provider or `baseUrl` changes. A new embedding provider, model or `baseUrl` re-indexes the company's knowledge, since vectors from two models can't be compared. The `X-Tcp-Warnings` header names any roles left with no model at all.
 

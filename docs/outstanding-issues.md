@@ -853,6 +853,12 @@ The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with bac
 
 **Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy%20%28draft%29.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
 
+## Creating a company doesn't list required secrets or offer a first task
+
+The prompt for 002.02 asked the create flow to list required secrets and offer a first task. A plain company has no roles, no planner and no services that need keys, so 002.02 opens Admin → Roles after creating instead.
+
+**Act when:** 005.04 (create from template) is planned, or 003.00 (secrets) lands. Both are carried forward into the 005.04 prompt.
+
 ## App-level model defaults can only be changed in env files
 
 The application's default chat and embedding models are the `LLM_*` and `EMBEDDING_*` env vars. The web picker (002.01) shows them read-only (`GET /api/system/llm-defaults`) as the fallback, but nothing in the browser or API can change them, and a change needs a restart.

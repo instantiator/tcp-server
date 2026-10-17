@@ -457,7 +457,7 @@ localhost or a private network only. Security-sensitive: Opus.
 
 ### Web UI: create a company
 
-> 📝 **In a draft, not implemented:** [unplanned.md](<../phase 05 - service quality/unplanned.md>) lists it first. [Phase 06 002.01 company configuration view](<../phase 06 - web ui quality/002.01.00.prompt - company configuration view (draft).md>) covers roles, knowledge and company users, but not creating the company.
+> ✅ **A plain form is done, in [002.02](<002.02.01.plan - web ui create and edit a company.md>):** a New company dialog on the Companies page, and Admin → Company to edit, choose the default planner and delete. Starting from a template comes with [002.03](<002.03.00.prompt - company template format v1 with import and export (draft).md>) and [005.04](<005.04.00.prompt - company templates v2, gallery and create from template (draft).md>), which also carry listing required secrets and offering a first task. There is no `region` field on a company.
 
 Already noted in [unplanned.md](<../phase 05 - service quality/unplanned.md>). Today companies are created with
 the TUI or `tcp-cli set-company`. The web flow should start from the
