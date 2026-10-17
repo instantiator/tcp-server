@@ -38,6 +38,7 @@ import {
   type LlmDraftErrors,
 } from '../../../components/LlmConfigPicker/llmDraft';
 import { useLocalAddressCheck } from '../../../components/LlmConfigPicker/useLocalAddressCheck';
+import { slugify } from '../../../components/Field/slugify';
 import { t } from '../../../strings';
 import './RoleDialog.css';
 import { KnowledgePanel } from './KnowledgePanel';
@@ -55,14 +56,6 @@ type Toggles = Record<string, boolean>;
 
 const toChoice = (value: string): Choice =>
   value === 'on' || value === 'off' ? value : 'default';
-
-/** A slug from a name: lower case, runs of other characters become one dash. */
-const slugify = (name: string): string =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 
 /** Comma-separated text to a list: trimmed, empties dropped. */
 const parseDomains = (text: string): string[] =>
