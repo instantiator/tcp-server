@@ -55,6 +55,8 @@ import {
 } from '../../api/validation-warnings';
 import { DbService } from '../../db/db.service';
 import { CompanyTemplateService } from './company-template.service';
+import { ParsedTemplate, parseTemplate } from './format';
+import { TemplateSourceService } from './template-source.service';
 
 /** Subset of the multer file object a template upload needs. */
 interface UploadedTemplate {
@@ -67,6 +69,11 @@ const TEMPLATE_FILE = {
   type: 'string',
   format: 'binary',
   description: 'The template as a zip.',
+} as const;
+
+const TEMPLATE_ID = {
+  type: 'string',
+  description: 'A gallery template, as <sourceId>/<name>, instead of a file.',
 } as const;
 
 const optionsPipe = new ValidationPipe({
@@ -88,7 +95,27 @@ export class CompanyTemplateController {
     private readonly templates: CompanyTemplateService,
     private readonly db: DbService,
     private readonly membership: MembershipService,
+    private readonly sources: TemplateSourceService,
   ) {}
+
+  /** The template sent as `file`, or the gallery template named by `template`. */
+  private async resolve(
+    file: UploadedTemplate | undefined,
+    template: string | undefined,
+  ): Promise<ParsedTemplate> {
+    if (file && template) {
+      throw new BadRequestException(
+        'Send either `file` or `template`, not both.',
+      );
+    }
+    if (template) {
+      const [sourceId, ...name] = template.split('/');
+      return parseTemplate(
+        await this.sources.templateFiles(sourceId, name.join('/')),
+      );
+    }
+    return this.templates.read(requireZip(file));
+  }
 
   /** Reads a template and says what importing it would create. */
   @ApiOperation({ summary: 'Preview a company template before importing it' })
@@ -96,8 +123,7 @@ export class CompanyTemplateController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['file'],
-      properties: { file: TEMPLATE_FILE },
+      properties: { file: TEMPLATE_FILE, template: TEMPLATE_ID },
     },
   })
   @ApiOkResponse({ type: CompanyTemplatePreviewDto })
@@ -107,8 +133,9 @@ export class CompanyTemplateController {
   @UseInterceptors(FileInterceptor('file', UPLOAD_OPTIONS))
   async preview(
     @UploadedFile() file: UploadedTemplate | undefined,
+    @Body('template') template: string | undefined,
   ): Promise<CompanyTemplatePreviewDto> {
-    return this.templates.preview(this.templates.read(requireZip(file)));
+    return this.templates.preview(await this.resolve(file, template));
   }
 
   /**
@@ -122,9 +149,9 @@ export class CompanyTemplateController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['file'],
       properties: {
         file: TEMPLATE_FILE,
+        template: TEMPLATE_ID,
         options: {
           type: 'string',
           description:
@@ -143,12 +170,13 @@ export class CompanyTemplateController {
   @UseInterceptors(FileInterceptor('file', UPLOAD_OPTIONS))
   async import(
     @UploadedFile() file: UploadedTemplate | undefined,
+    @Body('template') template: string | undefined,
     @Body('options') rawOptions: string | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<TcpCompany> {
     const options = await parseOptions(rawOptions);
-    const parsed = this.templates.read(requireZip(file));
+    const parsed = await this.resolve(file, template);
     await assertSlugClaimable(
       this.db,
       this.membership,
@@ -202,9 +230,12 @@ export class CompanyTemplateController {
   }
 }
 
-/** The uploaded zip's bytes, or a 400 when no file was sent. */
+/** The uploaded zip's bytes, or a 400 when neither a file nor a template was sent. */
 function requireZip(file: UploadedTemplate | undefined): Uint8Array {
-  if (!file) throw new BadRequestException('Send the template as `file`.');
+  if (!file)
+    throw new BadRequestException(
+      'Send the template as `file`, or name a gallery `template`.',
+    );
   return new Uint8Array(file.buffer);
 }
 

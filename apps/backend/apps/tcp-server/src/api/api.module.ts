@@ -5,6 +5,7 @@ import {
   ConversationMessage,
   KnowledgeChunk,
   KnowledgeIndexState,
+  TemplateSource,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -37,6 +38,8 @@ import { AssignmentController } from './assignment.controller';
 import { CompanyController } from './api.company.controller';
 import { CompanyTemplateController } from '../templates/company-template/company-template.controller';
 import { CompanyTemplateService } from '../templates/company-template/company-template.service';
+import { TemplateGalleryController } from '../templates/company-template/template-gallery.controller';
+import { TemplateSourceService } from '../templates/company-template/template-source.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { CompanyUserController } from './company-user.controller';
@@ -118,10 +121,12 @@ import { TaskService } from './task.service';
       PendingConsultation,
       KnowledgeChunk,
       KnowledgeIndexState,
+      TemplateSource,
     ]),
   ],
   controllers: [
     CompanyTemplateController,
+    TemplateGalleryController,
     AssignmentController,
     ToolFootprintController,
     CompanyController,
@@ -146,6 +151,7 @@ import { TaskService } from './task.service';
   ],
   providers: [
     CompanyTemplateService,
+    TemplateSourceService,
     ApiService,
     LlmModelsService,
     ToolFootprintService,

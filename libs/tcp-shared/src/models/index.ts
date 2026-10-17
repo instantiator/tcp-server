@@ -16,6 +16,7 @@ export * from './TcpTask.model';
 export * from './TokenUsage.model';
 export * from './Notification.model';
 export * from './SpendCapState.model';
+export * from './TemplateSource.model';
 export * from './PendingConsultation.model';
 export * from './LlmConfig.model';
 export * from './TcpRole.model';

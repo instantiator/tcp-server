@@ -126,3 +126,51 @@ export class CompanyTemplatePreviewDto {
   /** Things the importer should know, such as an API key that was dropped. */
   warnings!: string[];
 }
+
+/** One template in the gallery. */
+export class GalleryTemplateDto {
+  sourceId!: string;
+  sourceName!: string;
+  /** Its name within the source; fetch it at `/api/template/:sourceId/:name`. */
+  name!: string;
+  /** The company name the template sets. */
+  title!: string;
+  description!: string;
+  roles!: number;
+  documents!: number;
+}
+
+/** A place the gallery reads templates from. */
+export class TemplateSourceDto {
+  /** `builtin` for the templates shipped with the server, otherwise a UUID. */
+  id!: string;
+  name!: string;
+  /** `github:<owner>/<repo>[/<path>][#<ref>]` or `dir:<path>`. */
+  location!: string;
+  /** `config` sources are set in `TEMPLATE_SOURCES` and can't be removed here. */
+  @ApiProperty({ enum: ['builtin', 'config', 'user'] })
+  origin!: 'builtin' | 'config' | 'user';
+}
+
+/** A public GitHub repository to read templates from. */
+export class AddTemplateSourceDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  /** `owner/repo`. */
+  @Matches(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/, {
+    message: 'repo must be owner/repo',
+  })
+  repo!: string;
+
+  /** The branch or tag; defaults to `main`. */
+  @IsOptional()
+  @IsString()
+  ref?: string;
+
+  /** The folder holding the templates; defaults to the repository root. */
+  @IsOptional()
+  @IsString()
+  path?: string;
+}

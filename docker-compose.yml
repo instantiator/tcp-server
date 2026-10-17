@@ -187,6 +187,7 @@ services:
       TCP_ADMIN_IDENTIFIERS: ${TCP_ADMIN_IDENTIFIERS:-}
       # Hosts a company or role's LLM baseUrl may point at — see .env.example.
       LLM_ALLOWED_HOSTS: ${LLM_ALLOWED_HOSTS:-}
+      TEMPLATE_SOURCES: ${TEMPLATE_SOURCES:-}
       # Per-provider token caps (JSON) — see .env.example.
       SPEND_CAPS: ${SPEND_CAPS:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}

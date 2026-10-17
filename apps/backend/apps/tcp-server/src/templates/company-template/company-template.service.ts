@@ -23,7 +23,6 @@ import {
   KnowledgeService,
 } from '../../api/knowledge.service';
 import { RecordsCleanupService } from '../../api/records-cleanup.service';
-import { MAX_UPLOAD_BYTES } from '../../api/upload-limit';
 import { DbService } from '../../db/db.service';
 import { LlmDestinationPolicy } from '../../db/llm-destination-policy';
 import { Originators } from '../../storage/storage.service';
@@ -37,13 +36,7 @@ import {
   TemplateRole,
   writeTemplate,
 } from './format';
-import { readZip, writeZip } from './zip';
-
-/** Caps on an uploaded template, beyond the upload size limit itself. */
-const ZIP_LIMITS = {
-  maxEntries: 2_000,
-  maxUncompressedBytes: 4 * MAX_UPLOAD_BYTES,
-};
+import { readZip, TEMPLATE_ZIP_LIMITS, writeZip } from './zip';
 
 /** A knowledge document converted to OKF, ready to store. */
 interface ConvertedDocument {
@@ -81,7 +74,7 @@ export class CompanyTemplateService {
 
   /** Unzips and parses an uploaded template. */
   read(zip: Uint8Array): ParsedTemplate {
-    return parseTemplate(readZip(zip, ZIP_LIMITS));
+    return parseTemplate(readZip(zip, TEMPLATE_ZIP_LIMITS));
   }
 
   /** What importing `parsed` would create, with nothing written. */

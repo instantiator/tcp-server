@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { unzipSync, zipSync } from 'fflate';
+import { MAX_UPLOAD_BYTES } from '../../api/upload-limit';
 
 /** Caps applied while reading an untrusted zip. */
 export interface ZipLimits {
@@ -8,6 +9,12 @@ export interface ZipLimits {
   /** Most bytes all entries may inflate to, in total. */
   maxUncompressedBytes: number;
 }
+
+/** Caps on any template zip: 2,000 entries, unpacking to 4× the upload limit. */
+export const TEMPLATE_ZIP_LIMITS: ZipLimits = {
+  maxEntries: 2_000,
+  maxUncompressedBytes: 4 * MAX_UPLOAD_BYTES,
+};
 
 /** A template's files, keyed by `/`-separated path relative to its root. */
 export type TemplateFiles = Map<string, Uint8Array>;
