@@ -18,6 +18,7 @@ jest.mock('pdf-parse', () => ({
 import {
   convertToMarkdown,
   ensureOkfFrontMatter,
+  withLicenceFrontMatter,
 } from './knowledge-conversion';
 
 const fixture = (name: string) =>
@@ -201,6 +202,37 @@ describe('ensureOkfFrontMatter', () => {
     const result = ensureOkfFrontMatter('doc.md', { title: null, body });
     expect(result).toBe(
       '---\ntitle: Real Heading\n---\n\n# Real Heading\n\nContent.',
+    );
+  });
+});
+
+describe('withLicenceFrontMatter', () => {
+  const doc = '---\ntitle: Report\nauthor: Ann\n---\n\nBody.';
+
+  it('adds licence keys to existing front matter, keeping title', () => {
+    const out = withLicenceFrontMatter(doc, { license: 'MIT' });
+    expect(out).toContain('title: Report');
+    expect(out).toContain('author: Ann');
+    expect(out).toContain('license: MIT');
+    expect(out.endsWith('\n\nBody.')).toBe(true);
+  });
+
+  it('overwrites only the provided keys', () => {
+    const existing =
+      '---\ntitle: T\nlicense: GPL\nsource: http://a\n---\n\nBody.';
+    const out = withLicenceFrontMatter(existing, { license: 'MIT' });
+    expect(out).toContain('license: MIT');
+    expect(out).toContain('source: http://a');
+    expect(out).not.toContain('GPL');
+  });
+
+  it('returns the input unchanged when no licence keys are given', () => {
+    expect(withLicenceFrontMatter(doc, {})).toBe(doc);
+  });
+
+  it('returns the input unchanged when there is no front matter', () => {
+    expect(withLicenceFrontMatter('# Plain', { license: 'MIT' })).toBe(
+      '# Plain',
     );
   });
 });

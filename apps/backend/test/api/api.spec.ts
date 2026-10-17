@@ -168,6 +168,27 @@ describe('tcp-cli API flows', () => {
               expect(docs.some((d) => d.name === 'role-doc.md')).toBe(true);
             });
 
+            it('POST with licence fields lists them; a plain upload lists without', async () => {
+              await api.storeKnowledge(
+                scopePath(),
+                'licensed-doc.md',
+                '---\ntitle: Licensed doc\n---\n\nContent.',
+                201,
+                { license: 'CC-BY-4.0', source: 'https://example.com/doc' },
+              );
+
+              const docs = await api.listKnowledge(scopePath());
+              const licensed = docs.find((d) => d.name === 'licensed-doc.md');
+              expect(licensed).toMatchObject({
+                title: 'Licensed doc',
+                license: 'CC-BY-4.0',
+                source: 'https://example.com/doc',
+              });
+              const plain = docs.find((d) => d.name === 'role-doc.md');
+              expect(plain?.license).toBeUndefined();
+              expect(plain?.source).toBeUndefined();
+            });
+
             it('GET :filename returns the stored content', async () => {
               const content = await api.getKnowledgeText(
                 scopePath(),

@@ -49,6 +49,10 @@ export interface DocumentSummary {
   name: string;
   size: number;
   lastModified: string;
+  title?: string;
+  license?: string;
+  source?: string;
+  attribution?: string;
 }
 
 export class ApiHelper {
@@ -278,8 +282,12 @@ export class ApiHelper {
     filename: string,
     content: string | Buffer,
     expectedStatus = 201,
+    fields: Record<string, string> = {},
   ) {
     const form = new FormData();
+    for (const [name, value] of Object.entries(fields)) {
+      form.append(name, value);
+    }
     form.append(
       'file',
       new Blob([new Uint8Array(Buffer.from(content))], {
