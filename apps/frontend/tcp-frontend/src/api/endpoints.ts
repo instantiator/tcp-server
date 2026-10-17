@@ -654,6 +654,28 @@ export const useUpdateRoleMutation = () =>
     },
   });
 
+/**
+ * Creates a company. Never asks to replace: an existing slug comes back as a
+ * 409 {@link ApiError}, so a form can say the slug is taken.
+ */
+export const useCreateCompanyMutation = () =>
+  useMutation({
+    mutationFn: async (body: Schemas['CreateCompanyDto']) => {
+      let result;
+      try {
+        result = await api.POST('/api/company', { body });
+      } catch (cause) {
+        // The request never landed — same reasoning as `unwrap`'s catch.
+        throw networkError(cause);
+      }
+
+      const { data, error, response } = result;
+      if (!response.ok || data === undefined) throw apiError(response, error);
+
+      return { company: data, warnings: readWarnings(response) };
+    },
+  });
+
 /** Edits a company. Soft warnings come back beside it, as for a role. */
 export const useUpdateCompanyMutation = () =>
   useMutation({
@@ -680,6 +702,18 @@ export const useUpdateCompanyMutation = () =>
 
       return { company: data, warnings: readWarnings(response) };
     },
+  });
+
+/**
+ * Deletes a company and everything it owns. `expectAccepted`, not `unwrap`:
+ * the route answers 204 with no body.
+ */
+export const useDeleteCompanyMutation = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      expectAccepted(
+        api.DELETE('/api/company/{id}', { params: { path: { id } } }),
+      ),
   });
 
 /**

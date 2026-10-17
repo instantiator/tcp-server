@@ -17,6 +17,8 @@ import {
   useConversations,
   useCreateRoleMutation,
   useDeleteKnowledgeMutation,
+  useCreateCompanyMutation,
+  useDeleteCompanyMutation,
   useDeleteRoleMutation,
   useLlmDefaults,
   useLocalModelsQuery,
@@ -435,6 +437,63 @@ describe('the role and knowledge mutations', () => {
     expect(request.method).toBe('PUT');
     expect(new URL(request.url).pathname).toBe('/api/company/c1');
     expect(await request.json()).toEqual({ llmConfig: null });
+  });
+
+  it('useCreateCompanyMutation POSTs /api/company without asking to replace', async () => {
+    respondWith({ id: 'c1', slug: 'acme' });
+
+    const { result } = renderHook(() => useCreateCompanyMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({
+        slug: 'acme',
+        name: 'Acme',
+        description: 'Makes things',
+      });
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('POST');
+    const url = new URL(request.url);
+    expect(url.pathname).toBe('/api/company');
+    expect(url.search).toBe('');
+  });
+
+  it('useCreateCompanyMutation surfaces a taken slug as a 409 ApiError', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          message: "A company with slug 'acme' already exists.",
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const { result } = renderHook(() => useCreateCompanyMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    const error: unknown = await result.current
+      .mutateAsync({ slug: 'acme', name: 'Acme', description: 'd' })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error instanceof ApiError && error.status).toBe(409);
+  });
+
+  it('useDeleteCompanyMutation DELETEs /api/company/{id}', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const { result } = renderHook(() => useDeleteCompanyMutation(), {
+      wrapper: wrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync('c1');
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('DELETE');
+    expect(new URL(request.url).pathname).toBe('/api/company/c1');
   });
 
   it('useDeleteRoleMutation DELETEs /api/role/{id}', async () => {

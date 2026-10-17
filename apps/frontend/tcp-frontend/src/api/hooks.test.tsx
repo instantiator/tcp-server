@@ -28,6 +28,8 @@ import {
   useLiveEnquiryState,
   useLiveNotifications,
   useDeleteChat,
+  useCreateCompany,
+  useDeleteCompany,
   useDeleteRole,
   useKnowledgeList,
   useKnowledgeStatus,
@@ -709,6 +711,44 @@ describe('role and knowledge writes', () => {
     expect(invalidated('role')).toBe(true);
     expect(invalidated('knowledge')).toBe(true);
     expect(invalidated('company')).toBe(true);
+  });
+
+  it('useCreateCompany invalidates company queries', async () => {
+    respondWithJson(201, { id: 'c2' });
+    const { result, queryClient } = renderHookWithClient(() =>
+      useCreateCompany(),
+    );
+    const invalidated = seed(queryClient);
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        slug: 'acme',
+        name: 'Acme',
+        description: 'd',
+      });
+    });
+
+    expect(invalidated('company')).toBe(true);
+    expect(invalidated('role')).toBe(false);
+  });
+
+  it('useDeleteCompany drops its detail rather than refetching it, and refreshes the list', async () => {
+    respondWithJson(204, undefined);
+    const { result, queryClient } = renderHookWithClient(() =>
+      useDeleteCompany(),
+    );
+    const list = ['company', 'list', {}] as const;
+    queryClient.setQueryData(list, []);
+    seed(queryClient);
+
+    await act(async () => {
+      await result.current.mutateAsync(COMPANY_ID);
+    });
+
+    expect(
+      queryClient.getQueryState(['company', 'detail', COMPANY_ID]),
+    ).toBeUndefined();
+    expect(queryClient.getQueryState(list)?.isInvalidated).toBe(true);
   });
 
   it('useUploadKnowledge invalidates knowledge queries only', async () => {

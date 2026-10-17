@@ -77,7 +77,9 @@ import {
   useCompanyKnowledge,
   useCompanyKnowledgeSearch,
   useCompanyKnowledgeStatus,
+  useCreateCompanyMutation,
   useCreateRoleMutation,
+  useDeleteCompanyMutation,
   useDeleteKnowledgeMutation,
   useDeleteRoleMutation,
   useReindexKnowledgeMutation,
@@ -434,6 +436,35 @@ export const useUpdateCompany = () => {
       for (const queryKey of [['company'], ['knowledge']]) {
         void queryClient.invalidateQueries({ queryKey });
       }
+    },
+  });
+};
+
+/** Creates a company; the companies list refetches (nothing streams it). */
+export const useCreateCompany = () => {
+  const queryClient = useQueryClient();
+  const create = useCreateCompanyMutation();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof create.mutateAsync>[0]) =>
+      create.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['company'] });
+    },
+  });
+};
+
+/**
+ * Deletes a company. Its detail is dropped rather than refetched, which would
+ * only 404; the companies list refetches.
+ */
+export const useDeleteCompany = () => {
+  const queryClient = useQueryClient();
+  const remove = useDeleteCompanyMutation();
+  return useMutation({
+    mutationFn: (id: string) => remove.mutateAsync(id),
+    onSuccess: (_result, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.company(id) });
+      void queryClient.invalidateQueries({ queryKey: ['company'] });
     },
   });
 };
