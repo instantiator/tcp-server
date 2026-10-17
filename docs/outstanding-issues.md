@@ -853,12 +853,6 @@ The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with bac
 
 **Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy%20%28draft%29.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
 
-## A deleted default planner can't be replaced in the browser
-
-Deleting the company's default planner role (Admin → Roles warns about it) clears `plannerRoleId`. Tasks without their own planner then won't start, and only `tcp-cli` can set a new one.
-
-**Act when:** 002.02 (create and edit a company) lands; it should let a person choose the planner.
-
 ## App-level model defaults can only be changed in env files
 
 The application's default chat and embedding models are the `LLM_*` and `EMBEDDING_*` env vars. The web picker (002.01) shows them read-only (`GET /api/system/llm-defaults`) as the fallback, but nothing in the browser or API can change them, and a change needs a restart.

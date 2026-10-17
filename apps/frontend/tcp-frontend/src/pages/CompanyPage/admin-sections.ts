@@ -2,6 +2,7 @@ import type { StringKey } from '../../strings';
 
 /** The Admin tab's sections, in menu order. Each id is also its URL hash path (`#admin/users`). */
 export const ADMIN_SECTIONS = [
+  { id: 'company', label: 'admin.menu.company' },
   { id: 'roles', label: 'admin.menu.roles' },
   { id: 'models', label: 'admin.menu.models' },
   { id: 'users', label: 'admin.menu.users' },

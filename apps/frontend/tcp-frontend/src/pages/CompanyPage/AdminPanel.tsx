@@ -5,6 +5,7 @@ import {
   isAdminSection,
   type AdminSection,
 } from './admin-sections';
+import { CompanyAdmin } from './admin/CompanyAdmin';
 import { KnowledgePanel } from './admin/KnowledgePanel';
 import { LanguageModelsAdmin } from './admin/LanguageModelsAdmin';
 import { RolesAdmin } from './admin/RolesAdmin';
@@ -21,7 +22,7 @@ export interface AdminPanelProps {
 }
 
 /**
- * The Admin tab (002.00): a menu of the company's administration — roles,
+ * The Admin tab (002.00): a menu of the company's administration — its details, roles,
  * users, knowledge and data protection — beside the chosen section. The menu
  * behaves as the Data tab's does: arrow keys move, Enter or Space opens, and
  * focus stays on the menu.
@@ -54,7 +55,9 @@ export const AdminPanel = ({
       </ListBox>
     </div>
     <div>
-      {section === 'roles' ? (
+      {section === 'company' ? (
+        <CompanyAdmin companyId={companyId} />
+      ) : section === 'roles' ? (
         <RolesAdmin companyId={companyId} />
       ) : section === 'knowledge' ? (
         <KnowledgePanel
