@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import {
   installFetchMock,
   respondByRoute,
 } from '../../test-support/fetch-mock';
+import type { CompanyTemplatePreview } from '../../api/dtos';
 import { CreateCompanyDialog } from './CreateCompanyDialog';
 
 vi.mock('../../announce/announcer', () => ({ announce: vi.fn() }));
@@ -256,6 +257,361 @@ describe('CreateCompanyDialog', () => {
 
   it('has no accessibility violations', async () => {
     renderDialog();
+    await nameField();
+    await expectNoA11yViolations(document.body);
+  });
+});
+
+const PREVIEW: CompanyTemplatePreview = {
+  formatVersion: 1,
+  company: {
+    slug: 'cottage',
+    name: 'Cottage industry',
+    description: 'Sells crafts.',
+    timezone: 'Europe/London',
+    companyContext: 'We sell at fairs.',
+    llmConfig: { provider: 'anthropic', model: 'claude-x' },
+    embeddingConfig: null,
+  },
+  plannerRole: 'planner',
+  roles: [
+    {
+      slug: 'planner',
+      name: 'Planner',
+      description: 'Plans the work.',
+      llmConfig: { provider: 'openai', model: 'gpt-x' },
+      documents: 1,
+    },
+    {
+      slug: 'writer',
+      name: 'Writer',
+      description: 'Writes copy.',
+      llmConfig: null,
+      documents: 0,
+    },
+  ],
+  documents: [
+    { scope: 'company', name: 'a.md', license: 'CC-BY-4.0' },
+    { scope: 'company', name: 'b.md', license: 'CC-BY-4.0' },
+    { scope: 'planner', name: 'c.md' },
+  ],
+  neededKeys: ['anthropic', 'openai'],
+  slugTaken: false,
+  warnings: ['The template held an API key; it was ignored.'],
+};
+
+const IMPORTED = { id: 'c7', slug: 'cottage', name: 'Cottage industry' };
+
+const importRoutes = [
+  ...routes.filter(([pattern]) => !pattern.test('/api/company')),
+  [/\/api\/company\/import$/, { status: 201, body: IMPORTED }],
+] as const;
+
+/** The multipart bodies of the import requests made so far. */
+const importForms = (): FormData[] =>
+  fetchMock.mock.calls.flatMap(([input, init]) =>
+    (input instanceof Request ? input.url : String(input)).endsWith(
+      '/api/company/import',
+    ) && init?.body instanceof FormData
+      ? [init.body]
+      : [],
+  );
+
+/** The `options` field of each import request made so far. */
+const sentOptions = (): unknown[] =>
+  importForms().map((form) => {
+    const options = form.get('options');
+    const parsed: unknown =
+      typeof options === 'string' ? JSON.parse(options) : null;
+    return parsed;
+  });
+
+const renderImport = (source: File | string = 'builtin/cottage') =>
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter>
+        <Routes>
+          <Route
+            path="*"
+            element={
+              <>
+                <CreateCompanyDialog
+                  isOpen
+                  onClose={onClose}
+                  template={{ preview: PREVIEW, source }}
+                />
+                <Where />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+const importButton = () =>
+  screen.getByRole('button', { name: t('companies.import.submit') });
+
+describe('CreateCompanyDialog with a template', () => {
+  beforeEach(() => {
+    installFetchMock();
+    respondByRoute([...importRoutes]);
+    vi.mocked(announce).mockClear();
+    onClose.mockClear();
+  });
+
+  it('is headed by the template and prefilled from it', async () => {
+    renderImport();
+
+    expect(
+      await screen.findByRole('heading', {
+        name: t('companies.import.heading', { name: 'Cottage industry' }),
+      }),
+    ).toBeInTheDocument();
+    expect(await nameField()).toHaveValue('Cottage industry');
+    expect(slugField()).toHaveValue('cottage');
+    expect(screen.getByRole('textbox', { name: /^Description/ })).toHaveValue(
+      'Sells crafts.',
+    );
+    expect(screen.getByRole('combobox', { name: /^Time zone/ })).toHaveValue(
+      'Europe/London',
+    );
+    expect(
+      screen.getByRole('textbox', { name: /^Company context/ }),
+    ).toHaveValue('We sell at fairs.');
+    expect(
+      screen.getAllByRole('button', { name: /Provider$/ })[0],
+    ).toHaveTextContent(/Anthropic/i);
+  });
+
+  it('keeps the template’s slug when the name is edited', async () => {
+    const user = userEvent.setup();
+    renderImport();
+    await user.type(await nameField(), ' Two');
+    expect(slugField()).toHaveValue('cottage');
+  });
+
+  it('says which keys are needed, and shows the template’s warnings', async () => {
+    renderImport();
+    await nameField();
+
+    expect(
+      screen.getByText(
+        t('companies.import.needsKey', { provider: 'anthropic' }),
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(t('companies.import.needsKey', { provider: 'openai' })),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('The template held an API key; it was ignored.'),
+    ).toBeInTheDocument();
+  });
+
+  it('lists the roles, offering a model only to a role that has one', async () => {
+    renderImport();
+    await nameField();
+
+    const roles = screen.getByRole('group', {
+      name: t('companies.import.roles'),
+    });
+    expect(within(roles).getByText('Planner')).toBeInTheDocument();
+    expect(within(roles).getByText('Writes copy.')).toBeInTheDocument();
+    const boxes = within(roles).getAllByRole('checkbox');
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[0]).toHaveAccessibleName(
+      t('companies.import.roleModel', { provider: 'openai', model: 'gpt-x' }),
+    );
+    expect(boxes[0]).toHaveAccessibleDescription('Planner');
+    expect(screen.getByText(/3 knowledge documents/)).toHaveTextContent(
+      'Licences: CC-BY-4.0',
+    );
+  });
+
+  it('sends both models explicitly, and no roleModels by default', async () => {
+    const user = userEvent.setup();
+    renderImport();
+    await nameField();
+    await user.click(importButton());
+
+    await waitFor(() => expect(announce).toHaveBeenCalled());
+    const [options] = sentOptions();
+    expect(options).toMatchObject({
+      slug: 'cottage',
+      name: 'Cottage industry',
+      description: 'Sells crafts.',
+      timezone: 'Europe/London',
+      companyContext: 'We sell at fairs.',
+      llmConfig: { provider: 'anthropic', model: 'claude-x' },
+      embeddingConfig: null,
+    });
+    expect(options).not.toHaveProperty('roleModels');
+    expect(options).not.toHaveProperty('replace');
+  });
+
+  it('sends roleModels false for a role whose model is unchecked', async () => {
+    const user = userEvent.setup();
+    renderImport();
+    await nameField();
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(importButton());
+
+    await waitFor(() => expect(announce).toHaveBeenCalled());
+    const [options] = sentOptions();
+    expect(options).toMatchObject({ roleModels: { planner: false } });
+  });
+
+  it('sends the zip file itself when the template is one', async () => {
+    const user = userEvent.setup();
+    const file = new File(['zip'], 'mine.zip');
+    renderImport(file);
+    await nameField();
+    await user.click(importButton());
+
+    await waitFor(() => expect(announce).toHaveBeenCalled());
+    expect(importForms()[0]?.get('file')).toBeInstanceOf(File);
+  });
+
+  it('announces, closes and opens the new company on success', async () => {
+    const user = userEvent.setup();
+    renderImport();
+    await nameField();
+    await user.click(importButton());
+
+    await waitFor(() =>
+      expect(screen.getByTestId('where')).toHaveTextContent('/company/c7'),
+    );
+    expect(screen.getByTestId('where')).not.toHaveTextContent('#');
+    expect(onClose).toHaveBeenCalled();
+    expect(announce).toHaveBeenCalledWith({
+      channel: 'companies',
+      change: 'companies.import.announce',
+    });
+  });
+
+  describe('when the slug is taken', () => {
+    let imports: number;
+    beforeEach(() => {
+      imports = 0;
+      fetchMock.mockImplementation((input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith('/api/company/import')) {
+          imports += 1;
+          // The first try is refused; the replace goes through.
+          return Promise.resolve(
+            new Response(
+              JSON.stringify(imports === 1 ? { message: 'taken' } : IMPORTED),
+              {
+                status: imports === 1 ? 409 : 201,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              chat: null,
+              embedding: null,
+              embeddingDimension: 768,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      });
+    });
+
+    it('asks, then resends with replace when agreed', async () => {
+      const user = userEvent.setup();
+      renderImport();
+      await nameField();
+      await user.click(importButton());
+
+      expect(
+        await screen.findByRole('alertdialog', {
+          name: t('companies.import.replaceHeading', { slug: 'cottage' }),
+        }),
+      ).toBeInTheDocument();
+      await user.click(
+        screen.getByRole('button', {
+          name: t('companies.import.replaceConfirm'),
+        }),
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('where')).toHaveTextContent('/company/c7'),
+      );
+      const [first, second] = sentOptions();
+      expect(first).not.toHaveProperty('replace');
+      expect(second).toMatchObject({ slug: 'cottage', replace: true });
+    });
+
+    it('puts the problem on the slug when declined', async () => {
+      const user = userEvent.setup();
+      renderImport();
+      await nameField();
+      await user.click(importButton());
+      await user.click(
+        await screen.findByRole('button', { name: t('confirm.no') }),
+      );
+
+      await waitFor(() =>
+        expect(slugField()).toHaveAccessibleDescription(
+          expect.stringContaining(t('companies.import.slugTaken')),
+        ),
+      );
+      await waitFor(() => expect(slugField()).toHaveFocus());
+      expect(sentOptions()).toHaveLength(1);
+      expect(onClose).not.toHaveBeenCalled();
+    });
+  });
+
+  it('says only members can replace when the replace is refused', async () => {
+    const user = userEvent.setup();
+    let imports = 0;
+    fetchMock.mockImplementation((input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/company/import')) {
+        imports += 1;
+        return Promise.resolve(
+          new Response(JSON.stringify({ message: 'no' }), {
+            status: imports === 1 ? 409 : 403,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            chat: null,
+            embedding: null,
+            embeddingDimension: 768,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+    });
+    renderImport();
+    await nameField();
+    await user.click(importButton());
+    await user.click(
+      await screen.findByRole('button', {
+        name: t('companies.import.replaceConfirm'),
+      }),
+    );
+
+    expect(
+      await screen.findByText(t('companies.import.replaceForbidden')),
+    ).toBeVisible();
+  });
+
+  it('has no accessibility violations', async () => {
+    renderImport();
     await nameField();
     await expectNoA11yViolations(document.body);
   });

@@ -13,6 +13,10 @@ import { LoadingState } from '../../components/LoadingState/LoadingState';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t, tCount } from '../../strings';
 import { CreateCompanyDialog } from './CreateCompanyDialog';
+import {
+  TemplateGalleryDialog,
+  type ChosenTemplate,
+} from './TemplateGalleryDialog';
 import './CompaniesPage.css';
 
 /**
@@ -28,9 +32,20 @@ import './CompaniesPage.css';
 export const CompaniesPage = () => {
   useDocumentTitle(t('page.companies.title'));
   const { data, isPending, error, refetch } = useCompanies();
-  const [creating, setCreating] = useState(false);
+  // New company is two steps and one dialog at a time: the gallery, then the
+  // form it leads to, blank or from the chosen template.
+  const [step, setStep] = useState<
+    | { readonly kind: 'closed' }
+    | { readonly kind: 'gallery' }
+    | { readonly kind: 'scratch' }
+    | { readonly kind: 'template'; readonly template: ChosenTemplate }
+  >({ kind: 'closed' });
+  const close = () => setStep({ kind: 'closed' });
   const newCompany = (
-    <Button className="react-aria-Button" onPress={() => setCreating(true)}>
+    <Button
+      className="react-aria-Button"
+      onPress={() => setStep({ kind: 'gallery' })}
+    >
       {t('companies.create.open')}
     </Button>
   );
@@ -54,9 +69,16 @@ export const CompaniesPage = () => {
     <>
       <h1>{t('page.companies.title')}</h1>
       {newCompany}
+      <TemplateGalleryDialog
+        isOpen={step.kind === 'gallery'}
+        onClose={close}
+        onScratch={() => setStep({ kind: 'scratch' })}
+        onChosen={(template) => setStep({ kind: 'template', template })}
+      />
       <CreateCompanyDialog
-        isOpen={creating}
-        onClose={() => setCreating(false)}
+        isOpen={step.kind === 'scratch' || step.kind === 'template'}
+        onClose={close}
+        template={step.kind === 'template' ? step.template : undefined}
       />
       {/*
         ADR-027 marks the region whose content is loading as busy.

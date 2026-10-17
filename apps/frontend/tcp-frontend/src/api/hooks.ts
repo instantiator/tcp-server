@@ -78,6 +78,9 @@ import {
   useCompanyKnowledgeSearch,
   useCompanyKnowledgeStatus,
   useCreateCompanyMutation,
+  useImportCompanyMutation,
+  usePreviewTemplateMutation,
+  templateDownloadPath,
   useCreateRoleMutation,
   useDeleteCompanyMutation,
   useDeleteKnowledgeMutation,
@@ -447,6 +450,22 @@ export const useCreateCompany = () => {
   return useMutation({
     mutationFn: (body: Parameters<typeof create.mutateAsync>[0]) =>
       create.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['company'] });
+    },
+  });
+};
+
+/** Reads a template without creating anything; nothing is cached or refetched. */
+export const usePreviewTemplate = usePreviewTemplateMutation;
+
+/** Imports a company from a template; the companies list refetches, as for {@link useCreateCompany}. */
+export const useImportCompany = () => {
+  const queryClient = useQueryClient();
+  const importCompany = useImportCompanyMutation();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof importCompany.mutateAsync>[0]) =>
+      importCompany.mutateAsync(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['company'] });
     },
@@ -923,6 +942,7 @@ export {
   useRoleBySlug,
   useSendMessageMutation as useSendMessage,
   useTaskHistory,
+  useTemplateGalleryQuery as useTemplateGallery,
   useToolFootprintQuery as useToolFootprint,
   useTranscriptSearch,
 } from './endpoints';
@@ -1390,6 +1410,15 @@ const saveBlob = (blob: Blob, name: string): void => {
   anchor.download = name;
   anchor.click();
   URL.revokeObjectURL(url);
+};
+
+/** Downloads a gallery template's zip, named after the template. */
+export const downloadTemplate = async (
+  sourceId: string,
+  name: string,
+): Promise<void> => {
+  const { blob } = await getBlob(templateDownloadPath(sourceId, name));
+  saveBlob(blob, `${name}.zip`);
 };
 
 /** Downloads one table as CSV, named in local time by the browser, not the server. */

@@ -1,3 +1,4 @@
+import type { LlmConfig } from '@tcp/shared/client';
 import type { components } from './schema';
 
 export type CompanyDTO = components['schemas']['CompanyResponseDto'];
@@ -33,3 +34,26 @@ export type AddColumn = components['schemas']['AddColumnDto'];
 /** A column's new type (001.06). */
 export type RetypeColumn = components['schemas']['RetypeColumnDto'];
 export type DoNotStoreEntry = components['schemas']['DoNotStoreEntryDto'];
+
+/** What importing a company template would do, before anything is created (002.03). */
+export type CompanyTemplatePreview =
+  components['schemas']['CompanyTemplatePreviewDto'];
+/** One template in the gallery, with the source it came from. */
+export type GalleryTemplate = components['schemas']['GalleryTemplateDto'];
+/**
+ * The importer's choices, sent as the `options` JSON field. The generated
+ * schema types that field as a bare string, so the shape is written here from
+ * `ImportCompanyOptionsDto` on the server.
+ */
+export interface ImportCompanyOptions {
+  readonly slug?: string;
+  readonly name?: string;
+  readonly description?: string;
+  readonly timezone?: string;
+  readonly companyContext?: string | null;
+  readonly llmConfig?: LlmConfig | null;
+  readonly embeddingConfig?: LlmConfig | null;
+  /** `false` for a role that should inherit rather than use the template's model. */
+  readonly roleModels?: Readonly<Record<string, boolean>>;
+  readonly replace?: boolean;
+}
