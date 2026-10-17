@@ -55,9 +55,9 @@ export interface LlmConfigPickerProps {
   readonly saved: LlmConfig | null | undefined;
   readonly fallback: LlmFallback;
   /**
-   * The company whose saved keys and address policy a local server's model
-   * list goes through. Absent while the company is being created: there is
-   * nothing to list through yet, so only the suggestions are offered.
+   * The company whose saved keys a local server's model list may use. Absent
+   * while the company is being created or imported: the list then uses only a
+   * typed key.
    */
   readonly companyId?: string;
   /** A role whose saved key may be used to list a local server's models. */
@@ -160,12 +160,7 @@ export const LlmConfigPicker = ({
   // rather than on every keystroke in the address or key fields.
   const [listing, setListing] = useState(() => listingOf(draft, roleId));
   const [revision, setRevision] = useState(0);
-  const canList = companyId !== undefined;
-  const models = useLocalModels(
-    companyId ?? '',
-    canList ? listing : null,
-    revision,
-  );
+  const models = useLocalModels(companyId, listing, revision);
 
   const choose = (key: Key | null): void => {
     const next = chooseProvider(
@@ -307,9 +302,7 @@ export const LlmConfigPicker = ({
               >
                 {listError !== undefined
                   ? t('llm.model.listFailed', { reason: listError })
-                  : !canList && template !== undefined && !isRemote(template)
-                    ? t('llm.model.listAfterCreate')
-                    : t('llm.model.hint')}
+                  : t('llm.model.hint')}
               </Text>
               {errors.model !== undefined && (
                 <FieldError className="react-aria-FieldError tcp-field__error">
@@ -331,7 +324,7 @@ export const LlmConfigPicker = ({
                 </ListBox>
               </Popover>
             </ComboBox>
-            {canList && !isRemote(template) && (
+            {!isRemote(template) && (
               <RoundIconButton
                 icon={RefreshCw}
                 label={t('llm.model.refresh')}

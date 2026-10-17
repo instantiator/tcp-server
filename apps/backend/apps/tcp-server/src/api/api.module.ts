@@ -49,7 +49,10 @@ import { InternalController } from './internal.controller';
 import { InternalTaskController } from './internal-task.controller';
 import { KnowledgeController } from './knowledge.controller';
 import { McpServersController } from './mcp-servers.controller';
-import { LlmModelsController } from './llm-models.controller';
+import {
+  LlmModelsController,
+  NewCompanyLlmModelsController,
+} from './llm-models.controller';
 import { LlmDefaultsController } from './llm-defaults.controller';
 import { LlmModelsService } from './llm-models.service';
 import { ModelController } from './api.model.controller';
@@ -137,6 +140,7 @@ import { TaskService } from './task.service';
     KnowledgeController,
     McpServersController,
     LlmModelsController,
+    NewCompanyLlmModelsController,
     LlmDefaultsController,
     RecordsController,
     RoleController,

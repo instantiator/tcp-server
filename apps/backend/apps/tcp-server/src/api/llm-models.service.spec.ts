@@ -93,6 +93,31 @@ describe('LlmModelsService', () => {
     expect(sentAuth()).toBe('Bearer company-key');
   });
 
+  describe('without a company', () => {
+    it('lists with no key, and never looks a saved one up', async () => {
+      db.getCompany.mockClear();
+      db.findRoleByIdOrSlug.mockClear();
+      await expect(
+        service.list(null, { ...LOCAL, roleId: 'r1' }),
+      ).resolves.toEqual(['a', 'b']);
+      expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({});
+      expect(db.getCompany).not.toHaveBeenCalled();
+      expect(db.findRoleByIdOrSlug).not.toHaveBeenCalled();
+    });
+
+    it('sends a typed key', async () => {
+      await service.list(null, { ...LOCAL, apiKey: 'typed' });
+      expect(sentAuth()).toBe('Bearer typed');
+    });
+
+    it('still refuses a host the policy does not allow', async () => {
+      await expect(
+        service.list(null, { ...LOCAL, baseUrl: 'http://10.0.0.5:1234/v1' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   it('never sends a saved key to another address', async () => {
     await service.list('c1', {
       ...LOCAL,

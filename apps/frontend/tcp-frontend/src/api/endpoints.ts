@@ -351,31 +351,36 @@ export type LocalModelsQuery = Schemas['ListLlmModelsDto'];
 /**
  * The models a local or custom server lists, fetched through tcp-server (the
  * browser can't reach `host.docker.internal`, and the saved key stays there).
- * A POST, so a typed key travels in the body. Disabled for `null`, and not
- * retried: a server that isn't running won't be on the next try either. Bump
- * `revision` to ask again.
+ * A POST, so a typed key travels in the body. Without a company (a form for
+ * one not yet created) it lists through `/api/llm/models`, with only a typed
+ * key. Disabled for `null`, and not retried: a server that isn't running
+ * won't be on the next try either. Bump `revision` to ask again.
  */
 export const useLocalModelsQuery = (
-  companyId: string,
+  companyId: string | undefined,
   query: LocalModelsQuery | null,
   revision = 0,
 ) =>
   useQuery({
     queryKey: queryKeys.localModels(
-      companyId,
+      companyId ?? '',
       query?.provider ?? '',
       query?.baseUrl ?? '',
       query?.roleId,
       revision,
     ),
-    queryFn: () =>
-      unwrap(
-        api.POST('/api/company/{companyId}/llm/models', {
-          params: { path: { companyId } },
-          // `query` is non-null whenever the query is enabled.
-          body: query ?? { provider: '', baseUrl: '' },
-        }),
-      ),
+    queryFn: () => {
+      // `query` is non-null whenever the query is enabled.
+      const body = query ?? { provider: '', baseUrl: '' };
+      return unwrap(
+        companyId === undefined
+          ? api.POST('/api/llm/models', { body })
+          : api.POST('/api/company/{companyId}/llm/models', {
+              params: { path: { companyId } },
+              body,
+            }),
+      );
+    },
     enabled: query !== null,
     retry: false,
   });

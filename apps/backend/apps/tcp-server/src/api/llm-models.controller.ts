@@ -14,7 +14,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
-import { CompanyScope } from '../auth/company-scope.decorator';
+import { CompanyScope, NoCompanyScope } from '../auth/company-scope.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ListLlmModelsDto, LlmModelsResponseDto } from './dto/llm-models.dto';
 import { LlmModelsService } from './llm-models.service';
@@ -41,5 +41,33 @@ export class LlmModelsController {
     @Body() body: ListLlmModelsDto,
   ): Promise<LlmModelsResponseDto> {
     return { models: await this.models.list(companyId, body) };
+  }
+}
+
+/**
+ * The same list for a form whose company doesn't exist yet: creating a
+ * company, or importing a template. Only a key the caller sends is used, and
+ * the address must still pass the URL policy, so this reaches nothing a
+ * signed-in user couldn't already reach by creating a company with it.
+ */
+@ApiTags('companies')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
+@Controller({ path: 'api/llm' })
+export class NewCompanyLlmModelsController {
+  constructor(private readonly models: LlmModelsService) {}
+
+  @ApiOperation({
+    summary:
+      'List the models a local or custom server offers, before a company exists',
+  })
+  @ApiOkResponse({ type: LlmModelsResponseDto })
+  @NoCompanyScope(
+    'lists only addresses the URL policy allows, with only a key the caller sends',
+  )
+  @HttpCode(HttpStatus.OK)
+  @Post('models')
+  async list(@Body() body: ListLlmModelsDto): Promise<LlmModelsResponseDto> {
+    return { models: await this.models.list(null, body) };
   }
 }

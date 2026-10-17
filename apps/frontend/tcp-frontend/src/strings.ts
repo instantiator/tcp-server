@@ -1281,8 +1281,6 @@ const strings = {
   'llm.model.width': 'Makes {width}-wide vectors.',
   'llm.model.refresh': 'Refresh the model list',
   'llm.model.listFailed': 'Couldn’t list models from this server: {reason}',
-  'llm.model.listAfterCreate':
-    'Pick a suggestion, or type any model name. The server’s own list is available after the company is created.',
   'llm.apiKey': 'API key',
   'llm.apiKey.saved': 'A key is saved. Leave this blank to keep it.',
   'llm.apiKey.dropped':

@@ -1218,8 +1218,9 @@ unknown `#admin` opens.
 button, in its header and in its empty state. It opens `CreateCompanyDialog`
 with name, slug (it follows the name until edited), description, time zone (the
 browser's, by default), company context, and the chat and embedding pickers.
-The picker takes no `companyId` there, so it offers suggestions but can't list
-a local server's models until the company exists. A taken slug comes back as a
+The picker takes no `companyId` there, so a local server's models are listed
+through `POST /api/llm/models`, which uses only a typed key (there is no saved
+one yet) and the same URL policy as saving. A taken slug comes back as a
 409 and is shown on the slug field. On success the page opens the new
 company's `#admin/roles`, since a company needs roles before it can run tasks.
 `TimezoneField` (`components/Field/`) is a `ComboBox` over
