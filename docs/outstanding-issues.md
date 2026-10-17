@@ -138,13 +138,13 @@ See `your-first-company.md` to get started.
 Providing the `-i` or `--input` option for the `set-company` verb fails:
 
 ```bash
-./tcp-cli.sh set-company -i ./scripts/test-data/companies/home-maintenance.json
+./tcp-cli.sh set-company -i ./scripts/test-data/companies/simple-company.json
 ```
 
 The workaround is to pipe the data in with:
 
 ```bash
-cat ./scripts/test-data/companies/home-maintenance.json | ./tcp-cli.sh set-company
+cat ./scripts/test-data/companies/simple-company.json | ./tcp-cli.sh set-company
 ```
 
 It'd be good to inspect and fix all the input options, as this isn't the only case where an expected option isn't recognised.
@@ -152,7 +152,7 @@ It'd be good to inspect and fix all the input options, as this isn't the only ca
 Another I've noticed is that the `-s` option for the `store-knowledge` verb fails, but the `--source` option succeeds.
 
 ```bash
-./tcp-cli.sh store-knowledge -r diy-assistant -c home-maintenance -s ./scripts/test-data/knowledge/diy-manual.pdf
+./tcp-cli.sh store-knowledge -r diy-assistant -c home-maintenance -s ./scripts/test-data/templates/home-maintenance/roles/diy-assistant/knowledge/diy-manual.pdf
 ```
 
 As a part of the repair, please also unify: `-i`, `--input`, `-s`, `--source` to: `-i`, `--input-path`
@@ -885,23 +885,11 @@ Admin → Language models and the role dialog let every member of a company chan
 
 **Act when:** the permission flags land (phase 06 002.01). Gate model changes on `modify_company` / `define_agent_roles`.
 
-## Seed data is still JSON, not templates
-
-`start-dev.sh --seed`, `manual-verify.sh` and the eavesdrop hook still load `scripts/test-data/companies/*.json` and roles one call at a time. Converting them to templates would exercise the format daily, but those scripts depend on the current files.
-
-**Act when:** any of those scripts next changes, or a seed company needs knowledge or a planner. Turn each seed into a template folder and load it with `tcp-cli import-company`.
-
 ## Listing knowledge reads every document
 
 Knowledge has no database table, so the licence fields (002.03) live in each document's front matter, and `KnowledgeService.list` reads every file to return them. The upload name check calls `list` too.
 
 **Act when:** listing one knowledge scope takes over a second, or a scope passes a few hundred documents. Store title and licence in a column (or object metadata) written on upload.
-
-## Importing offers no live model list
-
-The import form (002.03), like the create form (002.02), can't list a local server's models, because that route needs a company. A model named in a template may not exist on the importer's server; they can type another, or change it after import in Admin → Language models.
-
-**Act when:** importers report picking a model that doesn't exist on their server. Add a pre-company model listing limited to the URL policy's allowed hosts.
 
 ## GitHub is the only remote template source
 

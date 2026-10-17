@@ -169,47 +169,38 @@ ACCESS_TOKEN=$("$ROOT/tcp-cli.sh" --tcp-server "$TCP_SERVER" get-token) \
 start_docker_capture
 start_lm_studio_capture
 
-# Step 1: create the test company from fixture JSON, then confirm it round-trips
-# through list-companies before trusting its id for the steps that follow.
-echo "${BLUE}=== 1. Creating test company ===${RESET}"
-COMPANY_JSON=$(cat "$ROOT/scripts/test-data/companies/simple-company.json" | cli set-company) \
-  || fail "set-company failed"
+# Step 1: import the test company template (the chicken and cat assistants),
+# replacing any earlier run's copy, then confirm it round-trips through
+# list-companies before trusting its id for the steps that follow.
+echo "${BLUE}=== 1. Importing test company ===${RESET}"
+COMPANY_JSON=$(cli import-company "$ROOT/scripts/test-data/templates/test-company" --replace) \
+  || fail "import-company failed"
 COMPANY_ID=$(jq -r '.id' <<< "$COMPANY_JSON")
-[[ -n "$COMPANY_ID" && "$COMPANY_ID" != "null" ]] || fail "set-company response had no id: $COMPANY_JSON"
-echo "Company created: $COMPANY_ID"
+[[ -n "$COMPANY_ID" && "$COMPANY_ID" != "null" ]] || fail "import-company response had no id: $COMPANY_JSON"
+echo "Company imported: $COMPANY_ID"
 
 cli list-companies | jq -e --arg id "$COMPANY_ID" \
   'map(select(.id == $id)) | length > 0' >/dev/null \
   || fail "company $COMPANY_ID not found in list-companies"
 
-# Step 2: create the chicken assistant role under that company, same
-# create-then-verify pattern as step 1.
+# Steps 2–3: find the two roles the template brought. The chicken recommends
+# consulting someone and the cat actually consults, so the scenarios need both.
+ROLES_JSON=$(cli list-roles --company-id "$COMPANY_ID") || fail "list-roles failed"
+# The id of the role with slug $1, or a failure naming it.
+role_id() {
+  local id
+  id=$(jq -r --arg slug "$1" '.[0].roles | map(select(.slug == $slug)) | .[0].id // empty' <<< "$ROLES_JSON")
+  [[ -n "$id" ]] || fail "role $1 not found in list-roles"
+  echo "$id"
+}
 echo ""
-echo "${BLUE}=== 2. Creating chicken assistant role ===${RESET}"
-CHICKEN_JSON=$(cat "$ROOT/scripts/test-data/roles/chicken-assistant.json" \
-  | cli set-role --company-id "$COMPANY_ID") || fail "set-role (chicken) failed"
-CHICKEN_ROLE_ID=$(jq -r '.id' <<< "$CHICKEN_JSON")
-[[ -n "$CHICKEN_ROLE_ID" && "$CHICKEN_ROLE_ID" != "null" ]] || fail "set-role (chicken) response had no id: $CHICKEN_JSON"
-echo "Chicken role created: $CHICKEN_ROLE_ID"
-
-cli list-roles --company-id "$COMPANY_ID" | jq -e --arg id "$CHICKEN_ROLE_ID" \
-  '.[0].roles | map(select(.id == $id)) | length > 0' >/dev/null \
-  || fail "chicken role $CHICKEN_ROLE_ID not found in list-roles"
-
-# Step 3: same as step 2, for the cat assistant role — needed so the chicken
-# (step 2) has someone to recommend consulting, and the cat (here) has someone
-# to actually consult in the scenarios below.
+echo "${BLUE}=== 2. Finding the chicken assistant role ===${RESET}"
+CHICKEN_ROLE_ID=$(role_id chicken-assistant) || exit 1
+echo "Chicken role: $CHICKEN_ROLE_ID"
 echo ""
-echo "${BLUE}=== 3. Creating cat assistant role ===${RESET}"
-CAT_JSON=$(cat "$ROOT/scripts/test-data/roles/cat-assistant.json" \
-  | cli set-role --company-id "$COMPANY_ID") || fail "set-role (cat) failed"
-CAT_ROLE_ID=$(jq -r '.id' <<< "$CAT_JSON")
-[[ -n "$CAT_ROLE_ID" && "$CAT_ROLE_ID" != "null" ]] || fail "set-role (cat) response had no id: $CAT_JSON"
-echo "Cat role created: $CAT_ROLE_ID"
-
-cli list-roles --company-id "$COMPANY_ID" | jq -e --arg id "$CAT_ROLE_ID" \
-  '.[0].roles | map(select(.id == $id)) | length > 0' >/dev/null \
-  || fail "cat role $CAT_ROLE_ID not found in list-roles"
+echo "${BLUE}=== 3. Finding the cat assistant role ===${RESET}"
+CAT_ROLE_ID=$(role_id cat-assistant) || exit 1
+echo "Cat role: $CAT_ROLE_ID"
 
 # Step 4: walk the scenarios file — for each entry, resolve its role key to the
 # id created above, send the prompt via a single-query chat session, then ask
