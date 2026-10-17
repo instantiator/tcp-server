@@ -127,6 +127,19 @@ describe('CompanyAdmin', () => {
     });
   });
 
+  it('saves other fields when the saved time zone is one this browser does not list', async () => {
+    respondByRoute([...routes({ ...COMPANY, timezone: 'Mars/Olympus' })]);
+    const user = userEvent.setup();
+    render_();
+    const name = await field(t('admin.company.name'));
+    await user.clear(name);
+    await user.type(name, 'Acme Ltd');
+    await save(user);
+
+    await waitFor(() => expect(announce).toHaveBeenCalled());
+    expect(await sentBodies()).toEqual([{ name: 'Acme Ltd' }]);
+  });
+
   it('refuses an empty name and sends nothing', async () => {
     const user = userEvent.setup();
     render_();

@@ -139,7 +139,9 @@ const CompanyForm = ({
     if (description.trim() === '') {
       found['description'] = t('admin.company.required');
     }
-    if (timezone !== '' && !isKnownTimeZone(timezone)) {
+    // Checked only when changed: a zone saved elsewhere that this browser
+    // doesn't list must not block saving the other fields.
+    if (timezone !== (saved.timezone ?? '') && !isKnownTimeZone(timezone)) {
       found['timezone'] = t('admin.company.timezoneInvalid');
     }
     if (!isValidRetention(retention)) {

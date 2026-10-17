@@ -53,6 +53,7 @@ describe('isKnownTimeZone', () => {
   it.each([
     ['', true],
     ['Europe/London', true],
+    ['UTC', true],
     ['europe/london', false],
     ['Mars/Olympus', false],
   ])('%j → %s', (value, known) => {
