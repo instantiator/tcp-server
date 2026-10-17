@@ -2152,6 +2152,47 @@
       ],
       "type": "string"
     },
+    "TemplateSource": {
+      "additionalProperties": false,
+      "description": "A place the template gallery reads company templates from. The built-in templates shipped with the server are not stored here.",
+      "properties": {
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "location": {
+          "description": "`github:<owner>/<repo>[/<path>][#<ref>]` or `dir:<absolute path>`. Unique, so the same place can't be listed twice.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the gallery calls this source.",
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/definitions/TemplateSourceOrigin"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "location",
+        "origin",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "TemplateSourceOrigin": {
+      "description": "Where a source's entry came from: the server's `TEMPLATE_SOURCES` setting (kept in step with it at boot, and not removable in the UI), or an administrator adding it.",
+      "enum": [
+        "config",
+        "user"
+      ],
+      "type": "string"
+    },
     "TokenUsage": {
       "additionalProperties": false,
       "description": "One LLM call's recorded token usage. Insert-only: a row is written once and never updated or deleted, so spend history survives the task or agent it references being removed later — for the same reason it carries no foreign keys. Per-provider/per-task totals are computed by the reader (`GROUP BY`), not maintained here.",
