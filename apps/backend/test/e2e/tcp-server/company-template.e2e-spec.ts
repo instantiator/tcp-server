@@ -339,6 +339,7 @@ describe('Company templates (e2e)', () => {
     it.each([
       ['blank', 0, null],
       ['basic', 1, 'planner'],
+      ['cottage-industry', 8, 'planner'],
     ])('imports %s with %i roles', async (name, roleCount, planner) => {
       const s = slug(`builtin-${name}`);
       const res = await request(app.getHttpServer())

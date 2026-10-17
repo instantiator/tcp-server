@@ -1,0 +1,9 @@
+{
+  "formatVersion": 1,
+  "slug": "cottage-industry",
+  "name": "Cottage industry",
+  "description": "Helps one person in the UK run a small home business as a second income, selling handmade goods online and at markets.",
+  "timezone": "Europe/London",
+  "plannerRole": "planner",
+  "mcpServerToggles": { "records": true, "utilities": true }
+}
