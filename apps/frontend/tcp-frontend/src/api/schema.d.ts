@@ -103,6 +103,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the templates in the gallery */
+        get: operations["TemplateGalleryController_gallery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template/{sourceId}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a gallery template as a zip */
+        get: operations["TemplateGalleryController_download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the template gallery’s sources */
+        get: operations["TemplateGalleryController_listSources"];
+        put?: never;
+        /** Add a GitHub repository as a template source */
+        post: operations["TemplateGalleryController_addSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template-source/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a template source */
+        delete: operations["TemplateGalleryController_removeSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assignment": {
         parameters: {
             query?: never;
@@ -2027,6 +2096,28 @@ export interface components {
             plannerRoleId?: string | null;
             nextTaskShortcodeIndex: number;
         };
+        GalleryTemplateDto: {
+            sourceId: string;
+            sourceName: string;
+            name: string;
+            title: string;
+            description: string;
+            roles: number;
+            documents: number;
+        };
+        TemplateSourceDto: {
+            /** @enum {string} */
+            origin: "builtin" | "config" | "user";
+            id: string;
+            name: string;
+            location: string;
+        };
+        AddTemplateSourceDto: {
+            name: string;
+            repo: string;
+            ref?: string;
+            path?: string;
+        };
         AssignmentResponseDto: {
             id: string;
             taskId?: string | null;
@@ -3104,7 +3195,9 @@ export interface operations {
                      * Format: binary
                      * @description The template as a zip.
                      */
-                    file: string;
+                    file?: string;
+                    /** @description A gallery template, as <sourceId>/<name>, instead of a file. */
+                    template?: string;
                 };
             };
         };
@@ -3133,7 +3226,9 @@ export interface operations {
                      * Format: binary
                      * @description The template as a zip.
                      */
-                    file: string;
+                    file?: string;
+                    /** @description A gallery template, as <sourceId>/<name>, instead of a file. */
+                    template?: string;
                     /** @description ImportCompanyOptions as a JSON string: slug, name, description, timezone, companyContext, llmConfig, embeddingConfig, roleModels and replace. Absent fields keep the template’s values. */
                     options?: string;
                 };
@@ -3171,6 +3266,108 @@ export interface operations {
                 content: {
                     "application/zip": string;
                 };
+            };
+        };
+    };
+    TemplateGalleryController_gallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryTemplateDto"][];
+                };
+            };
+        };
+    };
+    TemplateGalleryController_download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+        };
+    };
+    TemplateGalleryController_listSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSourceDto"][];
+                };
+            };
+        };
+    };
+    TemplateGalleryController_addSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTemplateSourceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSourceDto"];
+                };
+            };
+        };
+    };
+    TemplateGalleryController_removeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
