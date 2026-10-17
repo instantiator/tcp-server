@@ -7,6 +7,7 @@ import { gotoSignedIn } from './signed-in';
  * change fails here rather than silently testing the wrong control.
  */
 const NEW_COMPANY = 'New company';
+const SCRATCH = 'Start from scratch';
 const CREATE = 'Create';
 const ADD_ROLE = 'Add role';
 const COMPANY_SECTION = 'Company';
@@ -40,6 +41,11 @@ test('a company is created, given a planner and a new name, then deleted', async
   await page
     .getByRole('button', { name: NEW_COMPANY, exact: true })
     .first()
+    .click();
+  // New company opens the template gallery first (002.03).
+  await page
+    .getByRole('dialog', { name: NEW_COMPANY })
+    .getByRole('button', { name: SCRATCH, exact: true })
     .click();
 
   const create = page.getByRole('dialog', { name: NEW_COMPANY });

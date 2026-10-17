@@ -30,6 +30,7 @@ const SIGNED_IN_SPECS = [
   /data-protection\.spec\.ts/,
   /records\.spec\.ts/,
   /spend\.spec\.ts/,
+  /templates\.spec\.ts/,
 ];
 
 export default defineConfig({
