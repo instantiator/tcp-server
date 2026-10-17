@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { buildSwaggerDocument } from './swagger-document';
 
 /** Bootstraps the NestJS application and listens on {@link process.env.PORT} (default 3000). */
 async function bootstrap() {
@@ -9,21 +10,7 @@ async function bootstrap() {
   // event relay, and other connections close cleanly on shutdown.
   app.enableShutdownHooks();
 
-  const config = new DocumentBuilder()
-    .setTitle('TCP Server')
-    .setDescription('REST API for the TCP server')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addApiKey(
-      { type: 'apiKey', in: 'header', name: 'x-internal-api-key' },
-      'internal-api-key',
-    )
-    .build();
-  SwaggerModule.setup(
-    'swagger',
-    app,
-    SwaggerModule.createDocument(app, config),
-  );
+  SwaggerModule.setup('swagger', app, buildSwaggerDocument(app));
 
   await app.listen(process.env['PORT'] ?? 3000);
   // Disable Node.js's built-in 5-minute request timeout so that long-running

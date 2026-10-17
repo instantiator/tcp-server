@@ -182,7 +182,7 @@ answer to "how does a panel leave the screen." See
 
 What is still deferred:
 
-- choosing a role's model in the browser (the dialog shows it read-only; [002.01](<../prompts/phase%2004%20-%20utility/002.01.00.prompt%20-%20web%20ui%20llm%20provider%20picker%20(draft).md>));
+- choosing a role's model in the browser (the dialog shows it read-only; [002.01](../prompts/phase%2004%20-%20utility/002.01.00.prompt%20-%20web%20ui%20llm%20provider%20picker.md));
 - creating and editing a company, including its default planner (002.02);
 - adding, editing and removing users, and the permission flags ([phase 06 002.01](<../prompts/phase%2006%20-%20web%20ui%20quality/002.01.00.prompt%20-%20company%20configuration%20view%20(draft).md>)).
 

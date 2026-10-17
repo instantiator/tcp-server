@@ -323,10 +323,17 @@ body {
  * already picks up `.react-aria-Button`'s styling, so the field itself only
  * needs the label-above-control layout.
  */
-.react-aria-Select {
+.react-aria-Select,
+.react-aria-ComboBox {
   display: flex;
   flex-direction: column;
   gap: var(--tcp-space-xs);
+}
+
+/* A section heading inside a popover list, such as a provider group. */
+.react-aria-ListBox .react-aria-Header {
+  padding: var(--tcp-space-sm) var(--tcp-space-md) var(--tcp-space-xs);
+  font-weight: 600;
 }
 
 /*

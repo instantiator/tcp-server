@@ -6,7 +6,7 @@ import { hostOf, runFailure, type RunFailure } from './run-failure';
 export const MODEL_READINESS_TIMEOUT_MS = 10_000;
 
 /** The model ids an OpenAI-style `GET /models` body lists, if it is one. */
-function listedModels(body: unknown): string[] | undefined {
+export function listedModels(body: unknown): string[] | undefined {
   const data = (body as { data?: unknown } | null)?.data;
   if (!Array.isArray(data)) return undefined;
   return data

@@ -2,8 +2,10 @@ import type { TcpCompany, TcpRole, LlmConfig } from '@tcp/shared';
 import type { Response } from 'express';
 import {
   WARNINGS_HEADER,
+  computeCompanyNoModelWarning,
   computeCompanyWarnings,
   computeEmbeddingConfigWarning,
+  computeNoModelWarning,
   computeRoleWarnings,
   setWarningsHeader,
 } from './validation-warnings';
@@ -174,5 +176,62 @@ describe('setWarningsHeader', () => {
     expect(() =>
       setWarningsHeader(res as unknown as Response, ['a warning']),
     ).not.toThrow();
+  });
+});
+
+describe('computeNoModelWarning', () => {
+  const model: LlmConfig = { provider: 'openai', model: 'gpt-4o' };
+
+  it('warns when the role, company and env all have no model', () => {
+    expect(computeNoModelWarning({}, { llmConfig: null }, null)).toHaveLength(
+      1,
+    );
+    expect(computeNoModelWarning({}, null, undefined)).toHaveLength(1);
+  });
+
+  it('is silent when the role has a model', () => {
+    expect(computeNoModelWarning({ llmConfig: model }, null, null)).toEqual([]);
+  });
+
+  it('is silent when the company has a model', () => {
+    expect(computeNoModelWarning({}, { llmConfig: model }, null)).toEqual([]);
+  });
+
+  it('is silent when the env fallback has a model', () => {
+    expect(computeNoModelWarning({}, null, model)).toEqual([]);
+  });
+});
+
+describe('computeCompanyNoModelWarning', () => {
+  const model: LlmConfig = { provider: 'openai', model: 'gpt-4o' };
+  const roles = [
+    { name: 'a', llmConfig: null },
+    { name: 'b', llmConfig: model },
+    { name: 'c' },
+  ];
+
+  it('names exactly the roles without their own model', () => {
+    const [warning] = computeCompanyNoModelWarning({}, roles, null);
+    expect(warning).toContain('No model for 2 role(s): a, c.');
+  });
+
+  it('is silent when every role has a model', () => {
+    expect(
+      computeCompanyNoModelWarning({}, [{ name: 'b', llmConfig: model }], null),
+    ).toEqual([]);
+  });
+
+  it('is silent when there are no roles', () => {
+    expect(computeCompanyNoModelWarning({}, [], null)).toEqual([]);
+  });
+
+  it('is silent when the company has a model', () => {
+    expect(
+      computeCompanyNoModelWarning({ llmConfig: model }, roles, null),
+    ).toEqual([]);
+  });
+
+  it('is silent when the env fallback has a model', () => {
+    expect(computeCompanyNoModelWarning({}, roles, model)).toEqual([]);
   });
 });

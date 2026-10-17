@@ -27,11 +27,13 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
+import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import {
   CompanyListItem,
   CompanySpend,
   emptyCompanyStats,
+  resolveEnvLlmConfig,
   TcpCompany,
   TcpRole,
   WireEvent,
@@ -62,8 +64,11 @@ import { SpendResumeService } from './spend-resume.service';
 import { UpdateRoleDto } from './dto/role.dto';
 import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
+import { embeddingModelChanged } from '../db/llm-destination-policy';
 import {
+  computeCompanyNoModelWarning,
   computeCompanyWarnings,
+  computeNoModelWarning,
   computeRoleWarnings,
   setWarningsHeader,
 } from './validation-warnings';
@@ -85,6 +90,7 @@ export class CompanyController {
     private readonly spendReport: SpendReportService,
     private readonly recordsCleanup: RecordsCleanupService,
     private readonly knowledge: KnowledgeService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -182,6 +188,8 @@ export class CompanyController {
    * The `id` field is immutable and must not be included in the request body.
    * Soft data-quality warnings (e.g. blank `companyContext`) are reported via
    * the `X-Tcp-Warnings` response header — the update still succeeds.
+   * A new embedding model re-indexes the company's knowledge, since vectors
+   * from the old model can't be searched with the new one.
    */
   @ApiOperation({ summary: 'Partially update a company by ID or slug' })
   @ApiOkResponse({ type: CompanyResponseDto })
@@ -192,8 +200,25 @@ export class CompanyController {
     @Body() partial: UpdateCompanyDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<TcpCompany> {
+    const before = partial.embeddingConfig
+      ? await this.db.getCompany(id)
+      : null;
     const company = await this.api.setCompany(id, partial);
-    setWarningsHeader(res, computeCompanyWarnings(company));
+    if (
+      partial.embeddingConfig &&
+      embeddingModelChanged(before?.embeddingConfig, company.embeddingConfig)
+    ) {
+      await this.knowledge.reindexCompany(company.id);
+    }
+    const envLlm = resolveEnvLlmConfig(this.config);
+    setWarningsHeader(res, [
+      ...computeCompanyWarnings(company),
+      ...computeCompanyNoModelWarning(
+        company,
+        await this.db.listRoles(company.id),
+        envLlm,
+      ),
+    ]);
     return company;
   }
 
@@ -282,7 +307,10 @@ export class CompanyController {
       { ...partial, companyId: company.id },
       isUUID(slug) ? { id: slug } : { slug },
     );
-    setWarningsHeader(res, computeRoleWarnings(role));
+    setWarningsHeader(res, [
+      ...computeRoleWarnings(role),
+      ...computeNoModelWarning(role, company, resolveEnvLlmConfig(this.config)),
+    ]);
     return role;
   }
 

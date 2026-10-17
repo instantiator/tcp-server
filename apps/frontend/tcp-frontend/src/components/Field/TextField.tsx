@@ -28,6 +28,8 @@ export interface TextFieldProps {
   readonly isDisabled?: boolean;
   /** Renders a `TextArea` rather than a single-line `Input`. */
   readonly multiline?: boolean;
+  /** `password` hides what is typed, for secrets such as API keys. */
+  readonly type?: 'text' | 'password';
   /** So a failed submit can move focus to the first field that is wrong. */
   readonly inputRef?: RefObject<HTMLElement | null>;
 }
@@ -62,6 +64,7 @@ export const TextField = ({
   isRequired = false,
   isDisabled = false,
   multiline = false,
+  type = 'text',
   inputRef,
 }: TextFieldProps) => {
   // React Aria replaces its own default class when `className` is passed, and
@@ -80,6 +83,7 @@ export const TextField = ({
       isDisabled={isDisabled}
       isInvalid={errorMessage !== undefined}
       validationBehavior="aria"
+      type={type}
     >
       <Label className="react-aria-Label tcp-field__label">{label}</Label>
       {multiline ? (

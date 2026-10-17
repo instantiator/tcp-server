@@ -77,6 +77,51 @@ describe('RolesAdmin', () => {
     vi.mocked(announce).mockClear();
   });
 
+  it('marks a role with no model only when nothing else supplies one', async () => {
+    const withModel = {
+      ...role('r4', 'Modelled', 'modelled'),
+      llmConfig: { provider: 'openai', model: 'gpt-5-mini' },
+    };
+    const answer = (companyModel: object | null, appChat: object | null) =>
+      respondByRoute([
+        [ROLES_ROUTE, { body: [ROLES[0], withModel] }],
+        [
+          COMPANY_ROUTE,
+          { body: { id: 'c1', slug: 'acme', llmConfig: companyModel } },
+        ],
+        [
+          /\/api\/system\/llm-defaults$/,
+          { body: { chat: appChat, embedding: null, embeddingDimension: 768 } },
+        ],
+      ]);
+
+    answer(null, null);
+    const view = renderAdmin();
+    const writer = await screen.findByRole('row', { name: /Writer/ });
+    expect(
+      await within(writer).findByText(t('admin.roles.noModel')),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole('row', { name: /Modelled/ })).queryByText(
+        t('admin.roles.noModel'),
+      ),
+    ).toBeNull();
+    view.unmount();
+
+    for (const [companyModel, appChat] of [
+      [{ provider: 'openai', model: 'm' }, null],
+      [null, { provider: 'openai', model: 'm' }],
+    ] as const) {
+      answer(companyModel, appChat);
+      const again = renderAdmin();
+      await screen.findByRole('row', { name: /Writer/ });
+      // Let the company and defaults answers land; the marker would show by then.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(t('admin.roles.noModel'))).toBeNull();
+      again.unmount();
+    }
+  });
+
   it('lists the roles by name, marks the planner, and sorts both ways', async () => {
     const user = userEvent.setup();
     renderAdmin();

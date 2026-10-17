@@ -1,0 +1,25 @@
+/*
+ * The picker's layout: fields stacked, and the model's combo box beside its
+ * refresh button. No literal colour, spacing or border value: use a `--tcp-*`
+ * token.
+ */
+
+.tcp-llm-picker__model {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--tcp-space-sm);
+}
+
+.tcp-llm-picker__model > .react-aria-ComboBox {
+  flex: 1;
+}
+
+/* The refresh button lines up with the input, not the label above it. */
+.tcp-llm-picker__model > .react-aria-Button {
+  margin-block-start: var(--tcp-space-lg);
+}
+
+.tcp-llm-picker__select {
+  justify-content: space-between;
+  text-align: start;
+}

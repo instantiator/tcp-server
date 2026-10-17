@@ -709,6 +709,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/llm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** List the models a local or custom server offers */
+        post: operations["LlmModelsController_list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/llm-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the application's default models */
+        get: operations["LlmDefaultsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company/{companyId}/records/tables": {
         parameters: {
             query?: never;
@@ -1868,7 +1902,7 @@ export interface components {
         };
         DeviceTokenPollResponseDto: {
             /** @enum {string} */
-            status: "pending" | "slow_down" | "complete";
+            status: "complete" | "pending" | "slow_down";
             access_token?: string;
             token_type?: string;
             expires_in?: number;
@@ -1888,16 +1922,16 @@ export interface components {
             taskId?: string | null;
             companyId: string;
             /** @enum {string} */
-            mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            mode: "chat" | "consultee" | "finalise" | "implement" | "plan" | "qa";
             orderIndex?: number | null;
             prompt: string;
             shortcode?: string | null;
             roleId: string;
             /** @enum {string} */
-            status: "ready" | "in-progress" | "in-qa" | "succeeded" | "failed" | "cancelled";
+            status: "cancelled" | "failed" | "in-progress" | "in-qa" | "ready" | "succeeded";
             failureReason: string | null;
             /** @enum {string|null} */
-            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
+            failureCode: "auth_rejected" | "context_too_long" | "data_protection" | "forbidden" | "information_unavailable" | "interrupted" | "iteration_limit" | "llm_timeout" | "model_not_found" | "no_llm_config" | "no_output" | "provider_error" | "repeating_call" | "required_tools_missing" | "review_exhausted" | "run_timed_out" | "service_unavailable" | "stopped" | "tools_exhausted" | "tools_unsupported" | "unexpected" | "unreachable" | null;
             agentId?: string | null;
             targetAssignmentId?: string | null;
             parentAssignmentId?: string | null;
@@ -1923,7 +1957,7 @@ export interface components {
         };
         ToolFootprintDto: {
             /** @enum {string} */
-            mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            mode: "chat" | "consultee" | "finalise" | "implement" | "plan" | "qa";
             servers: components["schemas"]["ServerFootprintDto"][];
             total: number;
         };
@@ -1953,7 +1987,7 @@ export interface components {
              * @description The caller's own membership; null on an administrator's ?all row for a company they don't belong to.
              * @enum {string|null}
              */
-            memberType: "creator" | "owner" | "member" | null;
+            memberType: "creator" | "member" | "owner" | null;
             slug: string;
             name: string;
             description: string;
@@ -2001,16 +2035,16 @@ export interface components {
             versionRetentionDays?: number | null;
             timezone?: string | null;
             companyContext?: string | null;
-            embeddingConfig?: Record<string, never> | null;
+            embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
             runConfig?: Record<string, never> | null;
             plannerRoleId?: string | null;
             nextTaskShortcodeIndex: number;
         };
         UpdateCompanyDto: {
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
+            embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
             name?: string;
             description?: string;
-            llmConfig?: components["schemas"]["LlmConfigDto"];
-            embeddingConfig?: components["schemas"]["LlmConfigDto"];
             companyContext?: string;
             systemPromptTemplate?: string;
             mcpServerList?: string[];
@@ -2082,7 +2116,7 @@ export interface components {
             identifier: string;
             name: string | null;
             /** @enum {string} */
-            memberType: "creator" | "owner" | "member";
+            memberType: "creator" | "member" | "owner";
             roles: string[];
             knowledgeDomains: string[];
             /** Format: date-time */
@@ -2091,7 +2125,7 @@ export interface components {
         CreateCompanyUserDto: {
             identifier: string;
             /** @enum {string} */
-            memberType: "creator" | "owner" | "member";
+            memberType: "creator" | "member" | "owner";
             name?: string;
             roles?: string[];
             knowledgeDomains?: string[];
@@ -2099,7 +2133,7 @@ export interface components {
         UpdateCompanyUserDto: {
             name?: string;
             /** @enum {string} */
-            memberType?: "creator" | "owner" | "member";
+            memberType?: "creator" | "member" | "owner";
             roles?: string[];
             knowledgeDomains?: string[];
         };
@@ -2126,7 +2160,7 @@ export interface components {
             id: string;
             conversationId: string;
             /** @enum {string} */
-            author: "user" | "agent";
+            author: "agent" | "user";
             authorIdentifier: string | null;
             content: string;
             /** Format: date-time */
@@ -2172,7 +2206,7 @@ export interface components {
         };
         PauseDto: {
             /** @enum {string} */
-            type: "user_input" | "agent_consultation";
+            type: "agent_consultation" | "user_input";
             /** Format: uuid */
             agentId: string;
             question: string;
@@ -2197,7 +2231,7 @@ export interface components {
         FailDto: {
             reason: string;
             /** @enum {string} */
-            code?: "unreachable" | "llm_timeout" | "auth_rejected" | "forbidden" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable";
+            code?: "auth_rejected" | "context_too_long" | "data_protection" | "forbidden" | "information_unavailable" | "interrupted" | "iteration_limit" | "llm_timeout" | "model_not_found" | "no_llm_config" | "no_output" | "provider_error" | "repeating_call" | "required_tools_missing" | "review_exhausted" | "run_timed_out" | "service_unavailable" | "stopped" | "tools_exhausted" | "tools_unsupported" | "unexpected" | "unreachable";
         };
         UpdateStorageChangesDto: {
             created?: string[];
@@ -2215,13 +2249,13 @@ export interface components {
             shortcode: string;
             plannerRoleId?: string | null;
             /** @enum {string} */
-            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
+            status: "cancelled" | "failed" | "finalising" | "in-progress" | "planning" | "ready" | "succeeded";
             materials: Record<string, never>[];
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
             failureReason: string | null;
             /** @enum {string|null} */
-            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
+            failureCode: "auth_rejected" | "context_too_long" | "data_protection" | "forbidden" | "information_unavailable" | "interrupted" | "iteration_limit" | "llm_timeout" | "model_not_found" | "no_llm_config" | "no_output" | "provider_error" | "repeating_call" | "required_tools_missing" | "review_exhausted" | "run_timed_out" | "service_unavailable" | "stopped" | "tools_exhausted" | "tools_unsupported" | "unexpected" | "unreachable" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2244,13 +2278,13 @@ export interface components {
         };
         ResourceScopeDto: {
             /** @enum {string} */
-            mode: "draft" | "direct" | "read-only";
+            mode: "direct" | "draft" | "read-only";
             writePrefix: string | null;
             readPrefixes: string[];
         };
         StorageScopeResponseDto: {
             /** @enum {string} */
-            mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            mode: "chat" | "consultee" | "finalise" | "implement" | "plan" | "qa";
             materials: components["schemas"]["ResolvedMaterialDto"][];
             readOnly: boolean;
             companyPrefix: string;
@@ -2322,9 +2356,35 @@ export interface components {
             /** @description Whether this deployment has the server configured (its URL is set). */
             available: boolean;
         };
+        ListLlmModelsDto: {
+            /** @description A local or custom catalogue provider id. */
+            provider: string;
+            /** @description The server address, including `/v1`. */
+            baseUrl: string;
+            /** @description A key just typed. Without one, a key already saved for this provider and address is used. */
+            apiKey?: string;
+            /**
+             * Format: uuid
+             * @description A role of this company whose saved key may be used, as well as the company's own.
+             */
+            roleId?: string;
+        };
+        LlmModelsResponseDto: {
+            models: string[];
+        };
+        LlmDefaultDto: {
+            contextWindow?: number;
+            provider: string;
+            model: string;
+        };
+        LlmDefaultsDto: {
+            chat: components["schemas"]["LlmDefaultDto"] | null;
+            embedding: components["schemas"]["LlmDefaultDto"] | null;
+            embeddingDimension: number;
+        };
         RecordFieldSchemaDto: {
             /** @enum {string} */
-            type: "string" | "number" | "integer" | "boolean";
+            type: "boolean" | "integer" | "number" | "string";
             format?: string;
             description?: string;
             minimum?: number;
@@ -2425,7 +2485,7 @@ export interface components {
         };
         AddColumnDto: {
             /** @enum {string} */
-            type: "string" | "number" | "integer" | "boolean";
+            type: "boolean" | "integer" | "number" | "string";
             /** @enum {string} */
             format?: "date";
             /** @description Given to every existing record */
@@ -2445,13 +2505,13 @@ export interface components {
         };
         RetypeColumnDto: {
             /** @enum {string} */
-            type: "string" | "number" | "integer" | "boolean";
+            type: "boolean" | "integer" | "number" | "string";
             /** @enum {string} */
             format?: "date";
         };
         DoNotStoreEntryDto: {
             /** @enum {string} */
-            addedByRole: "user" | "agent";
+            addedByRole: "agent" | "user";
             id: string;
             value: string;
             note: string | null;
@@ -2622,9 +2682,9 @@ export interface components {
         };
         CapReportDto: {
             /** @enum {string} */
-            action: "pause" | "finish-agents" | "finish-tasks";
+            action: "finish-agents" | "finish-tasks" | "pause";
             /** @enum {string} */
-            dismissal: "none" | "until-reset" | "indefinite";
+            dismissal: "indefinite" | "none" | "until-reset";
             reachedUntil: string | null;
             limits: components["schemas"]["CapLimitReportDto"][];
             provider: string;
@@ -2637,7 +2697,7 @@ export interface components {
         };
         DismissCapDto: {
             /** @enum {string} */
-            until: "reset" | "indefinite";
+            until: "indefinite" | "reset";
         };
         SpendCapState: {
             provider: string;
@@ -2647,15 +2707,15 @@ export interface components {
             /** Format: date-time */
             reachedUntil?: string;
             /** @enum {string} */
-            action?: "pause" | "finish-agents" | "finish-tasks";
+            action?: "finish-agents" | "finish-tasks" | "pause";
             /** @enum {string} */
-            dismissal: "none" | "until-reset" | "indefinite";
+            dismissal: "indefinite" | "none" | "until-reset";
             /** Format: date-time */
             updatedAt: string;
         };
         PublicShutdownStateDto: {
             /** @enum {string} */
-            state: "idle" | "draining" | "quiesced";
+            state: "draining" | "idle" | "quiesced";
             restart: boolean;
             haltedOnError: boolean;
         };
@@ -2665,9 +2725,9 @@ export interface components {
         };
         ServiceHealthDto: {
             /** @enum {string} */
-            name: "tcp-server" | "tcp-agent" | "tcp-mcp-storage" | "tcp-mcp-memory" | "tcp-mcp-interactions" | "tcp-mcp-tasks" | "tcp-mcp-utilities" | "tcp-mcp-records";
+            name: "tcp-agent" | "tcp-mcp-interactions" | "tcp-mcp-memory" | "tcp-mcp-records" | "tcp-mcp-storage" | "tcp-mcp-tasks" | "tcp-mcp-utilities" | "tcp-server";
             /** @enum {string} */
-            status: "up" | "down" | "not_configured";
+            status: "down" | "not_configured" | "up";
             detail?: {
                 [key: string]: unknown;
             };
@@ -2675,12 +2735,12 @@ export interface components {
         };
         SystemHealthResponseDto: {
             /** @enum {string} */
-            status: "ok" | "degraded";
+            status: "degraded" | "ok";
             services: components["schemas"]["ServiceHealthDto"][];
         };
         ShutdownStatusResponseDto: {
             /** @enum {string} */
-            state: "idle" | "draining" | "quiesced";
+            state: "draining" | "idle" | "quiesced";
             forced: boolean;
             agentsRunning: number;
             restart: boolean;
@@ -2689,7 +2749,7 @@ export interface components {
         };
         TaskExpectedArtifactDto: {
             /** @enum {string} */
-            type: "task-completed-path" | "inline-text";
+            type: "inline-text" | "task-completed-path";
             value: string;
         };
         InlineTextMaterialDto: {
@@ -2720,7 +2780,7 @@ export interface components {
         };
         TaskWaitingResponseDto: {
             /** @enum {string} */
-            kind: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | "restart" | "queued";
+            kind: "consultation" | "manual" | "queued" | "rate_limited" | "restart" | "shutdown" | "spend_cap" | "user_input";
             pausedBy?: string;
             /** @description ISO-8601 */
             resumeAfter?: string;
@@ -2732,13 +2792,13 @@ export interface components {
             shortcode: string;
             plannerRoleId?: string | null;
             /** @enum {string} */
-            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
+            status: "cancelled" | "failed" | "finalising" | "in-progress" | "planning" | "ready" | "succeeded";
             materials: Record<string, never>[];
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
             failureReason: string | null;
             /** @enum {string|null} */
-            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
+            failureCode: "auth_rejected" | "context_too_long" | "data_protection" | "forbidden" | "information_unavailable" | "interrupted" | "iteration_limit" | "llm_timeout" | "model_not_found" | "no_llm_config" | "no_output" | "provider_error" | "repeating_call" | "required_tools_missing" | "review_exhausted" | "run_timed_out" | "service_unavailable" | "stopped" | "tools_exhausted" | "tools_unsupported" | "unexpected" | "unreachable" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2762,7 +2822,7 @@ export interface components {
             assignmentId: string | null;
             taskId: string | null;
             /** @enum {string} */
-            eventType: "llm_request" | "llm_response" | "tool_call" | "tool_result" | "decision" | "state_change" | "agent_loop_completion" | "compaction" | "input";
+            eventType: "agent_loop_completion" | "compaction" | "decision" | "input" | "llm_request" | "llm_response" | "state_change" | "tool_call" | "tool_result";
             payload: {
                 [key: string]: unknown;
             };
@@ -2780,7 +2840,7 @@ export interface components {
             roleId: string;
             assignmentId: string;
             /** @enum {string} */
-            status: "idle" | "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            status: "cancelled" | "completed" | "failed" | "idle" | "paused" | "queued" | "running";
             threadId: string | null;
             initialPrompt: string;
             /** Format: date-time */
@@ -2801,7 +2861,7 @@ export interface components {
             /** Format: date-time */
             pausedAt?: string;
             /** @enum {string|null} */
-            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | "restart" | null;
+            pauseReason?: "consultation" | "manual" | "rate_limited" | "restart" | "shutdown" | "spend_cap" | "user_input" | null;
             /** Format: date-time */
             resumeAfter?: string;
             rateLimitRetries: number;
@@ -2827,7 +2887,7 @@ export interface components {
         };
         ModelCompatibilityResultDto: {
             /** @enum {string} */
-            errorCode?: "unsupported_provider" | "destination_refused" | "unreachable" | "timeout" | "auth_rejected" | "forbidden" | "model_not_found" | "rate_limited" | "provider_error" | "failed";
+            errorCode?: "auth_rejected" | "destination_refused" | "failed" | "forbidden" | "model_not_found" | "provider_error" | "rate_limited" | "timeout" | "unreachable" | "unsupported_provider";
             provider: string;
             model: string;
             supportsTools: boolean;
@@ -2846,7 +2906,7 @@ export interface components {
             /** Format: uuid */
             taskId?: string;
             /** @enum {string} */
-            eventType: "llm_request" | "llm_response" | "tool_call" | "tool_result" | "decision" | "state_change" | "agent_loop_completion" | "compaction" | "input";
+            eventType: "agent_loop_completion" | "compaction" | "decision" | "input" | "llm_request" | "llm_response" | "state_change" | "tool_call" | "tool_result";
             payload: {
                 [key: string]: unknown;
             };
@@ -2854,9 +2914,9 @@ export interface components {
         TcpNotification: {
             id: string;
             /** @enum {string} */
-            severity: "info" | "error" | "warning";
+            severity: "error" | "info" | "warning";
             /** @enum {string} */
-            kind: "task_paused" | "spend_threshold" | "spend_reached" | "spend_reset" | "spend_untracked" | "task_failed";
+            kind: "spend_reached" | "spend_reset" | "spend_threshold" | "spend_untracked" | "task_failed" | "task_paused";
             message: string;
             params?: {
                 [key: string]: unknown;
@@ -2952,9 +3012,9 @@ export interface operations {
                 taskId?: string;
                 /** @description Role UUID */
                 roleId?: string;
-                status?: "ready" | "in-progress" | "in-qa" | "succeeded" | "failed" | "cancelled";
+                status?: "cancelled" | "failed" | "in-progress" | "in-qa" | "ready" | "succeeded";
                 /** @description `?taskId=null&mode=consultee` is the consultations list (ADR-023) */
-                mode?: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+                mode?: "chat" | "consultee" | "finalise" | "implement" | "plan" | "qa";
             };
             header?: never;
             path?: never;
@@ -2996,7 +3056,7 @@ export interface operations {
     ToolFootprintController_toolFootprint: {
         parameters: {
             query?: {
-                mode?: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+                mode?: "chat" | "consultee" | "finalise" | "implement" | "plan" | "qa";
             };
             header?: never;
             path: {
@@ -4043,6 +4103,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpServerResponseDto"][];
+                };
+            };
+        };
+    };
+    LlmModelsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListLlmModelsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelsResponseDto"];
+                };
+            };
+        };
+    };
+    LlmDefaultsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmDefaultsDto"];
                 };
             };
         };

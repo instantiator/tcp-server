@@ -1090,6 +1090,18 @@ describe('CompanyTabs', () => {
       expect(screen.getByTestId('hash')).toHaveTextContent('#admin/users');
     });
 
+    it('opens the Language models section from #admin/models', async () => {
+      respondActivity();
+      renderActivity('/#admin/models');
+
+      expect(
+        screen.getByRole('option', { name: t('admin.menu.models') }),
+      ).toHaveAttribute('aria-selected', 'true');
+      expect(
+        await screen.findByRole('heading', { name: t('admin.models.heading') }),
+      ).toBeInTheDocument();
+    });
+
     it('falls back to the office view for no hash or an unknown one', () => {
       respondActivity();
       renderActivity('/#nonsense');

@@ -886,12 +886,6 @@ const strings = {
   'admin.role.mcp.off': 'Off',
   'admin.role.mcp.unavailable': '{name} (not set up here)',
   'admin.role.llm.heading': 'Language model',
-  'admin.role.llm.role': 'This role has its own model: {provider}, {model}.',
-  'admin.role.llm.company':
-    'This role uses the company’s model: {provider}, {model}.',
-  'admin.role.llm.app': 'This role uses the app’s default model.',
-  'admin.role.llm.useCompany': 'Use the company’s model',
-  'admin.role.llm.later': 'Choosing a model here comes in a later release.',
   'admin.role.save': 'Save',
   'admin.role.create': 'Add role',
   'admin.role.cancel': 'Close',
@@ -1200,6 +1194,87 @@ const strings = {
     'The columns of a table here were changed elsewhere. Its rows cannot be edited until you reload.',
   'dataProtection.announce.outOfDate':
     'The search results have changed elsewhere. Reload to see the changes.',
+
+  // The language model picker (002.01), shared by the role dialog and Admin → Language models.
+  'llm.provider': 'Provider',
+  'llm.provider.remote': 'Online services',
+  'llm.provider.local': 'On this machine',
+  'llm.provider.custom': 'Other',
+  'llm.inherit.company': 'Use the company’s model ({provider} · {model})',
+  'llm.inherit.app': 'Use the app default ({provider} · {model})',
+  'llm.inherit.none': 'None: no app default is set',
+  'llm.inherit.noneHint':
+    'Nothing will run: neither this setting nor the one it falls back to names a model.',
+  'llm.region': 'Region',
+  'llm.region.hint': 'For example eu-west-2.',
+  'llm.resource': 'Resource name',
+  'llm.resource.hint': 'The name before .openai.azure.com.',
+  'llm.baseUrl': 'Address',
+  'llm.baseUrl.hint': 'Including /v1. The server must be allowed to reach it.',
+  'llm.baseUrl.fixed': 'Address: {url}',
+  'llm.model': 'Model',
+  'llm.model.hint': 'Pick a suggestion, or type any model name.',
+  'llm.model.width': 'Makes {width}-wide vectors.',
+  'llm.model.refresh': 'Refresh the model list',
+  'llm.model.listFailed': 'Couldn’t list models from this server: {reason}',
+  'llm.apiKey': 'API key',
+  'llm.apiKey.saved': 'A key is saved. Leave this blank to keep it.',
+  'llm.apiKey.dropped':
+    'Changing the provider or address drops the saved key. Enter a new one.',
+  'llm.apiKey.local': 'Optional for a server on this machine.',
+  'llm.apiKey.getOne': 'Get a key',
+  'llm.apiKey.newTab': '(opens in a new tab)',
+  'llm.contextWindow': 'Context window (tokens)',
+  'llm.contextWindow.hint':
+    'How much the model can read at once. Leave blank for the app default.',
+  'llm.contextWindow.local':
+    'Load a local model with at least {recommended} tokens: the agents’ tool descriptions alone take thousands.',
+  'llm.contextWindow.budget':
+    'Tools take about {tools} tokens a turn, which leaves about {left} for the conversation.',
+  'llm.contextWindow.tooSmall':
+    'Tools take about {tools} tokens a turn, more than this window holds.',
+  'llm.contextWindow.unsaved':
+    'Save the role to see how much of the window its tools take.',
+  'llm.timeout': 'Timeout (seconds)',
+  'llm.timeout.hint':
+    'How long to wait for one reply. Leave blank for the app default.',
+  'llm.embedding.width':
+    'This app stores {dimension}-wide vectors, so the model must make vectors that wide.',
+  'llm.notes': 'About {provider}',
+  'llm.error.model': 'Enter a model name.',
+  'llm.error.region': 'Enter the region.',
+  'llm.error.resource': 'Enter the resource name.',
+  'llm.error.baseUrl': 'Enter an address starting with http:// or https://.',
+  'llm.error.contextWindow': 'Enter a whole number of tokens.',
+  'llm.error.timeout': 'Enter a number of seconds.',
+  'llm.error.dimension':
+    'This model makes {width}-wide vectors, but this app stores {dimension}-wide ones.',
+  'llm.local.heading': 'This address is on your computer',
+  'llm.local.message':
+    'TCP runs in Docker, where {host} means the container itself, not your computer. Use host.docker.internal instead?',
+  'llm.local.replace': 'Use host.docker.internal',
+  'llm.local.keep': 'Keep as typed',
+
+  'admin.menu.models': 'Language models',
+  'admin.models.heading': 'Language models',
+  'admin.models.chat': 'Chat model',
+  'admin.models.chat.hint': 'Roles without a model of their own use this one.',
+  'admin.models.embedding': 'Embedding model',
+  'admin.models.embedding.hint':
+    'Turns knowledge into vectors for search. Changing it re-indexes all knowledge.',
+  'admin.models.save': 'Save',
+  'admin.models.announce.saved': 'Language models saved.',
+  'admin.models.noModel.heading': 'Leave roles without a model?',
+  'admin.models.noModel.roles.one': 'One role will have no model:',
+  'admin.models.noModel.roles.other': '{count} roles will have no model:',
+  'admin.models.noModel.message':
+    '{roles} {names}. Their tasks will fail. Save anyway?',
+  'admin.models.noModel.confirm': 'Save anyway',
+  'admin.models.reindex.heading': 'Re-index knowledge?',
+  'admin.models.reindex.message':
+    'All knowledge will be re-indexed with the new model. Search may be incomplete until it finishes.',
+  'admin.models.reindex.confirm': 'Save and re-index',
+  'admin.roles.noModel': 'No model',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

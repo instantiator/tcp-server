@@ -454,6 +454,41 @@ describe('DbService', () => {
       expect(updated.llmConfig!.apiKey).toBe('new-key');
     });
 
+    // The web picker never sends the masked key back, so a save without one
+    // must keep the stored key, as it does for llmConfig.
+    it('merges embeddingConfig, keeping the key unless the address moves', async () => {
+      const created = await dbService.setCompany({
+        slug: 'embed-co',
+        name: 'Embed Co',
+        description: 'Embed Company',
+        embeddingConfig: {
+          provider: 'lm-studio',
+          model: 'old',
+          baseUrl: 'http://gpu-box.lan:1234/v1',
+          apiKey: 'embed-key',
+        },
+      });
+
+      const remodelled = await dbService.setCompany(
+        {
+          embeddingConfig: {
+            provider: 'lm-studio',
+            model: 'new',
+            baseUrl: 'http://gpu-box.lan:1234/v1',
+          },
+        },
+        { id: created.id },
+      );
+      expect(remodelled.embeddingConfig!.model).toBe('new');
+      expect(remodelled.embeddingConfig!.apiKey).toBe('embed-key');
+
+      const moved = await dbService.setCompany(
+        { embeddingConfig: { baseUrl: 'http://gpu-box.lan:5678/v1' } },
+        { id: created.id },
+      );
+      expect(moved.embeddingConfig!.apiKey).toBeUndefined();
+    });
+
     it.each([
       [
         'llmConfig',

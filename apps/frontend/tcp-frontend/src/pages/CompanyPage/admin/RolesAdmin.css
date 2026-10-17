@@ -20,3 +20,10 @@
   align-items: center;
   gap: var(--tcp-space-xs);
 }
+
+/* Says a role has no model at all, beside its name: its tasks will fail. */
+.roles-admin__flag {
+  margin-inline-start: var(--tcp-space-sm);
+  color: var(--tcp-color-danger);
+  font-weight: 600;
+}

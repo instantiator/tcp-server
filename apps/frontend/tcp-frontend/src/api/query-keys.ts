@@ -194,6 +194,26 @@ export const queryKeys = {
   /** Who the caller is to the system (admin or not) and the shutdown state. */
   systemStatus: () => ['system', 'detail'] as const,
   mcpServers: () => ['system', 'list'] as const,
+  llmDefaults: () => ['system', 'detail', 'llm-defaults'] as const,
+  /**
+   * No API key in it. A typed key changes the answer, so a caller asks again
+   * by bumping `revision` rather than by putting the key in the cache.
+   */
+  localModels: (
+    companyId: string,
+    provider: string,
+    baseUrl: string,
+    roleId?: string,
+    revision = 0,
+  ) =>
+    [
+      'system',
+      'list',
+      { models: { companyId, provider, baseUrl, roleId, revision } },
+    ] as const,
+  /** Under `role`, so a role edit (which may change its tools) refetches it. */
+  toolFootprint: (companyId: string, slug: string, mode: string) =>
+    ['role', 'detail', { companyId, slug, footprint: mode }] as const,
   /** Whether a shutdown or restart is under way, and whether restart is available. */
   shutdownStatus: () => ['system', 'history'] as const,
   /** The combined health of the server, agent runner and MCP servers. */

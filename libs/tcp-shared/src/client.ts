@@ -56,6 +56,23 @@ export {
 export { downloadStamp, recordsDownloadName } from './records/download-name';
 export { fieldOrder } from './records/field-order';
 
+// -- LLM providers: the catalogue the setup wizard and web picker share -----
+// provider-catalogue.ts imports only config/defaults.ts, which imports
+// nothing, and docker-host.ts imports nothing, so all are safe as values.
+export {
+  PROVIDER_CATALOGUE,
+  MAX_EMBEDDING_DIMENSION,
+  findProvider,
+  fillBaseUrl,
+} from './llm/provider-catalogue';
+export type {
+  ProviderTemplate,
+  ProviderField,
+  SuggestedModel,
+} from './llm/provider-catalogue';
+export { isHostLocal, toDockerHost } from './llm/docker-host';
+export { RECOMMENDED_LOCAL_CONTEXT_WINDOW } from './config/defaults';
+
 // -- Company statistics: the `GET /api/company` response shape ---------------
 // CompanyStats.model.ts imports only types, so its helper is safe as a value.
 export type {

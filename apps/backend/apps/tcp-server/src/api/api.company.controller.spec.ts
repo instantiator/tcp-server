@@ -5,6 +5,7 @@ import {
   WireEvent,
 } from '@tcp/shared';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import type { UUID } from 'crypto';
 import { firstValueFrom, Subject, take, toArray } from 'rxjs';
@@ -125,6 +126,7 @@ describe('CompanyController', () => {
       {} as SpendReportService,
       recordsCleanup as unknown as RecordsCleanupService,
       knowledge as unknown as KnowledgeService,
+      new ConfigService(),
     );
   });
 

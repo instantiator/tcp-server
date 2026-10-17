@@ -85,6 +85,7 @@ import {
   useRoleKnowledgeSearch,
   useRoleKnowledgeStatus,
   useUpdateRoleMutation,
+  useUpdateCompanyMutation,
   useUploadKnowledgeMutation,
   type KnowledgeScope,
   useAddRecordMutation,
@@ -415,6 +416,24 @@ export const useUpdateRole = () => {
       update.mutateAsync(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['role'] });
+    },
+  });
+};
+
+/**
+ * Edits a company. Its own detail refetches; so does knowledge, since a new
+ * embedding model starts a re-index.
+ */
+export const useUpdateCompany = () => {
+  const queryClient = useQueryClient();
+  const update = useUpdateCompanyMutation();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof update.mutateAsync>[0]) =>
+      update.mutateAsync(input),
+    onSuccess: () => {
+      for (const queryKey of [['company'], ['knowledge']]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 };
@@ -867,12 +886,17 @@ export const useLiveAgentState = ({
 export {
   useAgentHistory,
   useCompanyUsers,
+  useLlmDefaults,
+  useLocalModelsQuery as useLocalModels,
   useMcpServers,
   useRoleBySlug,
   useSendMessageMutation as useSendMessage,
   useTaskHistory,
+  useToolFootprintQuery as useToolFootprint,
   useTranscriptSearch,
 } from './endpoints';
+
+export type { LocalModelsQuery } from './endpoints';
 
 export type { KnowledgeScope };
 
