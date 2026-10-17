@@ -1,4 +1,6 @@
 import { Bot, ListTodo, MessageCircleQuestion } from 'lucide-react';
+import { useState } from 'react';
+import { Button } from 'react-aria-components';
 import { Link } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
 import { ApiError } from '../../api/errors';
@@ -10,6 +12,7 @@ import { Icon } from '../../components/Icon/Icon';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t, tCount } from '../../strings';
+import { CreateCompanyDialog } from './CreateCompanyDialog';
 import './CompaniesPage.css';
 
 /**
@@ -25,6 +28,12 @@ import './CompaniesPage.css';
 export const CompaniesPage = () => {
   useDocumentTitle(t('page.companies.title'));
   const { data, isPending, error, refetch } = useCompanies();
+  const [creating, setCreating] = useState(false);
+  const newCompany = (
+    <Button className="react-aria-Button" onPress={() => setCreating(true)}>
+      {t('companies.create.open')}
+    </Button>
+  );
 
   useLoadingAnnouncement(
     isPending,
@@ -44,6 +53,11 @@ export const CompaniesPage = () => {
   return (
     <>
       <h1>{t('page.companies.title')}</h1>
+      {newCompany}
+      <CreateCompanyDialog
+        isOpen={creating}
+        onClose={() => setCreating(false)}
+      />
       {/*
         ADR-027 marks the region whose content is loading as busy.
         `LoadingState` deliberately does not, because it does not know how
@@ -68,6 +82,7 @@ export const CompaniesPage = () => {
           // so `2` records that decision instead of inheriting it.
           <EmptyState heading={t('companies.empty.heading')} headingLevel={2}>
             <p>{t('companies.empty.body')}</p>
+            {newCompany}
           </EmptyState>
         )}
 

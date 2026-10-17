@@ -428,7 +428,31 @@ const strings = {
   'companies.error.forbidden': 'You are not permitted to list companies.',
   'companies.empty.heading': 'You are not a member of any company',
   'companies.empty.body':
-    'Companies are created and managed with tcp-cli, the command-line tool — the web client cannot create one yet. Ask whoever runs this system to add you to a company.',
+    'Create one to get started, or ask someone to add you to theirs.',
+  // The New company dialog.
+  'companies.create.open': 'New company',
+  'companies.create.heading': 'New company',
+  'companies.create.loading': 'model defaults',
+  'companies.create.name': 'Name',
+  'companies.create.slug': 'Slug',
+  'companies.create.slugHint':
+    'Used in addresses and the CLI. Can’t be changed later.',
+  'companies.create.description': 'Description',
+  'companies.create.timezone': 'Time zone',
+  'companies.create.timezoneInvalid':
+    'Choose a time zone from the list, or leave it empty.',
+  'companies.create.context': 'Company context',
+  'companies.create.contextHint':
+    'What every agent in this company should know about it.',
+  'companies.create.chat': 'Chat model',
+  'companies.create.embedding': 'Embedding model',
+  'companies.create.nameRequired': 'Enter a name.',
+  'companies.create.slugRequired': 'Enter a slug.',
+  'companies.create.descriptionRequired': 'Enter a description.',
+  'companies.create.slugTaken': 'That slug is taken. Choose another.',
+  'companies.create.submit': 'Create',
+  'companies.create.cancel': 'Cancel',
+  'companies.create.announce': 'Company created. Add roles next.',
   // Counted phrases, picked by `tCount`: each needs both forms.
   'companies.count.activeAgents.one': '{count} active agent',
   'companies.count.activeAgents.other': '{count} active agents',
@@ -742,6 +766,7 @@ const strings = {
   'data.menu.tables': 'Tables',
   'data.menu.documents': 'Documents',
   'admin.menu.label': 'Company administration',
+  'admin.menu.company': 'Company',
   'admin.menu.roles': 'Roles',
   'admin.menu.users': 'Users',
   'admin.menu.knowledge': 'Knowledge',
@@ -1277,6 +1302,38 @@ const strings = {
     'All knowledge will be re-indexed with the new model. Search may be incomplete until it finishes.',
   'admin.models.reindex.confirm': 'Save and re-index',
   'admin.roles.noModel': 'No model',
+
+  // Admin → Company (002.02)
+  'admin.company.heading': 'Company',
+  'admin.company.slug': 'Slug: {slug} (can’t be changed)',
+  'admin.company.name': 'Name',
+  'admin.company.description': 'Description',
+  'admin.company.timezone': 'Time zone',
+  'admin.company.timezoneInvalid': 'Choose a time zone from the list.',
+  'admin.company.context': 'Company context',
+  'admin.company.contextHint':
+    'What every agent in this company should know about it.',
+  'admin.company.prompt': 'System prompt template',
+  'admin.company.promptHint':
+    'Used by roles without their own. Leave empty for the built-in one.',
+  'admin.company.retention': 'Version retention days',
+  'admin.company.retentionHint':
+    'Days old file versions are kept. Leave empty for the app default (90).',
+  'admin.company.retentionInvalid': 'Enter a whole number from 1 to 3650.',
+  'admin.company.required': 'Enter a value.',
+  'admin.company.planner': 'Default planner',
+  'admin.company.plannerHint': 'Plans tasks that don’t name their own planner.',
+  'admin.company.plannerNone': 'None: each task must choose its own planner',
+  'admin.company.save': 'Save',
+  'admin.company.announce.saved': 'Company saved.',
+  'admin.company.dangerHeading': 'Delete this company',
+  'admin.company.delete': 'Delete company',
+  'admin.company.deleteHeading': 'Delete {name}?',
+  'admin.company.deleteMessage':
+    'Its roles, tasks, knowledge, records and files are deleted too. This can’t be undone.',
+  'admin.company.deleteConfirm': 'Delete company',
+  'admin.company.deleteFailed': 'The company wasn’t deleted: {message}',
+  'admin.company.announce.deleted': '{name} deleted.',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

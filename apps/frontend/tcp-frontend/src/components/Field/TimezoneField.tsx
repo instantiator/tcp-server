@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import {
   ComboBox,
   FieldError,
@@ -21,6 +22,8 @@ export interface TimezoneFieldProps {
   readonly description?: string;
   /** Already resolved through `t`. */
   readonly errorMessage?: string;
+  /** So a failed submit can move focus here, as `TextField` allows. */
+  readonly inputRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -36,6 +39,7 @@ export const TimezoneField = ({
   onChange,
   description,
   errorMessage,
+  inputRef,
 }: TimezoneFieldProps) => {
   const { contains } = useFilter({ sensitivity: 'base' });
   return (
@@ -50,7 +54,12 @@ export const TimezoneField = ({
       validationBehavior="aria"
     >
       <Label className="react-aria-Label tcp-field__label">{label}</Label>
-      <Input className="react-aria-Input" />
+      <Input
+        className="react-aria-Input"
+        ref={(node) => {
+          if (inputRef !== undefined) inputRef.current = node;
+        }}
+      />
       {description !== undefined && (
         <Text slot="description" className="react-aria-Text tcp-field__hint">
           {description}

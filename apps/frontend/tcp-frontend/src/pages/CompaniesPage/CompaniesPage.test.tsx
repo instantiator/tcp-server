@@ -8,6 +8,7 @@ import {
   fetchMock,
   installFetchMock,
   requestedUrls,
+  respondByRoute,
   respondWithJson,
 } from '../../test-support/fetch-mock';
 import { expectNoA11yViolations } from '../../test-support/axe';
@@ -197,7 +198,7 @@ describe('CompaniesPage', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows the empty state, pointing at tcp-cli, when there are no companies', async () => {
+  it('shows the empty state, offering to create a company', async () => {
     respondWithJson(200, []);
     renderCompaniesPage();
 
@@ -206,7 +207,37 @@ describe('CompaniesPage', () => {
         name: t('companies.empty.heading'),
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/tcp-cli/)).toBeInTheDocument();
+    expect(screen.getByText(t('companies.empty.body'))).toBeInTheDocument();
+    // One button in the header and one in the empty state.
+    expect(
+      screen.getAllByRole('button', { name: t('companies.create.open') }),
+    ).toHaveLength(2);
+  });
+
+  it('opens the New company dialog from the header button', async () => {
+    respondByRoute([
+      [
+        /\/api\/company/,
+        { body: [company({ id: 'company-1', name: 'Acme' })] },
+      ],
+      [
+        /\/api\/system\/llm-defaults$/,
+        { body: { chat: null, embedding: null, embeddingDimension: 768 } },
+      ],
+    ]);
+    const user = userEvent.setup();
+    renderCompaniesPage();
+    await screen.findByRole('link', { name: 'Acme' });
+
+    await user.click(
+      screen.getByRole('button', { name: t('companies.create.open') }),
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: t('companies.create.heading'),
+      }),
+    ).toBeInTheDocument();
   });
 
   it('titles the document', async () => {
