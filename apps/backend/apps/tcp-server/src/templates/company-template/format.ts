@@ -28,7 +28,7 @@ import type { TemplateFiles } from './zip';
 export const TEMPLATE_FORMAT_VERSION = 1;
 
 /** Lower-case words joined by hyphens: the shape of company and role slugs. */
-const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 const SLUG_MESSAGE =
   '$property must be lower-case letters and digits joined by hyphens';

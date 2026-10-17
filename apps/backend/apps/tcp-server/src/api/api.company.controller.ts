@@ -1,6 +1,5 @@
 import {
   Body,
-  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -48,6 +47,7 @@ import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope, NoCompanyScope } from '../auth/company-scope.decorator';
 import { MembershipService } from '../auth/membership.service';
 import {
+  getCurrentUserCreatorName,
   getCurrentUserId,
   getCurrentUserIdentifiers,
 } from '../auth/current-user';
@@ -65,6 +65,7 @@ import { SpendResumeService } from './spend-resume.service';
 import { UpdateRoleDto } from './dto/role.dto';
 import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
+import { assertSlugClaimable } from './company-slug';
 import { embeddingModelChanged } from '../db/llm-destination-policy';
 import {
   computeCompanyNoModelWarning,
@@ -176,38 +177,18 @@ export class CompanyController {
     // Only the exact string widens what this request may do; anything else
     // is a plain create, the same rule as `?all` on the list route.
     const replace = replaceFlag === 'true';
-    const existing = await this.db.getCompany(slug);
-    if (existing) {
-      if (!replace) {
-        throw new ConflictException(
-          `A company with slug '${slug}' already exists.`,
-        );
-      }
-      const identifiers = getCurrentUserIdentifiers(req);
-      if (
-        !this.membership.isAdmin(identifiers) &&
-        !(await this.membership.isMember(identifiers, existing.id))
-      ) {
-        throw new ForbiddenException(
-          'Replacing a company requires membership of it',
-        );
-      }
-    }
-    const user = req.user as Record<string, unknown> | undefined;
-    const creatorIdentifier =
-      typeof user?.sub === 'string' ? user.sub : 'unknown';
-    const creatorName =
-      (typeof user?.email === 'string' ? user.email : undefined) ??
-      (typeof user?.preferred_username === 'string'
-        ? user.preferred_username
-        : undefined) ??
-      (typeof user?.name === 'string' ? user.name : undefined) ??
-      null;
+    await assertSlugClaimable(
+      this.db,
+      this.membership,
+      slug,
+      replace,
+      getCurrentUserIdentifiers(req),
+    );
     const company = await this.api.createCompany(
       { ...template, mcpServerList: template.mcpServerList ?? [] },
       slug,
-      creatorIdentifier,
-      creatorName,
+      getCurrentUserId(req) ?? 'unknown',
+      getCurrentUserCreatorName(req),
       replace,
     );
     setWarningsHeader(res, computeCompanyWarnings(company));

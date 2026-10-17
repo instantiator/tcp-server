@@ -35,6 +35,8 @@ import { StorageModule } from '../storage/storage.module';
 import { AgentController } from './api.agent.controller';
 import { AssignmentController } from './assignment.controller';
 import { CompanyController } from './api.company.controller';
+import { CompanyTemplateController } from '../templates/company-template/company-template.controller';
+import { CompanyTemplateService } from '../templates/company-template/company-template.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { CompanyUserController } from './company-user.controller';
@@ -119,6 +121,7 @@ import { TaskService } from './task.service';
     ]),
   ],
   controllers: [
+    CompanyTemplateController,
     AssignmentController,
     ToolFootprintController,
     CompanyController,
@@ -142,6 +145,7 @@ import { TaskService } from './task.service';
     ModelController,
   ],
   providers: [
+    CompanyTemplateService,
     ApiService,
     LlmModelsService,
     ToolFootprintService,
