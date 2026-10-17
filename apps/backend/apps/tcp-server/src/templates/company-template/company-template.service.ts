@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   findProvider,
@@ -14,10 +13,7 @@ import {
   ImportCompanyOptionsDto,
   TemplateDocumentPreviewDto,
 } from '../../api/dto/company-template.dto';
-import {
-  convertToMarkdown,
-  ensureOkfFrontMatter,
-} from '../../api/knowledge-conversion';
+import { toOkfDocument } from '../../api/knowledge-conversion';
 import {
   KnowledgeScopeRef,
   KnowledgeService,
@@ -347,18 +343,11 @@ async function convertAll(
 ): Promise<ConvertedDocument[]> {
   const out: ConvertedDocument[] = [];
   for (const doc of docs) {
-    const ext = path.extname(doc.name).toLowerCase();
-    const filename =
-      ext === '.md' ? doc.name : `${path.basename(doc.name, ext)}.md`;
     try {
-      const converted = await convertToMarkdown(
+      const { filename, content } = await toOkfDocument(
         doc.name,
         Buffer.from(doc.data),
       );
-      const content =
-        ext === '.md'
-          ? converted.body
-          : ensureOkfFrontMatter(doc.name, converted);
       const check = validateOkf(content);
       if (!check.valid) {
         errors.push(

@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { RagChunk } from '@tcp/shared';
 import {
   BadRequestException,
@@ -36,11 +35,7 @@ import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 
 import { Originators } from '../storage/storage.service';
-import {
-  ensureOkfFrontMatter,
-  convertToMarkdown,
-  withLicenceFrontMatter,
-} from './knowledge-conversion';
+import { toOkfDocument, withLicenceFrontMatter } from './knowledge-conversion';
 import { DocumentLicence } from '../templates/company-template/format';
 import {
   CompanyKnowledgeStatusResponseDto,
@@ -505,27 +500,12 @@ export class KnowledgeController {
     originators: Originators,
     res: Response,
   ): Promise<DocumentSummary> {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const converted = await convertToMarkdown(file.originalname, file.buffer);
-    // .md sources pass through unchanged (see convertToMarkdown) and keep
-    // today's strict behaviour: KnowledgeService.store's validateOkf gate
-    // rejects a missing/invalid title rather than heuristically inventing
-    // one. Front-matter generation only applies to genuinely converted
-    // formats, which have no native front-matter concept of their own.
-    const content = withLicenceFrontMatter(
-      ext === '.md'
-        ? converted.body
-        : ensureOkfFrontMatter(file.originalname, converted),
-      licence,
-    );
+    const okf = await toOkfDocument(file.originalname, file.buffer);
+    const content = withLicenceFrontMatter(okf.content, licence);
+    const targetFilename = overrideFilename ?? okf.filename;
+    const converted = okf.filename !== file.originalname;
 
-    const targetFilename =
-      overrideFilename ??
-      (ext === '.md'
-        ? file.originalname
-        : `${path.basename(file.originalname, ext)}.md`);
-
-    if (!overrideFilename && ext !== '.md') {
+    if (!overrideFilename && converted) {
       const existing = await this.knowledge.list(ref);
       if (existing.some((doc) => doc.name === targetFilename)) {
         throw new ConflictException(

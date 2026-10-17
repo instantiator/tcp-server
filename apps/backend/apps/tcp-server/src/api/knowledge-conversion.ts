@@ -185,3 +185,31 @@ export function withLicenceFrontMatter(
   for (const [key, value] of entries) fm[key] = value;
   return `---\n${dumpYaml(fm)}---\n${markdown.slice(block.length)}`;
 }
+
+/** A file converted to OKF Markdown, with the name it is stored under. */
+export interface OkfDocument {
+  filename: string;
+  content: string;
+}
+
+/**
+ * Converts an uploaded file to OKF Markdown, as both a knowledge upload and a
+ * template import store it. `.md` sources pass through unchanged and keep
+ * today's strict behaviour: storage's `validateOkf` gate rejects a missing
+ * title rather than inventing one. Front matter is generated only for
+ * converted formats, which have none of their own. Other formats are stored
+ * under their name with `.md` in place of their extension.
+ */
+export async function toOkfDocument(
+  originalName: string,
+  data: Buffer,
+): Promise<OkfDocument> {
+  const ext = path.extname(originalName).toLowerCase();
+  const converted = await convertToMarkdown(originalName, data);
+  return ext === '.md'
+    ? { filename: originalName, content: converted.body }
+    : {
+        filename: `${path.basename(originalName, ext)}.md`,
+        content: ensureOkfFrontMatter(originalName, converted),
+      };
+}

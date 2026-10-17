@@ -54,6 +54,9 @@ A pause record created when a calling agent requests input from a different role
 **Company user (`CompanyUser`)**
 A human user associated with a company. Used for query routing: their `knowledgeDomains` and `roles` fields are matched against questions from agents to determine who receives them.
 
+**Company template**
+A company packaged as a zip: its details, roles with their prompts, and their knowledge, in a versioned format (`formatVersion`). Imported to create a company, exported from one. The gallery reads templates from sources (`TemplateSource`): the built-in `templates/` folder, server directories and public GitHub repositories. See [company-templates.md](company-templates.md).
+
 ## Execution concepts
 
 **Agent loop**

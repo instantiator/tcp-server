@@ -1166,7 +1166,9 @@ unknown `#admin` opens.
   description, time zone, company context, system prompt template, version
   retention and default planner. Save sends only the fields that changed, and
   an emptied field is sent as `null`. Models stay in Language models. **Delete
-  company** asks first, then returns to `/companies`.
+  company** asks first, then returns to `/companies`. **Export as template**
+  (002.03) downloads the company as a template zip, with or without model
+  settings; API keys are never included.
 
 - **Roles** is a React Aria `Table` with sorting, a name filter and multi-select
   delete. Delete asks first, and warns when the planner role is selected.
@@ -1222,6 +1224,21 @@ a local server's models until the company exists. A taken slug comes back as a
 company's `#admin/roles`, since a company needs roles before it can run tasks.
 `TimezoneField` (`components/Field/`) is a `ComboBox` over
 `Intl.supportedValuesOf('timeZone')` plus `UTC`, which V8 leaves out.
+
+**Starting from a template** (002.03): **New company** opens
+`TemplateGalleryDialog` first: **Start from scratch** (the dialog above),
+**Import a zip file** (a native file input), and the gallery's templates
+grouped by source, each with **Use this template** and **Download**. Choosing
+one previews it (`POST /api/company/import/preview`), closes the gallery and
+opens `CreateCompanyDialog` with a `template` prop: the fields are prefilled,
+any provider needing a key is named, and a Roles fieldset lets each role keep
+or drop its own model. Submitting imports (`POST /api/company/import`) and
+opens the new company. A 409 asks, in a `ConfirmDialog`, whether to replace the
+company at that slug. Only one dialog is open at a time; the page holds which.
+Admin → Company has **Export as template** (with or without model settings),
+the knowledge table shows each document's licence, and admins manage gallery
+sources from the system menu's **Template sources**
+(`components/TemplateSourcesDialog/`). See [company-templates.md](company-templates.md).
 
 The **Profile** dialog lists your companies with your member type. The
 Memberships dialog and its Account menu item are gone, so the Account menu has

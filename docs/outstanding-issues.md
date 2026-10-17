@@ -857,7 +857,9 @@ The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with bac
 
 The prompt for 002.02 asked the create flow to list required secrets and offer a first task. A plain company has no roles, no planner and no services that need keys, so 002.02 opens Admin → Roles after creating instead.
 
-**Act when:** 005.04 (create from template) is planned, or 003.00 (secrets) lands. Both are carried forward into the 005.04 prompt.
+Since 002.03, New company opens the template gallery, and a template brings roles and a planner. Importing one still lands on the company page without offering a first task, and the preview names only the model providers that need a key (`neededKeys`), not a service's secrets.
+
+**Act when:** 005.04 is planned, or 003.00 (secrets) lands. Both are carried forward into the 005.04 prompt.
 
 ## App-level model defaults can only be changed in env files
 
@@ -882,3 +884,33 @@ The picker lists a local server's models, but there is no "Test" button. `POST /
 Admin → Language models and the role dialog let every member of a company change its models and API keys. Membership is the only access control (ADR-011).
 
 **Act when:** the permission flags land (phase 06 002.01). Gate model changes on `modify_company` / `define_agent_roles`.
+
+## Seed data is still JSON, not templates
+
+`start-dev.sh --seed`, `manual-verify.sh` and the eavesdrop hook still load `scripts/test-data/companies/*.json` and roles one call at a time. Converting them to templates would exercise the format daily, but those scripts depend on the current files.
+
+**Act when:** any of those scripts next changes, or a seed company needs knowledge or a planner. Turn each seed into a template folder and load it with `tcp-cli import-company`.
+
+## Listing knowledge reads every document
+
+Knowledge has no database table, so the licence fields (002.03) live in each document's front matter, and `KnowledgeService.list` reads every file to return them. The upload name check calls `list` too.
+
+**Act when:** listing one knowledge scope takes over a second, or a scope passes a few hundred documents. Store title and licence in a column (or object metadata) written on upload.
+
+## Importing offers no live model list
+
+The import form (002.03), like the create form (002.02), can't list a local server's models, because that route needs a company. A model named in a template may not exist on the importer's server; they can type another, or change it after import in Admin → Language models.
+
+**Act when:** importers report picking a model that doesn't exist on their server. Add a pre-company model listing limited to the URL policy's allowed hosts.
+
+## GitHub is the only remote template source
+
+Remote gallery sources are public GitHub repositories, downloaded whole from `codeload.github.com` within the 50 MB upload limit. Other hosts, private repositories and larger repositories aren't supported.
+
+**Act when:** someone asks for another host or a private repository, or a template repository passes 50 MB. Read only the templates folder, and add hosts one at a time with the same checks.
+
+## Template prompts are trusted as written
+
+An imported template's role prompts and context are someone else's text, and could carry prompt injection. Import checks the format, not the intent; the docs tell people to read a template from an unknown source first. Built-in templates are reviewed in this repository.
+
+**Act when:** 003.04 (prompt security for untrusted inbound content) is planned; its prompt carries this note.

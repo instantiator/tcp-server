@@ -151,13 +151,43 @@ LLM_CONTEXT_WINDOW=32768
 
 ## 1. Create a company
 
-### 1.1 Create the company
+### 1.0 Start from a template (recommended)
+
+The quickest way to a working company is a template: a company with its roles,
+prompts and knowledge already written. TCP ships three:
+
+| Template             | What you get                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Blank**            | A company with no roles. Download it to write your own template.                                                           |
+| **Basic**            | One planner role that plans each task and does the work.                                                                   |
+| **Cottage industry** | Eight roles that help one person run a small home business in the UK, with GOV.UK guidance as knowledge. Not legal advice. |
+
+In the web app, open **Companies → New company** and choose **Use this
+template**. Check the name, address and models, choose whether each role keeps
+its own model, and select **Import company**.
+
+Or with the CLI:
+
+```bash
+./tcp-cli.sh list-templates
+./tcp-cli.sh import-company --template builtin/basic --slug my-first-company
+```
+
+Templates never carry API keys. If a template names a model, you can keep it or
+choose your own. See [Company templates](company-templates.md) for the gallery,
+importing and exporting your own companies, and the template format.
+
+The rest of this section builds a company by hand instead, one step at a time,
+so you can see each part. Later sections use the company it creates.
+
+### 1.1 Create the company by hand
 
 `scripts/test-data/companies/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
 > [!TIP]
-> You can also create a company in the web app: **New company** on the
-> Companies page. This walkthrough uses the CLI so each step can be copied.
+> You can also create a company in the web app: **New company → Start from
+> scratch** on the Companies page. This walkthrough uses the CLI so each step
+> can be copied.
 
 Pipe it into `tcp-cli.sh` with the `set-company` verb:
 
