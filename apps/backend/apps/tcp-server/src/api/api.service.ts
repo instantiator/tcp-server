@@ -17,7 +17,8 @@ export class ApiService {
 
   /**
    * Creates a new {@link TcpCompany} from the given template and slug,
-   * replacing any existing record with the same slug. Adds `creatorIdentifier`
+   * replacing any existing record with the same slug only when `replace` is
+   * set. Adds `creatorIdentifier`
    * as a {@link CompanyUser} with `memberType: 'creator'`.
    */
   async createCompany(
@@ -25,12 +26,14 @@ export class ApiService {
     slug: string,
     creatorIdentifier: string,
     creatorName?: string | null,
+    replace = false,
   ): Promise<TcpCompany> {
     return await this.dbService.createCompany(
       template,
       slug,
       creatorIdentifier,
       creatorName,
+      replace,
     );
   }
 

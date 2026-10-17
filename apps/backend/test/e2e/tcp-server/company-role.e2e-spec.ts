@@ -169,30 +169,65 @@ describe('CompanyController (e2e)', () => {
     });
   });
 
-  describe('POST /api/company (slug replacement)', () => {
-    it('replaces an existing company with the same slug on a second POST', async () => {
-      await request(app.getHttpServer())
-        .post('/api/company')
-        .set('Authorization', `Bearer ${jwt}`)
-        .send({
-          slug: 'acme',
-          name: 'First',
-          description: 'First company that makes everything',
-        });
+  describe('POST /api/company (existing slug)', () => {
+    /** Posts `acme` as the given caller, optionally asking to replace it. */
+    const postAcme = (token: string, name: string, query = '') =>
+      request(app.getHttpServer())
+        .post(`/api/company${query}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ slug: 'acme', name, description: `${name} makes everything` });
 
-      await request(app.getHttpServer())
-        .post('/api/company')
-        .set('Authorization', `Bearer ${jwt}`)
-        .send({
-          slug: 'acme',
-          name: 'Second',
-          description: 'Second company that makes everything',
-        });
+    const acmeName = async () =>
+      (await companyRepo.findOneByOrFail({ slug: 'acme' })).name;
+
+    beforeEach(async () => {
+      await postAcme(jwt, 'First').expect(201);
+    });
+
+    it('refuses an existing slug with 409 and leaves the company alone', async () => {
+      const res = await postAcme(jwt, 'Second').expect(409);
+
+      expect((res.body as { message: string }).message).toContain('acme');
+      expect(await acmeName()).toBe('First');
+    });
+
+    it('treats any value but "true" as a plain create', async () => {
+      await postAcme(jwt, 'Second', '?replace=1').expect(409);
+      await postAcme(jwt, 'Second', '?replace').expect(409);
+
+      expect(await acmeName()).toBe('First');
+    });
+
+    it('replaces the company for a member who asks to', async () => {
+      await postAcme(jwt, 'Second', '?replace=true').expect(201);
 
       expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
-      expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
-        'Second',
-      );
+      expect(await acmeName()).toBe('Second');
+    });
+
+    it("refuses to replace another user's company with 403", async () => {
+      const outsider = makeTestJwt({ sub: 'outsider' });
+
+      await postAcme(outsider, 'Hijacked', '?replace=true').expect(403);
+
+      expect(await acmeName()).toBe('First');
+    });
+
+    it('replaces the company for an administrator who is not a member', async () => {
+      // Named in `.env.testing`'s TCP_ADMIN_IDENTIFIERS.
+      const admin = makeTestJwt({ sub: 'e2e-admin' });
+
+      await postAcme(admin, 'Second', '?replace=true').expect(201);
+
+      expect(await acmeName()).toBe('Second');
+    });
+
+    it('creates a new slug with ?replace=true as an ordinary create', async () => {
+      await request(app.getHttpServer())
+        .post('/api/company?replace=true')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({ slug: 'fresh', name: 'Fresh', description: 'New' })
+        .expect(201);
     });
   });
 
@@ -299,6 +334,88 @@ describe('CompanyController (e2e)', () => {
         expect(warnings.map(decodeURIComponent)).toContainEqual(
           expect.stringContaining('tasks MCP server is switched off'),
         );
+      });
+    });
+
+    describe('PUT /api/company/:id clearing and the planner', () => {
+      /** PUTs `body` to the fixture company and returns the stored row. */
+      const put = async (body: object, status = 200) => {
+        await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send(body)
+          .expect(status);
+        return companyRepo.findOneByOrFail({ id: company.id });
+      };
+
+      /** Creates a role in `companyId` and returns its id. */
+      const createRole = async (companyId: string, slug: string) => {
+        const res = await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId,
+            slug,
+            name: slug,
+            description: 'Plans.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(201);
+        return (res.body as TcpRole).id;
+      };
+
+      it.each(['companyContext', 'systemPromptTemplate', 'timezone'] as const)(
+        'clears %s with null',
+        async (field) => {
+          const values = {
+            companyContext: 'We make everything.',
+            systemPromptTemplate: 'You are {{name}}.',
+            timezone: 'Europe/London',
+          };
+          expect((await put({ [field]: values[field] }))[field]).toBe(
+            values[field],
+          );
+
+          expect((await put({ [field]: null }))[field]).toBeNull();
+        },
+      );
+
+      it('sets the planner to one of its roles and clears it with null', async () => {
+        const roleId = await createRole(company.id, 'planner');
+
+        expect((await put({ plannerRoleId: roleId })).plannerRoleId).toBe(
+          roleId,
+        );
+        expect((await put({ plannerRoleId: null })).plannerRoleId).toBeNull();
+      });
+
+      it("refuses another company's role as the planner", async () => {
+        const otherRes = await request(app.getHttpServer())
+          .post('/api/company')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ slug: 'other', name: 'Other', description: 'Other co' })
+          .expect(201);
+        const roleId = await createRole(
+          (otherRes.body as TcpCompany).id,
+          'outsider',
+        );
+
+        expect((await put({ plannerRoleId: roleId }, 400)).plannerRoleId).toBe(
+          null,
+        );
+      });
+
+      it('sets version retention, clears it with null, and refuses 0 and 3651', async () => {
+        expect(
+          (await put({ versionRetentionDays: 30 })).versionRetentionDays,
+        ).toBe(30);
+        await put({ versionRetentionDays: 0 }, 400);
+        await put({ versionRetentionDays: 3651 }, 400);
+
+        expect(
+          (await put({ versionRetentionDays: null })).versionRetentionDays,
+        ).toBeNull();
       });
     });
 

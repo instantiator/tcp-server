@@ -32,20 +32,22 @@ export class CompanyDbService {
   ) {}
 
   /**
-   * Creates a new {@link TcpCompany} from template, replacing any existing
-   * record with the same slug, and adds `creatorIdentifier` as a
+   * Creates a new {@link TcpCompany} from template and adds `creatorIdentifier` as a
    * {@link CompanyUser} with `memberType: 'creator'` (skipped if one already
-   * exists for this company+identifier).
+   * exists for this company+identifier). With `replace`, an existing company
+   * with the same slug is deleted first; without it, the slug's unique index
+   * refuses the save, so a check-then-create race can never delete a company.
    */
   async create(
     template: TcpCompanyTemplate,
     slug: string,
     creatorIdentifier: string,
     creatorName?: string | null,
+    replace = false,
   ): Promise<TcpCompany> {
     this.llmPolicy.assertAllowed(template.llmConfig, 'llmConfig');
     this.llmPolicy.assertAllowed(template.embeddingConfig, 'embeddingConfig');
-    await this.companyRepo.delete({ slug });
+    if (replace) await this.companyRepo.delete({ slug });
     const company = await this.companyRepo.save({
       ...template,
       id: undefined!,

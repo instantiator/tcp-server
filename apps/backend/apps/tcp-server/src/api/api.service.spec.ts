@@ -45,6 +45,23 @@ describe('ApiService', () => {
         slug,
         'alice',
         'Alice',
+        false,
+      );
+    });
+
+    it('passes replace through only when asked', async () => {
+      const template: TcpCompanyTemplate = {
+        name: 'Acme Corp',
+        description: 'A Company That Makes Everything',
+        mcpServerList: [],
+      };
+      await api.createCompany(template, 'acme', 'alice', 'Alice', true);
+      expect(db.createCompany).toHaveBeenCalledWith(
+        template,
+        'acme',
+        'alice',
+        'Alice',
+        true,
       );
     });
 

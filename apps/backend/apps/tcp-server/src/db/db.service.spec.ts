@@ -168,7 +168,26 @@ describe('DbService', () => {
       );
     });
 
-    it('replaces an existing record with the same slug', async () => {
+    it('refuses a duplicate slug without replace, keeping the first', async () => {
+      await dbService.createCompany(
+        { name: 'First', description: 'v1', mcpServerList: [] },
+        'acme',
+        'alice',
+      );
+      await expect(
+        dbService.createCompany(
+          { name: 'Second', description: 'v2', mcpServerList: [] },
+          'acme',
+          'alice',
+        ),
+      ).rejects.toThrow();
+
+      expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
+        'First',
+      );
+    });
+
+    it('replaces an existing record with the same slug when asked to', async () => {
       await dbService.createCompany(
         { name: 'First', description: 'v1', mcpServerList: [] },
         'acme',
@@ -178,6 +197,8 @@ describe('DbService', () => {
         { name: 'Second', description: 'v2', mcpServerList: [] },
         'acme',
         'alice',
+        null,
+        true,
       );
 
       expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
@@ -207,9 +228,7 @@ describe('DbService', () => {
       // referencing a role that belongs to a different (existing) company is
       // the case that must be caught — an outright unknown role id already
       // fails the FK constraint before reaching this check. Uses a distinct
-      // slug from 'acme' — createCompany('acme', ...) deletes (and cascades)
-      // any existing 'acme'-slugged company first, which would take the
-      // fixture role down with it.
+      // slug from 'acme', which the new company takes.
       const other = await companyRepo.save(
         companyRepo.create({
           slug: 'other-co',

@@ -1,15 +1,22 @@
 import { apiRequest } from '../core/api';
 import { confirmAction } from '../core/confirm';
 import { resolveToken } from '../auth/token';
-import { deleteCompanyAction, listCompaniesAction } from './company.action';
+import { readJsonBody } from '../core/read-json-body';
+import {
+  deleteCompanyAction,
+  listCompaniesAction,
+  setCompanyAction,
+} from './company.action';
 
 jest.mock('../core/api');
 jest.mock('../core/confirm');
 jest.mock('../auth/token');
+jest.mock('../core/read-json-body');
 
 const mockedApiRequest = apiRequest as jest.Mock;
 const mockedConfirm = confirmAction as jest.Mock;
 const mockedResolveToken = resolveToken as jest.Mock;
+const mockedReadJsonBody = readJsonBody as jest.Mock;
 
 const opts = { tcpServer: 'http://localhost:3000' };
 const company = { id: 'company-id', slug: 'acme', name: 'Acme Corp' };
@@ -59,6 +66,48 @@ describe('listCompaniesAction', () => {
         description: 'Makes everything',
       },
     ]);
+  });
+});
+
+describe('setCompanyAction', () => {
+  let stdoutSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedResolveToken.mockResolvedValue('token');
+    mockedApiRequest.mockResolvedValue(company);
+    stdoutSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => stdoutSpy.mockRestore());
+
+  it('creates with replace, so re-running a seed replaces its company', async () => {
+    const body = { slug: 'acme', name: 'Acme', description: 'd' };
+    mockedReadJsonBody.mockResolvedValue(body);
+
+    await setCompanyAction(opts, {});
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'POST',
+      '/api/company?replace=true',
+      body,
+    );
+  });
+
+  it('updates by PUT when the body names an id', async () => {
+    mockedReadJsonBody.mockResolvedValue({ id: 'company-id', name: 'Acme' });
+
+    await setCompanyAction(opts, {});
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'PUT',
+      '/api/company/company-id',
+      { id: 'company-id', name: 'Acme' },
+    );
   });
 });
 
