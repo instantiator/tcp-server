@@ -1,5 +1,7 @@
 import { CompanyUser, TcpCompany, TcpRole } from '@tcp/shared';
+import * as path from 'path';
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -11,6 +13,7 @@ import { DbService } from '../../../apps/tcp-server/src/db/db.service';
 import { makeTestJwt } from '../helpers/test-jwt';
 
 const RUN = Date.now();
+const BUILTIN_DIR = path.resolve(__dirname, '../../../../../templates');
 const OPENAI = { provider: 'openai', model: 'gpt-4o-mini' };
 const GUIDE =
   '---\ntitle: Guide\nlicense: CC-BY-4.0\nsource: https://example.org/guide\n---\n\nRead me.';
@@ -91,6 +94,14 @@ describe('Company templates (e2e)', () => {
 
   beforeAll(async () => {
     module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    // Serve the repository's own templates as the built-in ones.
+    const config = module.get(ConfigService);
+    const get = config.get.bind(config);
+    jest
+      .spyOn(config, 'get')
+      .mockImplementation((key: string) =>
+        key === 'TEMPLATES_DIR' ? BUILTIN_DIR : get(key),
+      );
     app = module.createNestApplication();
     // Listening, not just init() — see agent.e2e-spec.ts for why.
     await app.listen(0);
@@ -321,6 +332,27 @@ describe('Company templates (e2e)', () => {
         .get(`/api/company/${company.id}/export`)
         .set('Authorization', `Bearer ${makeTestJwt({ sub: 'outsider' })}`)
         .expect(403);
+    });
+  });
+
+  describe('built-in templates', () => {
+    it.each([
+      ['blank', 0, null],
+      ['basic', 1, 'planner'],
+    ])('imports %s with %i roles', async (name, roleCount, planner) => {
+      const s = slug(`builtin-${name}`);
+      const res = await request(app.getHttpServer())
+        .post('/api/company/import')
+        .set('Authorization', `Bearer ${jwt}`)
+        .field('template', `builtin/${name}`)
+        .field('options', JSON.stringify({ slug: s }))
+        .expect(201);
+      const company = res.body as TcpCompany;
+      const roles = await roleRepo.findBy({ companyId: company.id });
+      expect(roles).toHaveLength(roleCount);
+      expect(
+        roles.find((r) => r.id === company.plannerRoleId)?.slug ?? null,
+      ).toBe(planner);
     });
   });
 });
