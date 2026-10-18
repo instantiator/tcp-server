@@ -424,9 +424,9 @@ export const StorageBrowser = ({
               className="storage-browser__preview"
               aria-labelledby={previewId}
             >
-              <p id={previewId} className="storage-browser__preview-name">
+              <h3 id={previewId} className="storage-browser__preview-name">
                 {previewEntry.name}
-              </p>
+              </h3>
               <p className="storage-browser__meta">
                 {t('storage.preview.meta', {
                   size: formatSize(previewEntry.size),

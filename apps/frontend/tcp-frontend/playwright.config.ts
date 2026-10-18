@@ -30,6 +30,7 @@ const SIGNED_IN_SPECS = [
   /data-protection\.spec\.ts/,
   /records\.spec\.ts/,
   /spend\.spec\.ts/,
+  /storage-browser\.spec\.ts/,
   /templates\.spec\.ts/,
 ];
 

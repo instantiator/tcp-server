@@ -126,6 +126,13 @@
   color: var(--tcp-color-highlight-text);
 }
 
+/* Muted text would fail contrast on the highlight, so it takes the row's colour. */
+.storage-browser__row[data-selected] .storage-browser__size,
+.storage-browser__row[data-selected] .storage-browser__purpose,
+.storage-browser__row[data-selected] .storage-browser__status {
+  color: inherit;
+}
+
 .storage-browser__row[data-focus-visible] {
   outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
   outline-offset: calc(-1 * var(--tcp-focus-ring-width));
@@ -178,7 +185,7 @@
 
 .storage-browser__preview-name {
   margin: 0;
-  font-weight: bold;
+  font-size: var(--tcp-font-size-base);
 }
 
 .storage-browser__meta {
