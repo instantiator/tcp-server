@@ -44,12 +44,13 @@ export const EVENT_ENTITIES = [
 
 /**
  * Key prefixes with no event behind them. Nothing streams a role, a member
- * list or a knowledge index, so these refetch only when their own hook asks.
+ * list, a knowledge index or a storage folder, so these refetch only when their own hook asks.
  */
 export const STATIC_ENTITIES = [
   'role',
   'company-user',
   'knowledge',
+  'storage',
   'system',
 ] as const;
 
@@ -157,6 +158,14 @@ export const queryKeys = {
     ['knowledge', 'status', { scope: 'company', companyId }] as const,
   companyKnowledgeSearch: (companyId: string, query: string) =>
     ['knowledge', 'search', { scope: 'company', companyId, query }] as const,
+
+  /** One folder of a company's storage, `path` relative to the company folder. */
+  storageFolder: (companyId: string, path: string) =>
+    ['storage', 'list', { companyId, path }] as const,
+  storageVersions: (companyId: string, path: string) =>
+    ['storage', 'history', { companyId, path }] as const,
+  storageFile: (companyId: string, path: string) =>
+    ['storage', 'detail', { companyId, path }] as const,
 
   /** One company's active notifications, with the application-wide ones. A dismissal patches the row in place, so there is no separate detail key. */
   notifications: (companyId: string) =>

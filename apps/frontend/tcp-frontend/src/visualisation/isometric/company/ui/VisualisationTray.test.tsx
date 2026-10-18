@@ -541,7 +541,7 @@ describe('VisualisationTray', () => {
     respond({ tasks: { body: [taskFixture('succeeded')] } });
     renderTray({ selection: { kind: 'archive' } });
 
-    await screen.findByText(/TASK-1/);
+    await screen.findByText(/^TASK-1 — /);
     expect(
       screen.getByRole('complementary', {
         name: t('visualisation.archive.heading'),

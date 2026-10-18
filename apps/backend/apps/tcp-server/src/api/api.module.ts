@@ -58,6 +58,7 @@ import { LlmModelsService } from './llm-models.service';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
 import { StorageActionsController } from './storage-actions.controller';
+import { CompanyStorageController } from './company-storage.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
 import { SpendController } from './spend.controller';
@@ -146,6 +147,7 @@ import { TaskService } from './task.service';
     RoleController,
     StorageActionsController,
     StorageProxyController,
+    CompanyStorageController,
     StorageValidationController,
     SpendController,
     SystemController,

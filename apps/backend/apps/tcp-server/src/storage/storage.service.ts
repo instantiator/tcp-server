@@ -16,6 +16,15 @@ export interface StorageObject {
 }
 
 /** Who/what requested a storage action, threaded through for audit attribution. */
+/** One stored version of an object, from a versioned bucket. */
+export interface StorageVersion {
+  versionId: string;
+  size: number;
+  lastModified: Date;
+  /** Whether this is the object's current version. */
+  isLatest: boolean;
+}
+
 export interface Originators {
   /** JWT `sub` of the human user, for direct (JWT-guarded) calls. `null` for agent-initiated calls. */
   user: string | null;
@@ -63,9 +72,10 @@ export abstract class StorageService {
     originators?: Originators,
   ): Promise<void>;
 
-  /** Returns the raw content stream and content-type for an arbitrary object key, or `null` if it does not exist. */
+  /** Returns the raw content stream and content-type for an arbitrary object key (or one of its old versions), or `null` if it does not exist. */
   abstract getByKey(
     key: string,
+    versionId?: string,
   ): Promise<{ stream: Readable; contentType: string } | null>;
 
   /** Writes arbitrary binary content to the given object key. Returns the number of bytes written. */
@@ -87,6 +97,27 @@ export abstract class StorageService {
     prefix?: string,
     options?: { all?: boolean },
   ): Promise<StorageObject[]>;
+
+  /**
+   * One folder level under `prefix` (excludes soft-deleted objects): the
+   * immediate subfolders' prefixes, and the files directly inside it.
+   */
+  abstract listFolder(
+    prefix: string,
+  ): Promise<{ folders: string[]; files: StorageObject[] }>;
+
+  /** Every kept version of the object at `key`, newest first. */
+  abstract listVersions(key: string): Promise<StorageVersion[]>;
+
+  /**
+   * Makes an old version of `key` its current one, by copying it over the
+   * top: the version it replaces is kept, so a restore can itself be undone.
+   */
+  abstract restoreVersion(
+    key: string,
+    versionId: string,
+    originators?: Originators,
+  ): Promise<void>;
 
   /** Reads an object's content as text. Returns `null` when it does not exist. */
   abstract readFile(path: string): Promise<string | null>;

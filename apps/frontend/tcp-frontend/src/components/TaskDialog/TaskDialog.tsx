@@ -16,6 +16,7 @@ import { EmptyState } from '../EmptyState/EmptyState';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { LabelledValue } from '../LabelledValue/LabelledValue';
 import { LoadingState } from '../LoadingState/LoadingState';
+import { StorageBrowser } from '../StorageBrowser/StorageBrowser';
 import { TaskAssignmentPanel } from './TaskAssignmentPanel';
 import { TaskControls } from './TaskControls';
 import { useTaskWaiting } from './useTaskWaiting';
@@ -61,6 +62,7 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
   useEventStream(streamUrls.task(taskId));
 
   const detailsHeadingId = useId();
+  const filesHeadingId = useId();
   const detailsRef = useRef<HTMLElement | null>(null);
 
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
@@ -226,6 +228,20 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
               />
             ))
           )}
+
+          <section aria-labelledby={filesHeadingId}>
+            <h3
+              id={filesHeadingId}
+              className="task-dialog__assignments-heading"
+            >
+              {t('task.files.heading')}
+            </h3>
+            <StorageBrowser
+              companyId={companyId}
+              root={`tasks/${taskId}/`}
+              label={t('task.files.label')}
+            />
+          </section>
         </>
       )}
     </Dialog>

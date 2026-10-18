@@ -13,6 +13,10 @@ import {
   respondWithJson,
 } from '../test-support/fetch-mock';
 import {
+  downloadStorageZip,
+  useDeleteStorage,
+  useRestoreStorageVersion,
+  useUploadStorageFile,
   useCompanyKnowledgeList,
   useCompanyRolesList,
   useLiveAgentState,
@@ -843,5 +847,76 @@ describe('the scoped knowledge reads', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(9_000));
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('company storage writes', () => {
+  beforeEach(() => {
+    installFetchMock();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('useUploadStorageFile invalidates every storage query on success', async () => {
+    respondWithJson(201, { path: 'a.md' });
+    const { result, queryClient } = renderHookWithClient(() =>
+      useUploadStorageFile('c1'),
+    );
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    await act(() =>
+      result.current.mutateAsync({
+        path: 'a.md',
+        file: new File(['x'], 'a.md'),
+        overwrite: false,
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['storage'] });
+  });
+
+  it('useDeleteStorage invalidates every storage query on success', async () => {
+    respondWithJson(204, undefined);
+    const { result, queryClient } = renderHookWithClient(() =>
+      useDeleteStorage('c1'),
+    );
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    await act(() => result.current.mutateAsync('a.md'));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['storage'] });
+  });
+
+  it('useRestoreStorageVersion invalidates every storage query on success', async () => {
+    respondWithJson(201, { path: 'a.md' });
+    const { result, queryClient } = renderHookWithClient(() =>
+      useRestoreStorageVersion('c1'),
+    );
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    await act(() =>
+      result.current.mutateAsync({ path: 'a.md', versionId: 'v1' }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['storage'] });
+  });
+
+  it('downloadStorageZip POSTs { root, paths } to the zip route', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Blob(['zip']), { status: 200 }),
+    );
+    URL.createObjectURL = () => 'blob:x';
+    URL.revokeObjectURL = () => undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+      () => undefined,
+    );
+
+    await downloadStorageZip('c1', 'resources/', ['a.md', 'sub/'], 'files.zip');
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    if (!(url instanceof URL) || typeof init?.body !== 'string')
+      throw new Error('expected a JSON POST');
+    expect(url.pathname).toBe('/api/company/c1/storage/zip');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({
+      root: 'resources/',
+      paths: ['a.md', 'sub/'],
+    });
   });
 });

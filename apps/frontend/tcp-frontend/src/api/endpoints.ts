@@ -596,6 +596,128 @@ export const useDeleteKnowledgeMutation = (scope: KnowledgeScope) =>
           ),
   });
 
+/** The route a stored file is read from; `versionId` picks an older version. */
+export const storageFilePath = (
+  companyId: string,
+  path: string,
+  versionId?: string,
+): string =>
+  `/api/company/${encodeURIComponent(companyId)}/storage/file?${new URLSearchParams(
+    { path, ...(versionId ? { versionId } : {}) },
+  )}`;
+
+/** The route a zip of chosen stored files and folders is built by. */
+export const storageZipPath = (companyId: string): string =>
+  `/api/company/${encodeURIComponent(companyId)}/storage/zip`;
+
+/** What a storage read takes beyond its ids: a wrapper's gating. */
+interface StorageReadOptions {
+  enabled?: boolean;
+}
+
+/** One folder of a company's storage; `path` is relative and ends in `/`, `''` is the root. */
+export const useStorageFolder = (
+  companyId: string,
+  path: string,
+  options: StorageReadOptions = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.storageFolder(companyId, path),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/storage/folder', {
+          params: { path: { companyId }, query: { path } },
+        }),
+      ),
+  });
+
+/** The saved versions of one stored file, newest first as the server orders them. */
+export const useStorageVersions = (
+  companyId: string,
+  path: string,
+  options: StorageReadOptions = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.storageVersions(companyId, path),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/storage/versions', {
+          params: { path: { companyId }, query: { path } },
+        }),
+      ),
+  });
+
+/** One stored file's bytes, for a preview. */
+export const useStorageFileBlob = (
+  companyId: string,
+  path: string,
+  options: StorageReadOptions = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.storageFile(companyId, path),
+    staleTime: 30_000,
+    queryFn: async () => (await getBlob(storageFilePath(companyId, path))).blob,
+  });
+
+/**
+ * Uploads one file into a company's storage; without `overwrite` an existing
+ * file is a 409 {@link ApiError}. The `signal` lets the caller cancel it.
+ *
+ * Goes through {@link postFile} rather than {@link api} for the same reason as
+ * {@link useUploadKnowledgeMutation}: a `File` cannot travel through the
+ * generated body type.
+ */
+export const useUploadStorageFileMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: ({
+      path,
+      file,
+      overwrite,
+      signal,
+    }: {
+      path: string;
+      file: File;
+      overwrite: boolean;
+      signal?: AbortSignal;
+    }) =>
+      postFile(
+        `/api/company/${encodeURIComponent(companyId)}/storage/file?${new URLSearchParams(
+          { path, ...(overwrite ? { overwrite: 'true' } : {}) },
+        )}`,
+        file,
+        signal,
+      ),
+  });
+
+/**
+ * Deletes a stored file, or a folder when `path` ends in `/`. `expectAccepted`,
+ * not `unwrap`: the route answers 204 with no body.
+ */
+export const useDeleteStorageMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: (path: string) =>
+      expectAccepted(
+        api.DELETE('/api/company/{companyId}/storage', {
+          params: { path: { companyId }, query: { path } },
+        }),
+      ),
+  });
+
+/** Makes an older version of a stored file the latest. */
+export const useRestoreStorageVersionMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: ({ path, versionId }: { path: string; versionId: string }) =>
+      unwrap(
+        api.POST('/api/company/{companyId}/storage/restore', {
+          params: { path: { companyId } },
+          body: { path, versionId },
+        }),
+      ),
+  });
+
 /**
  * Rebuilds a knowledge index. `unwrap`, not `expectAccepted`: the route
  * answers `202` but with `{ reindexing: true }` as its body.

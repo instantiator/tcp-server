@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Button } from 'react-aria-components';
 import {
   useCloseTaskVisualisation,
   useLiveAssignmentsList,
@@ -8,6 +10,7 @@ import {
 import { refusalKey } from '../../../../api/errors';
 import { taskOutputsUrl } from '../../../../api/storageLink';
 import { ErrorState } from '../../../../components/ErrorState/ErrorState';
+import { StorageBrowserDialog } from '../../../../components/StorageBrowser/StorageBrowserDialog';
 import { TaskControls } from '../../../../components/TaskDialog/TaskControls';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import type { AssignmentDTO } from '../../../../api/dtos';
@@ -104,6 +107,7 @@ export const TaskDetails = ({
   const companyQuery = useLiveCompanyState(companyId);
   const closeRoom = useCloseTaskVisualisation(taskId);
   const listenIn = useListenIn(companyId);
+  const [browsing, setBrowsing] = useState(false);
 
   if (tasksQuery.isPending) {
     return (
@@ -181,7 +185,30 @@ export const TaskDetails = ({
       }
     >
       {task.status === 'succeeded' && (
-        <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
+        <>
+          <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
+          <Button
+            className="react-aria-Button tcp-button--outline"
+            onPress={() => {
+              setBrowsing(true);
+            }}
+          >
+            {t('visualisation.tray.browseOutputs')}
+          </Button>
+          {browsing && (
+            <StorageBrowserDialog
+              companyId={companyId}
+              root={`tasks/${taskId}/completed/`}
+              heading={t('storage.dialog.taskOutputs', {
+                shortcode: task.shortcode,
+              })}
+              onClose={() => {
+                setBrowsing(false);
+              }}
+              portalContainer={portalContainer}
+            />
+          )}
+        </>
       )}
       {closeRoom.isError && (
         <ErrorState

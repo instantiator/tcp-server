@@ -27,7 +27,12 @@ import {
   DELETED_PREFIX,
   globToRegex,
 } from './storage-path-helpers';
-import { Originators, StorageObject, StorageService } from './storage.service';
+import {
+  Originators,
+  StorageObject,
+  StorageService,
+  StorageVersion,
+} from './storage.service';
 
 /**
  * MinIO/S3 implementation of {@link StorageService}.
@@ -136,8 +141,9 @@ export class MinioStorageAdapter
 
   async getByKey(
     key: string,
+    versionId?: string,
   ): Promise<{ stream: Readable; contentType: string } | null> {
-    return this.store.get(key);
+    return this.store.get(key, versionId);
   }
 
   async putByKey(
@@ -176,6 +182,69 @@ export class MinioStorageAdapter
         size: obj.Size ?? 0,
         lastModified: obj.LastModified ?? new Date(0),
       }));
+  }
+
+  async listFolder(
+    prefix: string,
+  ): Promise<{ folders: string[]; files: StorageObject[] }> {
+    const { folders, files } = await this.store.listLevel(prefix);
+    // In a versioned bucket MinIO still lists a prefix whose objects are all
+    // deleted (only delete markers left), so a deleted folder would linger
+    // for the whole retention period. Keep only folders with a live object.
+    // ponytail: one request per subfolder; batch or cache if a folder with
+    // hundreds of subfolders (tasks/) lists slowly.
+    const live = await Promise.all(
+      folders.map(async (f) =>
+        f.startsWith(DELETED_PREFIX) ? false : this.store.hasObjects(f),
+      ),
+    );
+    return {
+      folders: folders.filter((_, i) => live[i]),
+      files: files
+        .filter((obj) => !obj.Key?.startsWith(DELETED_PREFIX))
+        .map((obj) => ({
+          key: obj.Key ?? '',
+          name: (obj.Key ?? '').split('/').at(-1) ?? '',
+          size: obj.Size ?? 0,
+          lastModified: obj.LastModified ?? new Date(0),
+        })),
+    };
+  }
+
+  async listVersions(key: string): Promise<StorageVersion[]> {
+    assertValidStoragePath(key);
+    const versions = await this.store.listVersions(key);
+    return versions
+      .filter((v) => v.VersionId !== undefined)
+      .map((v) => ({
+        versionId: v.VersionId ?? '',
+        size: v.Size ?? 0,
+        lastModified: v.LastModified ?? new Date(0),
+        isLatest: v.IsLatest ?? false,
+      }));
+    // No re-sort: S3 lists newest first, and `lastModified` can tie when two
+    // saves land in the same second.
+  }
+
+  async restoreVersion(
+    key: string,
+    versionId: string,
+    originators?: Originators,
+  ): Promise<void> {
+    assertValidStoragePath(key);
+    const versions = await this.store.listVersions(key);
+    if (!versions.some((v) => v.VersionId === versionId)) {
+      throw new NotFoundException(`No version ${versionId} of ${key}`);
+    }
+    await this.store.copy(key, key, versionId);
+    await this.effects.recordAudit(
+      'restore_version',
+      key,
+      companySlugOf(key),
+      originators,
+      { versionId },
+    );
+    await this.effects.triggerReindex(key);
   }
 
   async readFile(path: string): Promise<string | null> {

@@ -145,6 +145,8 @@ const strings = {
   'task.details.failureReason': 'Why it failed',
   'task.details.waiting': "Why it's waiting",
   'task.details.pausing': 'Pausing — agents stop after their current step',
+  'task.files.heading': 'Files',
+  'task.files.label': 'The task’s files',
   'task.assignments.heading': 'Work on this task',
   'task.assignments.empty.heading': 'No work has started yet',
   'task.assignments.empty.body':
@@ -640,6 +642,7 @@ const strings = {
   'visualisation.tray.close': 'Close details',
   'visualisation.tray.closeRoom': 'Close room',
   'visualisation.tray.outputs': 'Outputs',
+  'visualisation.tray.browseOutputs': 'Browse outputs',
   'visualisation.tray.outputsUnconfigured':
     'The storage browser is not configured, so the outputs link is unavailable.',
 
@@ -651,8 +654,10 @@ const strings = {
   'visualisation.archive.empty': 'No completed tasks yet.',
   'visualisation.archive.row': '{shortcode} — {request}',
   'visualisation.archive.linkSuffix': '(outputs in Silo, opens in a new tab)',
+  'visualisation.archive.browse': 'Browse {shortcode} outputs',
+  'storage.dialog.taskOutputs': 'Task outputs · {shortcode}',
   'visualisation.archive.unconfigured':
-    'The storage browser is not configured, so these are shown as text only.',
+    'The storage console is not configured, so there are no links to it.',
 
   // Assignment modes, the office's word for each — `modeLabel` in
   // `api/modeLabel.ts`, mirroring
@@ -967,20 +972,75 @@ const strings = {
   'admin.role.error': 'The role could not be saved: {message}',
   'admin.role.announce.created': 'Role added: {name}',
   'admin.role.announce.saved': 'Role saved: {name}',
+  'storage.preview.none':
+    'No preview for this kind of file. Download it to open it.',
+  'storage.preview.tooLarge':
+    'Too large to preview ({size}). Download it to open it.',
+  'storage.preview.truncated': 'Showing the first {count} rows.',
+  'storage.preview.loading': 'the preview',
+  'storage.preview.error': 'The preview could not be loaded.',
+  /** The preview's size and date line. */
+  'storage.preview.meta': '{size} · changed {date}',
+  'storage.preview.download': 'Download {name}',
+
+  'storage.toolbar': 'File actions',
+  'storage.uploadFiles': 'Upload files',
+  'storage.uploadFolder': 'Upload folder',
+  'storage.download': 'Download',
+  'storage.downloadAll': 'Download all',
+  'storage.delete': 'Delete',
+  'storage.refresh': 'Refresh',
+  'storage.selected.one': '{count} selected',
+  'storage.selected.other': '{count} selected',
+  /** Where uploads land; `{folder}` is a path, or the root's name. */
+  'storage.target': 'Uploads go to {folder}',
+  'storage.target.readOnly':
+    '{folder} is read-only. Choose a folder in resources/ to upload into.',
+  'storage.rootName': 'the top folder',
+  'storage.readOnlyHere': 'These files are read-only.',
+  'storage.dropZone': 'Drop files here to upload them to {folder}',
+  'storage.readOnly': 'read-only',
+  'storage.loading': 'the files',
+  'storage.error': 'The files could not be loaded.',
+  'storage.empty.heading': 'No files yet',
+  'storage.empty.body': 'Nothing has been stored here yet.',
+  'storage.fileCount.one': '{count} file',
+  'storage.fileCount.other': '{count} files',
+  'storage.itemCount.one': '{count} item',
+  'storage.itemCount.other': '{count} items',
+  'storage.uploaded': 'Uploaded {files} to {folder}',
+  'storage.uploadFailed': 'Some files could not be uploaded.',
+  'storage.uploadFailedItem': '{name}: {reason}',
+  'storage.replace.heading': 'Replace {files}?',
+  'storage.replace.message':
+    '{names} already in {folder}. Replacing keeps the old version in its history.',
+  'storage.replace.confirm': 'Replace',
+  'storage.replace.skip': 'Skip',
+  'storage.delete.heading': 'Delete {items}?',
+  'storage.delete.message':
+    'Deleting can’t be undone here. An administrator can recover deleted files from the storage console.',
+  'storage.deleted': 'Deleted {items}',
+  'storage.deleteFailed': 'Could not delete: {reason}',
+  'storage.downloadFailed': 'The download failed.',
+  'storage.history': 'History',
+  'storage.history.saved': 'Saved',
+  'storage.history.size': 'Size',
+  'storage.history.actions': 'Actions',
+  'storage.history.current': '{date} (current)',
+  'storage.history.download': 'Download the version from {date}',
+  'storage.history.restore': 'Restore the version from {date}',
+  'storage.history.loading': 'the history',
+  'storage.history.error': 'The history could not be loaded.',
+  'storage.restore.heading': 'Restore this version?',
+  'storage.restore.message':
+    '{name} from {date} becomes the current version. The version it replaces is kept, so you can undo this the same way.',
+  'storage.restore.confirm': 'Restore',
+  'storage.restored': 'Restored {name} from {date}',
+  'storage.restoreFailed': 'Could not restore: {reason}',
   'documents.heading': 'Documents',
-  'documents.intro':
-    'Folders in the document store. Each link opens the storage browser in a new tab.',
-  'documents.refresh': 'Refresh the document links',
-  'documents.column.folder': 'Folder',
-  'documents.column.location': 'Location',
-  'documents.root': 'Everything the company stores',
-  'documents.resources': 'Company resources',
-  'documents.taskOutputs': 'Outputs of {shortcode} — {request}',
-  'documents.linkSuffix': '(opens the storage browser in a new tab)',
-  'documents.unconfigured':
-    'The storage browser is not configured, so there are no links to show.',
-  'documents.loading': 'Loading the tasks',
-  'documents.error': "The tasks' outputs could not be loaded.",
+  'documents.taskFolder': '{shortcode} — {request}',
+  'documents.console': 'Open in the storage console',
+  'documents.linkSuffix': '(opens the storage console in a new tab)',
 
   // Record tables (001.03): the spreadsheet view, its actions and dialogs.
   'dataProtection.duties.heading': 'Your data protection duties',

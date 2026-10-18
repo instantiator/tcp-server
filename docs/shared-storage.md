@@ -24,8 +24,10 @@ See [`tcp-cli.md` → `open-document-store`](tcp-cli.md#open-document-store) for
 
 ### Links from the web client's archive tray
 
-The office view's archive room links each succeeded task straight to its
-outputs folder in the console (`ArchiveDetails.tsx`, 002.02). Two of the same
+The office view's archive room lists each succeeded task with a **Browse**
+button, which opens the task's outputs in the in-app
+[storage browser](#browsing-in-the-web-client). Beside it sits a link straight
+to the same folder in the console (`ArchiveDetails.tsx`, 002.02). Two of the same
 environment variables reach `tcp-web` too, through `docker-compose.yml` and
 `docker/nginx/10-tcp-init.sh`:
 
@@ -35,7 +37,7 @@ environment variables reach `tcp-web` too, through `docker-compose.yml` and
 | `MINIO_BUCKET_PREFIX` | `storageBucket`      | The bucket the company data sits in |
 
 Both are optional. With either unset, the archive tray still lists completed
-tasks — just as plain text, with no link.
+tasks, each with its Browse button, but with no console link.
 
 **Confirmed link format** (002.02 stage 9, against a running `pgsty/silo`
 container — the MinIO fork this stack bundles):
@@ -53,6 +55,74 @@ browser on the bucket root, reading the encoded string as a literal
 See the [Silo link format drift](prompts/unresolved-notes.md#silos-console-link-format-was-confirmed-against-one-image-tag)
 unresolved note — this is confirmed against one image tag, not guaranteed
 across every future Silo release.
+
+## Browsing in the web client
+
+Since 002.05 the web client has its own storage browser. It talks to tcp-server, never to MinIO, so no S3 credential or presigned URL reaches the browser. The console links stay as a second way in.
+
+### Where it appears
+
+| Place                                                   | Rooted at                    | Can change files?    |
+| ------------------------------------------------------- | ---------------------------- | -------------------- |
+| Company page → **Data** → **Documents**                 | The company folder           | In `resources/` only |
+| Task dialog → **Files**                                 | `tasks/{task_id}/`           | No                   |
+| Office task tray → **Browse outputs** (succeeded tasks) | `tasks/{task_id}/completed/` | No                   |
+| Office archive tray → **Browse {shortcode} outputs**    | `tasks/{task_id}/completed/` | No                   |
+
+The root is a view, not a boundary. A browser rooted at a task never shows anything above it, but a member can reach the rest of their own company through Data → Documents anyway. In Data → Documents a task folder is labelled with the task ("T-12 — Restock tea") instead of its id.
+
+### What it does
+
+- **Tree.** Folders open one level at a time. Folders under `resources/` show their purpose, which is the first line of their `README.md`. Elsewhere there is no purpose, because reading every `README.md` under `tasks/` would cost one read per task.
+- **Preview.** Select one file and it opens beside the tree, or under it in a narrow dialog or tray. The kinds and caps are in the table below.
+- **Download.** One file downloads as it is. Several files, or a folder, download as one zip with entries named relative to the browser's root. With nothing selected, **Download all** zips the whole root. A zip is built in memory and refused above 200 MB in total. Downloads are always attachments, sent with `X-Content-Type-Options: nosniff`.
+- **Upload.** **Upload files**, **Upload folder**, or drag files and folders onto the drop strip. They go to the selected folder, or the folder of the selected file, or the root; the target is shown under the toolbar. Uploads run one at a time, up to 50 MB each. If a name is already there, the browser asks once: "Replace N files?" Replacing is safe, because the old version stays in the history.
+- **Delete.** Deleting a file or folder is soft: the files move to `_deleted/` and can be recovered from the storage console. A confirmation says so. The browser can't undo a delete.
+- **Refresh.** The browser doesn't update by itself. It refetches after its own changes, and has a Refresh button for changes made elsewhere, such as an agent writing a resource.
+
+Preview kinds and size caps:
+
+| Kind     | Files                                                                       | Cap    | Shown as                        |
+| -------- | --------------------------------------------------------------------------- | ------ | ------------------------------- |
+| Markdown | `.md`, `.markdown`                                                          | 1 MiB  | Rendered                        |
+| CSV      | `.csv`                                                                      | 1 MiB  | A table of the first 500 rows   |
+| Text     | `.txt .json .jsonl .yaml .yml .xml .log .html .htm .ini .toml .ts .js .css` | 1 MiB  | Literal text. HTML is never run |
+| Image    | `.png .jpg .jpeg .gif .webp .avif .svg`                                     | 25 MiB | An image. SVG scripts can't run |
+| PDF      | `.pdf`                                                                      | 25 MiB | The browser's own viewer        |
+
+Anything else, or a file over its cap, shows "No preview" and a download button. Office files (Word, Excel, PowerPoint, OpenDocument) have no preview yet.
+
+### What is writable, and why
+
+Only `resources/` can be changed from the browser. The server refuses upload, delete and restore anywhere else with `403`. The lock icons in the tree only show that rule.
+
+- **Tasks (`tasks/`, `assignments/`)** belong to the agents that work in them. A person adding or removing a file mid-task would change what the agents see. Task materials are the task row's list, not the folder, so a file dropped into `materials/` would be ignored anyway.
+- **Audit (`audit/`)** is append-only.
+- **Knowledge (`knowledge/`)** has its own upload door, which converts the file to OKF Markdown and reindexes. Writing there directly would skip the conversion. Use the Admin tab's knowledge panels.
+
+The folder `resources/` itself can't be deleted. Any member of the company can change resources, as in records; roles and permissions come later.
+
+`POST /api/storage` (the CLI's route) still writes anywhere in the company, knowledge included. See [outstanding-issues.md](outstanding-issues.md).
+
+### Routes
+
+All under `/api/company/:companyId/storage`, for a signed-in member of that company. `path` is relative to the company folder. A folder path ends in `/`, and an empty path is the company root. A path with a leading `/`, a `\`, a `.` or `..` segment, an empty segment, a control character, or more than 1,024 characters gets `400`.
+
+| Method | Route                    | Does                                                                                                             |
+| ------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| GET    | `/folder?path=`          | One level: `{ path, writable, folders: [{ path, name, purpose }], files: [{ path, name, size, lastModified }] }` |
+| GET    | `/file?path=&versionId=` | The file (or an old version) as an attachment. `404` if missing                                                  |
+| POST   | `/file?path=&overwrite=` | Multipart upload. `403` not writable, `409` exists without `overwrite=true`, `413` over 50 MB, `422` validation  |
+| DELETE | `?path=`                 | Soft-delete a file or folder. `403` not writable, `404` nothing there                                            |
+| POST   | `/zip`                   | Body `{ root, paths }`. A zip attachment. `400` path not inside `root`, `404` none exist, `413` over 200 MB      |
+| GET    | `/versions?path=`        | Versions of a file, newest first: `{ versionId, size, lastModified, isLatest }`                                  |
+| POST   | `/restore`               | Body `{ path, versionId }`. Makes that version current. `403` not writable, `404` unknown version                |
+
+Uploads are validated, audited and reindexed like any other write (see [Write validation](#write-validation)).
+
+### Empty folders after a delete
+
+In a versioned bucket, deleting every object in a folder leaves delete markers, and MinIO keeps listing the folder's prefix. So the listing drops any subfolder that has no live object. A fully deleted folder disappears from the browser even though the console may still show it.
 
 ## Authentication
 
@@ -187,14 +257,22 @@ Versioning covers the whole bucket, so working-file edits keep old versions too.
 
 ### Restoring an old version
 
-Restoring is done in the MinIO console for now. The wording of the console changes between releases, so look for the equivalent of each step.
+**In the web client**, for files in `resources/`:
+
+1. Open the file in Data → Documents, so its preview shows.
+2. Open **History**. It lists each version with its date and size, and a Download button for each.
+3. Choose **Restore** on the version you want, and confirm.
+
+Restore copies that version over the current file. It makes a **new current version**, so you can undo the restore the same way. The restore is audited and the knowledge index is refreshed if needed, as for any write. Restore is refused outside `resources/`.
+
+**In the MinIO console**, for any other file. The wording of the console changes between releases, so look for the equivalent of each step.
 
 1. Open the console. Run `./tcp-cli.sh open-document-store`, or go to `MINIO_CONSOLE_URL` (default [http://localhost:9001](http://localhost:9001)), and log in as described under [Authentication](#console-login).
-2. Browse the bucket to the file, for example `{company_slug}/resources/price-list.md`.
+2. Browse the bucket to the file, for example `{company_slug}/tasks/{task_id}/completed/report.md`.
 3. Select the file and open its version history. The console calls this "Versions" or "Display Object Versions". It lists each version with its date and size.
 4. Pick the version you want. Restore it, or download it and upload it again.
 
-Restoring does not remove the newer versions. It makes a **new current version** with the old content, so you can undo the restore the same way.
+The console restore makes a new current version too.
 
 A version is only there until its retention period ends. Restore soon after the bad change.
 
@@ -317,4 +395,4 @@ Filenames are normalised and rejected if absolute, containing a `..` segment, or
 
 ## Internal storage-action endpoints
 
-The full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `tcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `tcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `POST /internal/storage/append` (read-modify-write that creates the file when absent, `created` in the response) and `POST /internal/storage/replace` (all-occurrence literal string replace, returning `count`) are both variants of `write` and re-use its validation/audit/origination plumbing. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `list` takes an `all` flag that lifts the 1,000-key cap, used for resource trees and for promotion. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.
+The full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `tcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `tcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `POST /internal/storage/append` (read-modify-write that creates the file when absent, `created` in the response) and `POST /internal/storage/replace` (all-occurrence literal string replace, returning `count`) are both variants of `write` and re-use its validation/audit/origination plumbing. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the CLI's generic get/put-by-key surface. The web client uses the company-scoped routes under [Browsing in the web client](#routes). `list` takes an `all` flag that lifts the 1,000-key cap, used for resource trees and for promotion. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.

@@ -638,7 +638,8 @@ toggles there), or someone sizes a knowledge-less role near its window limit
 
 The resource tools create, replace, append and edit. None removes a resource.
 A task that should retire a resource (an old price list, a withdrawn policy)
-has no way to do it. A user can still delete the file in the MinIO console, and
+has no way to do it. A user can still delete the file in the web client's
+storage browser (Data → Documents, since 002.05) or the MinIO console, and
 versioning keeps the old version.
 
 **Act when:** a task needs to remove a resource. Add a delete that is a draft
@@ -908,3 +909,51 @@ An imported template's role prompts and context are someone else's text, and cou
 The Companies page only asks for `?all=true` once `GET /api/system/status` says the caller is an admin. On a cold load of `/companies?scope=all`, the page may fetch and briefly show "My companies" before the admin flag arrives (002.04). The header usually has the status cached already, so it is rarely seen.
 
 **Act when:** the flash is noticed in real use. Hold the company fetch while the status is pending and `scope=all` is in the URL.
+
+## The storage browser doesn't update by itself
+
+The browser (002.05) refetches after its own changes and has a Refresh button. An agent writing a resource, or someone else uploading, shows only after Refresh. Storage isn't on the company event stream.
+
+**Act when:** storage changes join the company event stream, or someone reports a stale browser.
+
+## Any member can change resources
+
+Upload, delete and restore in the storage browser (002.05) are open to every company member, as in records and company resources (001.02, 001.03). Membership is the only access control.
+
+**Act when:** 003.01 (action approval) lands. Gate resource changes on its permissions.
+
+## Storage zips are built in memory
+
+A zip download from the storage browser is built in memory with `zipSync`, and refused with `413` above 200 MB in total (`MAX_ZIP_BYTES`). There is a `ponytail:` note in the code.
+
+**Act when:** a real download is refused by the cap. Stream the zip instead.
+
+## The storage browser has no Office previews
+
+Word, Excel, PowerPoint and OpenDocument files show "No preview" and a download button. Agents can't read them either.
+
+**Act when:** [002.11](prompts/phase%2004%20-%20utility/002.11.00.prompt%20-%20office%20documents%20for%20agents%20%28draft%29.md) (office documents for agents) is planned. It adds a preview kind beside the existing ones.
+
+## Storage deletes can't be undone in the app
+
+Deleting in the storage browser moves files to `_deleted/`. The confirmation says they can be recovered from the storage console, and there is no undelete in the app.
+
+**Act when:** someone asks to undo a delete. Add a "Deleted files" view that calls `restoreFile`.
+
+## Storage uploads run one at a time
+
+`useUploads` sends one file at a time, so a folder upload of many small files takes a while. There is a `ponytail:` note in the code.
+
+**Act when:** a folder upload of 50 or more files is reported slow. Run a few uploads at once.
+
+## The storage browser has no per-folder drop targets
+
+A drop goes to the selected folder, the folder of the selected file, or the root, shown under the toolbar. Dropping onto a particular folder in the tree isn't supported.
+
+**Act when:** people are seen dropping files into the wrong folder. Make each folder row a drop target.
+
+## `POST /api/storage` writes anywhere in the company
+
+The CLI's route (`StorageProxyController`) lets any member write any path in their company, knowledge folders included. The storage browser's own routes are limited to `resources/` (002.05), but this one is not.
+
+**Act when:** 003.01 (action approval) lands, or the CLI moves to the company-scoped storage routes. Then limit this route or retire it.

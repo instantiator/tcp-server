@@ -594,8 +594,8 @@ past it.
 An event arrives over SSE, `applyEvent` folds it into the query cache, and
 every `useLive*` hook reading that cache re-renders. Its absence is a fact
 about the system, not an oversight: `query-keys.ts` names `role`,
-`company-user`, `knowledge` and `system` as `STATIC_ENTITIES` — nothing streams them, so
-`useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
+`company-user`, `knowledge`, `storage` and `system` as `STATIC_ENTITIES` — nothing streams them, so
+`useCompanyRolesList`, `useCompanyKnowledgeList`, `useRoleState` and `useStorageFolder` carry no
 prefix and answer once, refetching only when asked. Knowledge status is the one
 exception: it has no stream, so `useKnowledgeStatus` polls every 3 s while an
 index is building and stops when it is done.
@@ -995,6 +995,9 @@ one not to press by default.
 - **Edit keeps each expected output's type.** An output the CLI set as
   `inline-text` stays inline text; it is not turned into a file name.
 - **The task dialog still has no "Add new" menu**, by decision.
+- **A Files section** (002.05) follows the assignments: a storage browser
+  rooted at the task's folder, read-only. See
+  [shared-storage.md](shared-storage.md#browsing-in-the-web-client).
 
 ## "Add new": starting a task or a chat
 
@@ -1041,6 +1044,15 @@ the CSV format). There are two ways in, and both show the same view.
   The tab has no badge: a change elsewhere shows in the open sheet instead
   (see **Live updates** below). It is not force-mounted, so AG Grid loads only
   when the tab opens.
+- **Documents** (002.05) is the company's shared storage in the
+  **storage browser** (`src/components/StorageBrowser/`): a keyboard-driven
+  tree, a preview of the selected file, download (one file, or a zip), upload
+  (files, folders, or drag and drop), delete, and a file's version history with
+  restore. Only `resources/` can be changed, and the server enforces that;
+  everything else shows locked. Task folders are labelled with the task. One
+  link still opens the company's folder in the storage console, when it is
+  configured. Details, routes and limits are in
+  [shared-storage.md](shared-storage.md#browsing-in-the-web-client).
 - **The filing cabinet** stands in the archive room, beside the bookshelf. One
   selectable zone covers each piece (`SELECTABLE_FURNITURE`): the bookshelf
   selects `archive`, the cabinet selects `records`. Clicking it, or choosing it
@@ -1284,7 +1296,10 @@ header.
   be seen. A finished task's tray has a **Close room** button, which calls
   `POST /api/task/:id/close-visualisation` and sets `visualisationClosedAt`.
   The flag is on the server, so a closed room stays closed after a reload and
-  for every viewer. A succeeded task's tray also links to its outputs, shown
+  for every viewer. A succeeded task's tray also
+  has a **Browse outputs** button, which opens the task's outputs in the storage
+  browser (`StorageBrowserDialog`, in a dialog that portals into the view), and,
+  when the console is configured, links to the same folder there. Both show
   only on success. The "Show details for…" picker lists every open room, so a
   finished room stays reachable by keyboard. There is no CLI `close-room`.
 - **A tick marks a succeeded task.** A small tick above its whiteboard has a
@@ -1331,11 +1346,13 @@ header.
   archive bookshelf, then leaves. Failed or cancelled tasks don't carry
   anything; if nobody is left in the room, nobody carries. An agent still live
   on a finished task gets no new avatar. The bookshelf's
-  tray lists every succeeded task, newest first, each linking out to its
-  outputs folder in Silo — see
+  tray lists every succeeded task, newest first. Each row has a **Browse**
+  button (`Browse {shortcode} outputs`) that opens its outputs in the storage
+  browser, and, when the console is configured, a link out to the same folder
+  in Silo — see
   [shared-storage.md](shared-storage.md#links-from-the-web-clients-archive-tray)
   for the link format and the runtime config it depends on. Without that
-  config, rows still list, just as plain text.
+  config, rows still list, each with its Browse button.
 - **Thought bubbles** (005.01). A working or reviewing agent shows a bubble up
   and to the right of its head, clear of the book it carries: two dots, then
   a cloud, cleared and drawn again (`scene/ThoughtBubbleLayer.ts`). Under

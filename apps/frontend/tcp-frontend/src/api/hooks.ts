@@ -96,6 +96,11 @@ import {
   useUpdateRoleMutation,
   useUpdateCompanyMutation,
   useUploadKnowledgeMutation,
+  useUploadStorageFileMutation,
+  useDeleteStorageMutation,
+  useRestoreStorageVersionMutation,
+  storageFilePath,
+  storageZipPath,
   type KnowledgeScope,
   useAddRecordMutation,
   useAppendRecordsCsvMutation,
@@ -388,6 +393,50 @@ export const useDeleteKnowledge = (scope: KnowledgeScope) => {
   return useMutation({
     mutationFn: (filename: string) => remove.mutateAsync(filename),
     onSuccess: useKnowledgeInvalidation(),
+  });
+};
+
+/** The success handler for a storage mutation: every storage cache refetches. */
+const useStorageInvalidation = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['storage'] });
+  };
+};
+
+/** Refetches every storage listing, version list and preview: the browser's Refresh. */
+export const useRefreshStorage = (): (() => void) => useStorageInvalidation();
+
+/** Uploads a file into company storage; folders and versions refetch on success. */
+export const useUploadStorageFile = (companyId: string) => {
+  const upload = useUploadStorageFileMutation(companyId);
+  return useMutation({
+    mutationFn: (input: {
+      path: string;
+      file: File;
+      overwrite: boolean;
+      signal?: AbortSignal;
+    }) => upload.mutateAsync(input),
+    onSuccess: useStorageInvalidation(),
+  });
+};
+
+/** Deletes a stored file or folder; storage refetches on success. */
+export const useDeleteStorage = (companyId: string) => {
+  const remove = useDeleteStorageMutation(companyId);
+  return useMutation({
+    mutationFn: (path: string) => remove.mutateAsync(path),
+    onSuccess: useStorageInvalidation(),
+  });
+};
+
+/** Restores an older version of a stored file; storage refetches on success. */
+export const useRestoreStorageVersion = (companyId: string) => {
+  const restore = useRestoreStorageVersionMutation(companyId);
+  return useMutation({
+    mutationFn: (input: { path: string; versionId: string }) =>
+      restore.mutateAsync(input),
+    onSuccess: useStorageInvalidation(),
   });
 };
 
@@ -978,6 +1027,9 @@ export {
   useMcpServers,
   useRoleBySlug,
   useSendMessageMutation as useSendMessage,
+  useStorageFileBlob,
+  useStorageFolder,
+  useStorageVersions,
   useTaskHistory,
   useTemplateGalleryQuery as useTemplateGallery,
   useTemplateSourcesQuery as useTemplateSources,
@@ -986,6 +1038,12 @@ export {
 } from './endpoints';
 
 export type { LocalModelsQuery } from './endpoints';
+export type {
+  StorageFileEntryDTO,
+  StorageFolderDTO,
+  StorageFolderEntryDTO,
+  StorageVersionDTO,
+} from './dtos';
 
 export type { KnowledgeScope };
 
@@ -1457,6 +1515,30 @@ export const downloadTemplate = async (
 ): Promise<void> => {
   const { blob } = await getBlob(templateDownloadPath(sourceId, name));
   saveBlob(blob, `${name}.zip`);
+};
+
+/** Downloads one stored file (or an older version of it), named after its last path segment. */
+export const downloadStorageFile = async (
+  companyId: string,
+  path: string,
+  versionId?: string,
+): Promise<void> => {
+  const { blob } = await getBlob(storageFilePath(companyId, path, versionId));
+  saveBlob(blob, path.split('/').pop() ?? path);
+};
+
+/** Downloads chosen stored files and folders as one zip, its entries named relative to `root`. */
+export const downloadStorageZip = async (
+  companyId: string,
+  root: string,
+  paths: readonly string[],
+  name: string,
+): Promise<void> => {
+  const { blob } = await postJsonForBlob(storageZipPath(companyId), {
+    root,
+    paths,
+  });
+  saveBlob(blob, name);
 };
 
 /** Downloads a company as a template zip, named by its slug; `includeModels` keeps its model settings. */

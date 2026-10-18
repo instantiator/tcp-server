@@ -6,7 +6,9 @@ import {
   HeadBucketCommand,
   HeadObjectCommand,
   LifecycleRule,
+  ListObjectVersionsCommand,
   ListObjectsV2Command,
+  ObjectVersion,
   PutBucketLifecycleConfigurationCommand,
   PutBucketVersioningCommand,
   PutObjectCommand,
@@ -118,13 +120,21 @@ export class S3ObjectStore {
     );
   }
 
-  /** Opens an object as a stream, or `null` when it does not exist. */
+  /**
+   * Opens an object (or one of its old versions) as a stream, or `null` when
+   * it does not exist.
+   */
   async get(
     key: string,
+    versionId?: string,
   ): Promise<{ stream: Readable; contentType: string } | null> {
     try {
       const resp = await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          VersionId: versionId,
+        }),
       );
       return {
         stream: resp.Body as Readable,
@@ -209,12 +219,88 @@ export class S3ObjectStore {
     return results;
   }
 
-  /** Server-side copy within the bucket. */
-  async copy(source: string, destination: string): Promise<void> {
+  /**
+   * One folder level under `prefix`: the immediate subfolders' prefixes and
+   * the objects directly inside it, following continuation tokens to the end.
+   */
+  async listLevel(
+    prefix: string,
+  ): Promise<{ folders: string[]; files: _Object[] }> {
+    const folders: string[] = [];
+    const files: _Object[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const resp = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+        }),
+      );
+      for (const p of resp.CommonPrefixes ?? []) {
+        if (p.Prefix) folders.push(p.Prefix);
+      }
+      files.push(...(resp.Contents ?? []));
+      continuationToken = resp.NextContinuationToken;
+    } while (continuationToken);
+    return { folders, files };
+  }
+
+  /** Whether any current object exists under `prefix`: one key is enough. */
+  async hasObjects(prefix: string): Promise<boolean> {
+    const resp = await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: prefix,
+        MaxKeys: 1,
+      }),
+    );
+    return (resp.KeyCount ?? resp.Contents?.length ?? 0) > 0;
+  }
+
+  /**
+   * Every stored version of exactly `key`, newest first as S3 returns them.
+   * Delete markers are reported apart from versions, so they never appear.
+   */
+  async listVersions(key: string): Promise<ObjectVersion[]> {
+    const versions: ObjectVersion[] = [];
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+    let truncated: boolean | undefined;
+    do {
+      const resp = await this.client.send(
+        new ListObjectVersionsCommand({
+          Bucket: this.bucket,
+          Prefix: key,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker,
+        }),
+      );
+      // The prefix also matches longer keys (`a.md` matches `a.md.bak`).
+      versions.push(...(resp.Versions ?? []).filter((v) => v.Key === key));
+      keyMarker = resp.NextKeyMarker;
+      versionIdMarker = resp.NextVersionIdMarker;
+      truncated = resp.IsTruncated;
+    } while (truncated);
+    return versions;
+  }
+
+  /** Server-side copy within the bucket, of the current version or of `versionId`. */
+  async copy(
+    source: string,
+    destination: string,
+    versionId?: string,
+  ): Promise<void> {
+    const version =
+      versionId === undefined
+        ? ''
+        : `?versionId=${encodeURIComponent(versionId)}`;
     await this.client.send(
       new CopyObjectCommand({
         Bucket: this.bucket,
-        CopySource: `${this.bucket}/${source}`,
+        // S3 wants the source URL-encoded; unencoded, a space or `ü` fails.
+        CopySource: `${this.bucket}/${source.split('/').map(encodeURIComponent).join('/')}${version}`,
         Key: destination,
       }),
     );

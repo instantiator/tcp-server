@@ -453,7 +453,7 @@ describe('CompanyVisualisation', () => {
     // than after all of a panel's content as a tray-level control — so it
     // comes before the link here, not after it. Close stays last in the
     // tray's markup; its top-right position is CSS only.
-    it('opens the archive tray from the picker like any other kind, with its links before Follow and Close in the Tab order', async () => {
+    it('opens the archive tray from the picker like any other kind, with its links and Browse buttons before Follow and Close in the Tab order', async () => {
       withArchive();
       const user = userEvent.setup();
       renderCompanyVisualisation();
@@ -480,6 +480,12 @@ describe('CompanyVisualisation', () => {
       stage.focus();
       await user.tab();
       expect(link).toHaveFocus();
+      await user.tab();
+      expect(
+        within(tray).getByRole('button', {
+          name: t('visualisation.archive.browse', { shortcode: 'TASK-DONE' }),
+        }),
+      ).toHaveFocus();
       await user.tab();
       expect(
         within(tray).getByRole('button', {
