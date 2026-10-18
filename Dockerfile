@@ -55,6 +55,8 @@ WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/apps/backend/dist/apps/tcp-server ./dist
+# The built-in company templates the gallery serves (TEMPLATES_DIR).
+COPY --from=builder /app/templates ./templates
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
 

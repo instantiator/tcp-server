@@ -219,18 +219,17 @@ add_test_user_membership() {
 }
 
 # --seed's data: two small companies to poke at right after a fresh start,
-# rather than an empty "you are not a member of any company" screen. Every
-# `set-company`/`set-role` below is a create (no --company-id/--role-id given
-# and the JSON carries no `id`), and a second create would collide on the
-# slug — so a company whose slug already exists is skipped whole, roles,
-# knowledge and membership included.
+# rather than an empty "you are not a member of any company" screen. Each is a
+# company template under scripts/test-data/templates/, imported whole; a
+# second import would collide on the slug, so a company whose slug already
+# exists is skipped, membership included.
 seed_test_companies() {
   echo "Setting up test companies..."
 
   local token
   if ! token="$(get_machine_token "$PRIMARY_ENV")" || [[ -z "$token" || "$token" == "null" ]]; then
     echo "ERROR: could not obtain a machine token — skipping test company setup." >&2
-    echo "  Set it up by hand: ./tcp-cli.sh get-token, then set-company/set-role/store-knowledge." >&2
+    echo "  Set it up by hand: ./tcp-cli.sh get-token, then import-company scripts/test-data/templates/<name>." >&2
     return 1
   fi
 
@@ -256,59 +255,36 @@ seed_test_companies() {
   local data="$REPO_ROOT/scripts/test-data"
 
   # The company's own id and slug are read back from what the server
-  # actually created rather than assumed from the JSON filename —
-  # scripts/test-data/companies/simple-company.json's `slug` field is
-  # "test-company", not "simple-company".
+  # actually created rather than assumed from the folder name.
   local hint="tcp-cli's error is above. The stack is up; once it's fixed, run with --seed again (companies already created are skipped)."
   local existing
   step "listing existing companies" "$hint"
   existing="$("$cli" -t "$token" --tcp-server "$tcp_server_url" list-companies | jq -r '.[].slug')"
-  # Whether the company in $1 (a seed JSON file) was already created.
+  # Whether the company in $1 (a template's company.json) was already created.
   already_seeded() {
     local slug
     slug="$(jq -r .slug "$1")"
     grep -qxF "$slug" <<< "$existing" && echo "  Company: $slug (already exists — skipped)"
   }
 
-  local hm_company hm_id hm_slug
-  if ! already_seeded "$data/companies/home-maintenance.json"; then
-    step "creating the home-maintenance test company" "$hint"
-    hm_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/home-maintenance.json")"
-    hm_id="$(json_field "tcp-cli set-company" '.id' <<< "$hm_company")"
-    hm_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$hm_company")"
-    echo "  Company: $hm_slug"
-    step "adding the diy-assistant role and its knowledge" "$hint"
-    "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$hm_slug" \
-      < "$data/roles/diy-assistant.json" >/dev/null
-    echo "    Role: diy-assistant"
-    "$cli" -t "$token" --tcp-server "$tcp_server_url" store-knowledge \
-      --company-slug "$hm_slug" --role diy-assistant \
-      --source "$data/knowledge/diy-manual.pdf" >/dev/null
-    echo "    Knowledge: diy-manual.pdf"
+  # Imports the template folder in $1 (skipped whole if its slug exists),
+  # then shares the company with the human test user.
+  seed_template() {
+    local dir="$1" company id slug
+    already_seeded "$dir/company.json" && return 0
+    step "importing the $(basename "$dir") test company" "$hint"
+    company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" import-company "$dir")"
+    id="$(json_field "tcp-cli import-company" '.id' <<< "$company")"
+    slug="$(json_field "tcp-cli import-company" '.slug' <<< "$company")"
+    echo "  Company: $slug"
     if [[ -n "$test_user_id" ]]; then
-      add_test_user_membership "$token" "$tcp_server_url" "$hm_id" "$test_user_id"
+      add_test_user_membership "$token" "$tcp_server_url" "$id" "$test_user_id"
       echo "    Shared with: $test_username"
     fi
-  fi
+  }
 
-  local simple_company simple_id simple_slug
-  if ! already_seeded "$data/companies/simple-company.json"; then
-    step "creating the simple test company and its roles" "$hint"
-    simple_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/simple-company.json")"
-    simple_id="$(json_field "tcp-cli set-company" '.id' <<< "$simple_company")"
-    simple_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$simple_company")"
-    echo "  Company: $simple_slug"
-    "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
-      < "$data/roles/chicken-assistant.json" >/dev/null
-    echo "    Role: chicken-assistant"
-    "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
-      < "$data/roles/cat-assistant.json" >/dev/null
-    echo "    Role: cat-assistant"
-    if [[ -n "$test_user_id" ]]; then
-      add_test_user_membership "$token" "$tcp_server_url" "$simple_id" "$test_user_id"
-      echo "    Shared with: $test_username"
-    fi
-  fi
+  seed_template "$data/templates/home-maintenance"
+  seed_template "$data/templates/test-company"
 
   echo ""
 }

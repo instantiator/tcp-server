@@ -36,6 +36,7 @@ const strings = {
   'header.system.label': 'System',
   'header.system.health': 'System health',
   'header.system.shutdown': 'Shut down or restart…',
+  'header.system.templateSources': 'Template sources',
 
   'breadcrumbs.label': 'Breadcrumb',
 
@@ -453,6 +454,43 @@ const strings = {
   'companies.create.submit': 'Create',
   'companies.create.cancel': 'Cancel',
   'companies.create.announce': 'Company created. Add roles next.',
+  // The template gallery that New company opens first (002.03).
+  'companies.gallery.heading': 'New company',
+  'companies.gallery.scratch': 'Start from scratch',
+  'companies.gallery.importFile': 'Import a zip file',
+  'companies.gallery.loading': 'templates',
+  'companies.gallery.reading': 'template',
+  'companies.gallery.empty': 'No templates found.',
+  'companies.gallery.warnings': 'Some template sources could not be read',
+  'companies.gallery.use': 'Use this template',
+  'companies.gallery.useNamed': 'Use the {title} template',
+  'companies.gallery.download': 'Download',
+  'companies.gallery.downloadNamed': 'Download the {title} template',
+  'companies.gallery.downloadFailed': 'The template could not be downloaded.',
+  'companies.gallery.counts': '{roles} · {documents}',
+  'companies.gallery.roles.one': '{count} role',
+  'companies.gallery.roles.other': '{count} roles',
+  'companies.gallery.documents.one': '{count} document',
+  'companies.gallery.documents.other': '{count} documents',
+  // Creating a company from a template (002.03).
+  'companies.import.heading': 'Import {name}',
+  'companies.import.submit': 'Import company',
+  'companies.import.needsKey': 'You’ll need a key for {provider}.',
+  'companies.import.warnings': 'Warnings',
+  'companies.import.roles': 'Roles',
+  'companies.import.noRoles': 'This template has no roles.',
+  'companies.import.roleModel': 'Use its own model: {provider} · {model}',
+  'companies.import.documents.one': '{count} knowledge document',
+  'companies.import.documents.other': '{count} knowledge documents',
+  'companies.import.licences': 'Licences: {licences}',
+  'companies.import.slugTaken': 'That address is taken. Choose another.',
+  'companies.import.replaceHeading': 'Replace {slug}?',
+  'companies.import.replaceMessage':
+    'A company already uses this address. Replacing it deletes that company and everything in it.',
+  'companies.import.replaceConfirm': 'Replace it',
+  'companies.import.replaceForbidden':
+    'Only members of that company can replace it.',
+  'companies.import.announce': 'Company imported.',
   // Counted phrases, picked by `tCount`: each needs both forms.
   'companies.count.activeAgents.one': '{count} active agent',
   'companies.count.activeAgents.other': '{count} active agents',
@@ -851,6 +889,7 @@ const strings = {
   'knowledge.column.size': 'Size',
   'knowledge.column.modified': 'Changed',
   'knowledge.column.actions': 'Actions',
+  'knowledge.license.column': 'Licence',
   'knowledge.delete': 'Delete {name}',
   'knowledge.deleteHeading': 'Delete {name}?',
   'knowledge.deleteMessage':
@@ -1242,8 +1281,6 @@ const strings = {
   'llm.model.width': 'Makes {width}-wide vectors.',
   'llm.model.refresh': 'Refresh the model list',
   'llm.model.listFailed': 'Couldn’t list models from this server: {reason}',
-  'llm.model.listAfterCreate':
-    'Pick a suggestion, or type any model name. The server’s own list is available after the company is created.',
   'llm.apiKey': 'API key',
   'llm.apiKey.saved': 'A key is saved. Leave this blank to keep it.',
   'llm.apiKey.dropped':
@@ -1334,6 +1371,48 @@ const strings = {
   'admin.company.deleteConfirm': 'Delete company',
   'admin.company.deleteFailed': 'The company wasn’t deleted: {message}',
   'admin.company.announce.deleted': '{name} deleted.',
+
+  // Exporting a company as a template (002.03).
+  'admin.company.export.heading': 'Export as template',
+  'admin.company.export.intro':
+    'Download this company as a zip that can be imported again.',
+  'admin.company.export.models': 'Include model settings',
+  'admin.company.export.modelsHint': 'API keys are never included.',
+  'admin.company.export.button': 'Export as template',
+  'admin.company.export.announce': 'Template downloaded.',
+
+  // The template sources dialog in the System menu (002.03).
+  'system.templateSources.heading': 'Template sources',
+  'system.templateSources.intro':
+    'The gallery shows templates from these places.',
+  'system.templateSources.loading': 'template sources',
+  'system.templateSources.error': 'The template sources could not be loaded.',
+  'system.templateSources.empty': 'No sources are listed.',
+  'system.templateSources.origin.builtin': 'Built in',
+  'system.templateSources.origin.config': 'Set in server config',
+  'system.templateSources.origin.user': 'Added here',
+  'system.templateSources.remove': 'Remove {name}',
+  'system.templateSources.removeHeading': 'Remove {name}?',
+  'system.templateSources.removeMessage':
+    'Its templates will leave the gallery.',
+  'system.templateSources.removeConfirm': 'Remove source',
+  'system.templateSources.removeFailed': 'The source wasn’t removed: {message}',
+  'system.templateSources.announce.removed': 'Removed {name}.',
+  'system.templateSources.add.heading': 'Add a GitHub repository',
+  'system.templateSources.add.name': 'Name',
+  'system.templateSources.add.repo': 'Repository',
+  'system.templateSources.add.repoHint':
+    'As owner/repo, such as acme/templates.',
+  'system.templateSources.add.ref': 'Branch or tag',
+  'system.templateSources.add.refHint': 'Leave empty for main.',
+  'system.templateSources.add.path': 'Folder',
+  'system.templateSources.add.pathHint': 'Leave empty for the repository root.',
+  'system.templateSources.add.submit': 'Add source',
+  'system.templateSources.add.nameRequired': 'Enter a name.',
+  'system.templateSources.add.repoInvalid':
+    'Use owner/repo, such as acme/templates.',
+  'system.templateSources.add.duplicate': 'That source is already listed.',
+  'system.templateSources.announce.added': 'Added {name}.',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

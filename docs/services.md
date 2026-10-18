@@ -64,7 +64,7 @@ enqueues agent tasks via BullMQ, and validates JWT tokens issued by Zitadel.
 
 - **Health:** `GET http://localhost:3000/health` — checks PostgreSQL, Redis, MinIO, and OIDC reachability
 - **Depends on:** postgres, redis, minio (all must be healthy before startup)
-- **Built from:** the root `Dockerfile`, target `tcp-server`
+- **Built from:** the root `Dockerfile`, target `tcp-server`, which also copies the built-in company templates (`templates/`) to `/app/templates`
 
 ### tcp-agent
 

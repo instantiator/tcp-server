@@ -130,23 +130,33 @@ describe('LlmConfigPicker', () => {
     expect(names.some((n) => n.startsWith('mine'))).toBe(true);
   });
 
-  it('lists nothing while the company is being created, and says when it can', async () => {
+  it('lists through the route for a company not yet created', async () => {
     const user = userEvent.setup();
     render_({ creating: true });
     await chooseProvider(user, 'LM Studio');
 
-    expect(screen.getByText(t('llm.model.listAfterCreate'))).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: t('llm.model.refresh') }),
-    ).toBeNull();
-    // Suggestions are still offered.
-    await user.click(screen.getByRole('combobox', { name: /Model/ }));
-    expect((await screen.findAllByRole('option')).length).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([r]) =>
+            r instanceof Request &&
+            new URL(r.url).pathname === '/api/llm/models',
+        ),
+      ).toBe(true),
+    );
     expect(
       fetchMock.mock.calls.some(
-        ([r]) => r instanceof Request && r.url.endsWith('/llm/models'),
+        ([r]) => r instanceof Request && r.url.includes('/api/company/'),
       ),
     ).toBe(false);
+    expect(
+      screen.getByRole('button', { name: t('llm.model.refresh') }),
+    ).toBeVisible();
+    await user.click(screen.getByRole('combobox', { name: /Model/ }));
+    const names = (await screen.findAllByRole('option')).map(
+      (o) => o.textContent ?? '',
+    );
+    expect(names.some((n) => n.startsWith('mine'))).toBe(true);
   });
 
   it('shows a remote provider’s address rather than letting it be edited, and builds it from the region', async () => {

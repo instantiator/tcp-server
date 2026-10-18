@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { RagChunk } from '@tcp/shared';
 import {
   BadRequestException,
@@ -36,10 +35,8 @@ import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 
 import { Originators } from '../storage/storage.service';
-import {
-  ensureOkfFrontMatter,
-  convertToMarkdown,
-} from './knowledge-conversion';
+import { toOkfDocument, withLicenceFrontMatter } from './knowledge-conversion';
+import { DocumentLicence } from '../templates/company-template/format';
 import {
   CompanyKnowledgeStatusResponseDto,
   KnowledgeChunkResponseDto,
@@ -70,9 +67,34 @@ interface UploadedFileBuffer {
  */
 const UPLOAD_OPTIONS = { limits: { fileSize: MAX_UPLOAD_BYTES } };
 
-/** Multipart body fields alongside `file` — an optional filename override. */
+/** Multipart body fields alongside `file` — an optional filename override and licence metadata. */
 interface StoreKnowledgeBody {
   filename?: string;
+  license?: string;
+  source?: string;
+  attribution?: string;
+}
+
+/** Longest accepted value per licence field. */
+const LICENCE_LIMITS = { license: 500, source: 500, attribution: 2000 };
+
+/**
+ * Trims the licence fields of an upload body, dropping empty ones.
+ *
+ * @throws {@link BadRequestException} when a value exceeds its limit.
+ */
+function licenceFromBody(body: StoreKnowledgeBody): DocumentLicence {
+  const licence: DocumentLicence = {};
+  for (const [key, max] of Object.entries(LICENCE_LIMITS)) {
+    const k = key as keyof DocumentLicence;
+    const value = body[k]?.trim();
+    if (!value) continue;
+    if (value.length > max) {
+      throw new BadRequestException(`${key} must be at most ${max} characters`);
+    }
+    licence[k] = value;
+  }
+  return licence;
 }
 
 /**
@@ -217,6 +239,18 @@ export class KnowledgeController {
             "Stored name. Defaults to the upload's name with a .md extension; " +
             'giving one also allows overwriting an existing document.',
         },
+        license: {
+          type: 'string',
+          description: 'Licence identifier, written to the front matter.',
+        },
+        source: {
+          type: 'string',
+          description: 'Where the document came from (URL).',
+        },
+        attribution: {
+          type: 'string',
+          description: 'Credit line, written to the front matter.',
+        },
       },
     },
   })
@@ -235,6 +269,7 @@ export class KnowledgeController {
       { kind: 'role', roleId },
       file,
       body.filename,
+      licenceFromBody(body),
       { user: getCurrentUserId(req), agent: null, task: null },
       res,
     );
@@ -364,6 +399,18 @@ export class KnowledgeController {
             "Stored name. Defaults to the upload's name with a .md extension; " +
             'giving one also allows overwriting an existing document.',
         },
+        license: {
+          type: 'string',
+          description: 'Licence identifier, written to the front matter.',
+        },
+        source: {
+          type: 'string',
+          description: 'Where the document came from (URL).',
+        },
+        attribution: {
+          type: 'string',
+          description: 'Credit line, written to the front matter.',
+        },
       },
     },
   })
@@ -382,6 +429,7 @@ export class KnowledgeController {
       { kind: 'company', companyId },
       file,
       body.filename,
+      licenceFromBody(body),
       { user: getCurrentUserId(req), agent: null, task: null },
       res,
     );
@@ -448,28 +496,16 @@ export class KnowledgeController {
     ref: KnowledgeScopeRef,
     file: UploadedFileBuffer,
     overrideFilename: string | undefined,
+    licence: DocumentLicence,
     originators: Originators,
     res: Response,
   ): Promise<DocumentSummary> {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const converted = await convertToMarkdown(file.originalname, file.buffer);
-    // .md sources pass through unchanged (see convertToMarkdown) and keep
-    // today's strict behaviour: KnowledgeService.store's validateOkf gate
-    // rejects a missing/invalid title rather than heuristically inventing
-    // one. Front-matter generation only applies to genuinely converted
-    // formats, which have no native front-matter concept of their own.
-    const content =
-      ext === '.md'
-        ? converted.body
-        : ensureOkfFrontMatter(file.originalname, converted);
+    const okf = await toOkfDocument(file.originalname, file.buffer);
+    const content = withLicenceFrontMatter(okf.content, licence);
+    const targetFilename = overrideFilename ?? okf.filename;
+    const converted = okf.filename !== file.originalname;
 
-    const targetFilename =
-      overrideFilename ??
-      (ext === '.md'
-        ? file.originalname
-        : `${path.basename(file.originalname, ext)}.md`);
-
-    if (!overrideFilename && ext !== '.md') {
+    if (!overrideFilename && converted) {
       const existing = await this.knowledge.list(ref);
       if (existing.some((doc) => doc.name === targetFilename)) {
         throw new ConflictException(

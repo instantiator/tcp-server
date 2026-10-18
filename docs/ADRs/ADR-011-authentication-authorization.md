@@ -249,6 +249,27 @@ form would have made that easy to do by accident.
   system, so a create form has to say "taken" anyway; the company's id is still
   never returned.
 
+<a id="amendments-as-implemented-00203"></a>
+
+## Amendments as implemented (002.03) — importing a template, and template sources
+
+- **Importing a template follows the create rule.** `POST /api/company/import`
+  is `@NoCompanyScope`, like create. A taken slug is a 409 unless the import's
+  `options.replace` is set, and replacing needs membership of that company or
+  administrator access. Create and import share one check
+  (`assertSlugClaimable` in `api/company-slug.ts`), so neither can replace a
+  company the other would refuse to. The importer becomes the new company's
+  `creator` member.
+- **Exporting needs membership**: `GET /api/company/:companyId/export` is
+  `@CompanyScope`, like reading the company. Exports never carry an API key.
+- **The gallery is open to any signed-in user** (`GET /api/template`,
+  `GET /api/template-source`), since it belongs to no company.
+- **Adding and removing a gallery source is `@AdminOnly`.** A GitHub source
+  makes the server download from `codeload.github.com`; every part of the
+  address is checked and redirects are refused, but who may add one is still
+  limited to administrators. Sources set in `TEMPLATE_SOURCES` can't be
+  removed through the API at all.
+
 ## Consequences
 
 - `JwtAuthGuard` is applied to every user-facing controller (see Implemented above)

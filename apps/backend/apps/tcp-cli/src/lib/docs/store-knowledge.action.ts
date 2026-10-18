@@ -11,6 +11,10 @@ interface DocumentSummary {
   name: string;
   size: number;
   lastModified: string;
+  title?: string;
+  license?: string;
+  source?: string;
+  attribution?: string;
 }
 
 /** Extensions the server converts to OKF Markdown — kept in sync with `knowledge-conversion.ts`'s `SUPPORTED_EXTENSIONS`. */
@@ -42,17 +46,39 @@ export function validateSupportedFileType(filename: string): string | null {
   return null;
 }
 
+/** The licence fields the user gave, under the form-field names the server reads. */
+export function provenanceFields(cmdOpts: {
+  license?: string;
+  sourceUrl?: string;
+  attribution?: string;
+}): Record<string, string> {
+  const fields: Record<string, string> = {};
+  if (cmdOpts.license) fields['license'] = cmdOpts.license;
+  if (cmdOpts.sourceUrl) fields['source'] = cmdOpts.sourceUrl;
+  if (cmdOpts.attribution) fields['attribution'] = cmdOpts.attribution;
+  return fields;
+}
+
 /**
  * Uploads (or overwrites) a single document into a role's knowledge base, or
  * a company's shared knowledge. Accepts any of `SUPPORTED_EXTENSIONS`; the
  * server converts it to OKF Markdown and re-indexes its RAG chunks on
  * success.
  *
+ * `--license`, `--source-url` and `--attribution` are sent as the `license`,
+ * `source` and `attribution` form fields, only when given.
+ *
  * stdout: JSON `{ key, name, size, lastModified }` for the stored document.
  */
 export function storeKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: EntityRefOpts & { source: string; target?: string },
+  cmdOpts: EntityRefOpts & {
+    source: string;
+    target?: string;
+    license?: string;
+    sourceUrl?: string;
+    attribution?: string;
+  },
 ): Promise<void> {
   return runCommand(async () => {
     const resolved = path.resolve(cmdOpts.source);
@@ -82,6 +108,7 @@ export function storeKnowledgeAction(
       filename,
       content,
       'text/markdown',
+      provenanceFields(cmdOpts),
     );
     process.stderr.write(`  ✓ ${doc.key} (${doc.size} bytes)\n`);
     process.stdout.write(JSON.stringify(doc, null, 2) + '\n');

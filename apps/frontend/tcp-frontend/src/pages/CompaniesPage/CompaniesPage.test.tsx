@@ -260,4 +260,35 @@ describe('CompaniesPage', () => {
     await screen.findByRole('heading', { name: t('companies.empty.heading') });
     await expectNoA11yViolations(empty.container);
   });
+
+  it('opens the template gallery from New company, then a blank form from Start from scratch', async () => {
+    respondByRoute([
+      [/\/api\/company$/, { body: [] }],
+      [/\/api\/template$/, { body: [] }],
+      [
+        /\/api\/system\/llm-defaults$/,
+        { body: { chat: null, embedding: null, embeddingDimension: 768 } },
+      ],
+    ]);
+    const user = userEvent.setup();
+    renderCompaniesPage();
+    await screen.findByRole('heading', { name: t('companies.empty.heading') });
+
+    await user.click(
+      screen.getAllByRole('button', { name: t('companies.create.open') })[0],
+    );
+    await user.click(
+      await screen.findByRole('button', {
+        name: t('companies.gallery.scratch'),
+      }),
+    );
+
+    // The gallery has gone, rather than sitting under the form.
+    expect(
+      await screen.findByRole('textbox', { name: /^Name/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: t('companies.gallery.scratch') }),
+    ).not.toBeInTheDocument();
+  });
 });

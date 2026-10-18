@@ -1,11 +1,23 @@
 import type { LlmConfig } from '@tcp/shared/client';
-import { useRef, useState, type ReactNode, type SubmitEvent } from 'react';
-import { Button } from 'react-aria-components';
+import {
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type SubmitEvent,
+} from 'react';
+import { Button, CheckboxButton, CheckboxField } from 'react-aria-components';
 import { useNavigate } from 'react-router';
 import { announce } from '../../announce/announcer';
 import { ApiError } from '../../api/errors';
-import { useCreateCompany, useLlmDefaults } from '../../api/hooks';
+import {
+  useCreateCompany,
+  useImportCompany,
+  useLlmDefaults,
+} from '../../api/hooks';
+import type { ImportCompanyOptions } from '../../api/dtos';
 import { ButtonRow } from '../../components/ButtonRow/ButtonRow';
+import { ConfirmDialog } from '../../components/Dialog/ConfirmDialog';
 import { Dialog } from '../../components/Dialog/Dialog';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { TextField } from '../../components/Field/TextField';
@@ -25,7 +37,8 @@ import {
 } from '../../components/LlmConfigPicker/llmDraft';
 import { useLocalAddressCheck } from '../../components/LlmConfigPicker/useLocalAddressCheck';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
-import { t } from '../../strings';
+import { t, tCount } from '../../strings';
+import type { ChosenTemplate } from './TemplateGalleryDialog';
 
 /** The announcer channel shared with the companies page; this dialog writes only its own success. */
 const CHANNEL = 'companies';
@@ -35,26 +48,49 @@ type Defaults = NonNullable<ReturnType<typeof useLlmDefaults>['data']>;
 export interface CreateCompanyDialogProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  /** A template to import (002.03): the form starts from it and submits an import. */
+  readonly template?: ChosenTemplate | undefined;
 }
 
 /**
  * The New company dialog (002.02). Mounts its form only while open, so each
  * opening starts blank, and only once the app's model defaults are known, so
- * the pickers can say what "inherit" means.
+ * the pickers can say what "inherit" means. Given a `template`, it is the
+ * review step of an import instead (002.03).
  */
 export const CreateCompanyDialog = ({
   isOpen,
   onClose,
+  template,
 }: CreateCompanyDialogProps) =>
-  isOpen ? <OpenDialog onClose={onClose} /> : null;
+  isOpen ? <OpenDialog onClose={onClose} template={template} /> : null;
 
 /** Asks for the defaults only once opened, so a closed dialog costs the page no request. */
-const OpenDialog = ({ onClose }: { readonly onClose: () => void }) => {
+const OpenDialog = ({
+  onClose,
+  template,
+}: {
+  readonly onClose: () => void;
+  readonly template: ChosenTemplate | undefined;
+}) => {
   const defaults = useLlmDefaults();
   return (
-    <Dialog heading={t('companies.create.heading')} onClose={onClose}>
+    <Dialog
+      heading={
+        template
+          ? t('companies.import.heading', {
+              name: template.preview.company.name,
+            })
+          : t('companies.create.heading')
+      }
+      onClose={onClose}
+    >
       {defaults.data ? (
-        <CreateForm defaults={defaults.data} onClose={onClose} />
+        <CreateForm
+          defaults={defaults.data}
+          onClose={onClose}
+          template={template}
+        />
       ) : defaults.isError ? (
         <ErrorState
           message={t('records.error.generic')}
@@ -93,22 +129,39 @@ const ModelGroup = ({
 const CreateForm = ({
   defaults,
   onClose,
+  template,
 }: {
   readonly defaults: Defaults;
   readonly onClose: () => void;
+  readonly template: ChosenTemplate | undefined;
 }) => {
   const createCompany = useCreateCompany();
+  const importCompany = useImportCompany();
   const navigate = useNavigate();
   const { check, dialog } = useLocalAddressCheck();
+  const preview = template?.preview;
 
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [description, setDescription] = useState('');
-  const [timezone, setTimezone] = useState(browserTimeZone);
-  const [context, setContext] = useState('');
-  const [chat, setChat] = useState(() => draftOf(null));
-  const [embedding, setEmbedding] = useState(() => draftOf(null));
+  const [name, setName] = useState(preview?.company.name ?? '');
+  const [slug, setSlug] = useState(preview?.company.slug ?? '');
+  // A template's slug is its own choice; it doesn't follow edits to the name.
+  const [slugTouched, setSlugTouched] = useState(preview !== undefined);
+  const [description, setDescription] = useState(
+    preview?.company.description ?? '',
+  );
+  const [timezone, setTimezone] = useState(
+    () => preview?.company.timezone ?? browserTimeZone(),
+  );
+  const [context, setContext] = useState(preview?.company.companyContext ?? '');
+  const [chat, setChat] = useState(() =>
+    draftOf(preview?.company.llmConfig ?? null),
+  );
+  const [embedding, setEmbedding] = useState(() =>
+    draftOf(preview?.company.embeddingConfig ?? null),
+  );
+  // Roles whose own model the importer turned off; they inherit instead.
+  const [inheriting, setInheriting] = useState<readonly string[]>([]);
+  // The import held back by a taken slug, until the person agrees to replace.
+  const [replacing, setReplacing] = useState<ImportCompanyOptions | null>(null);
   const [chatErrors, setChatErrors] = useState<LlmDraftErrors>({});
   const [embeddingErrors, setEmbeddingErrors] = useState<LlmDraftErrors>({});
   const [errors, setErrors] = useState<{
@@ -148,6 +201,31 @@ const CreateForm = ({
     );
   };
 
+  /** Sends the import; a taken slug asks before replacing what holds it. */
+  const sendImport = async (
+    source: ChosenTemplate['source'],
+    options: ImportCompanyOptions,
+  ): Promise<void> => {
+    try {
+      const { id } = await importCompany.mutateAsync({ source, options });
+      announce({ channel: CHANNEL, change: 'companies.import.announce' });
+      onClose();
+      void navigate(`/company/${id}`);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.status === 409 &&
+        !options.replace
+      ) {
+        setReplacing(options);
+      } else if (error instanceof ApiError && error.status === 403) {
+        setProblem(t('companies.import.replaceForbidden'));
+      } else {
+        failed(error);
+      }
+    }
+  };
+
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const found = {
@@ -182,6 +260,24 @@ const CreateForm = ({
 
     const llmConfig = await checked(patchOf(chat, null));
     const embeddingConfig = await checked(patchOf(embedding, null));
+    if (template) {
+      setProblem(null);
+      // Both models are always sent, `null` meaning inherit, so the
+      // importer's choice wins over the template's.
+      await sendImport(template.source, {
+        slug: shownSlug,
+        name: name.trim(),
+        description: description.trim(),
+        timezone,
+        companyContext: context.trim() ? context : null,
+        llmConfig: llmConfig ?? null,
+        embeddingConfig: embeddingConfig ?? null,
+        ...(inheriting.length > 0 && {
+          roleModels: Object.fromEntries(inheriting.map((r) => [r, false])),
+        }),
+      });
+      return;
+    }
     try {
       const { company } = await createCompany.mutateAsync({
         slug: shownSlug,
@@ -202,6 +298,16 @@ const CreateForm = ({
 
   return (
     <form onSubmit={(event) => void submit(event)}>
+      {preview && preview.warnings.length > 0 && (
+        <>
+          <p>{t('companies.import.warnings')}</p>
+          <ul>
+            {preview.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </>
+      )}
       <TextField
         label={t('companies.create.name')}
         value={name}
@@ -255,6 +361,9 @@ const CreateForm = ({
         description={t('companies.create.contextHint')}
         multiline
       />
+      {preview?.neededKeys.map((provider) => (
+        <p key={provider}>{t('companies.import.needsKey', { provider })}</p>
+      ))}
       <ModelGroup id="create-company-chat" heading={t('companies.create.chat')}>
         <LlmConfigPicker
           purpose="chat"
@@ -285,14 +394,23 @@ const CreateForm = ({
           errors={embeddingErrors}
         />
       </ModelGroup>
+      {preview && (
+        <TemplateRoles
+          preview={preview}
+          inheriting={inheriting}
+          onChange={setInheriting}
+        />
+      )}
       {problem !== null && <p className="tcp-field__error">{problem}</p>}
       <ButtonRow>
         <Button
           className="react-aria-Button"
           type="submit"
-          isPending={createCompany.isPending}
+          isPending={createCompany.isPending || importCompany.isPending}
         >
-          {t('companies.create.submit')}
+          {template
+            ? t('companies.import.submit')
+            : t('companies.create.submit')}
         </Button>
         <Button
           className="react-aria-Button tcp-button--outline"
@@ -302,6 +420,88 @@ const CreateForm = ({
         </Button>
       </ButtonRow>
       {dialog}
+      <ConfirmDialog
+        isOpen={replacing !== null}
+        heading={t('companies.import.replaceHeading', { slug: shownSlug })}
+        message={t('companies.import.replaceMessage')}
+        confirmLabel={t('companies.import.replaceConfirm')}
+        onConfirm={() => {
+          const options = replacing;
+          setReplacing(null);
+          if (template && options) {
+            void sendImport(template.source, { ...options, replace: true });
+          }
+        }}
+        onCancel={() => {
+          setReplacing(null);
+          setErrors((e) => ({ ...e, slug: t('companies.import.slugTaken') }));
+          slugRef.current?.focus();
+        }}
+      />
     </form>
+  );
+};
+
+/**
+ * What a template brings besides the company: each role, with a switch for
+ * the model it carries, and its knowledge documents with their licences.
+ */
+const TemplateRoles = ({
+  preview,
+  inheriting,
+  onChange,
+}: {
+  readonly preview: ChosenTemplate['preview'];
+  readonly inheriting: readonly string[];
+  readonly onChange: (inheriting: readonly string[]) => void;
+}) => {
+  const idBase = useId();
+  const licences = [
+    ...new Set(
+      preview.documents.flatMap(({ license }) => (license ? [license] : [])),
+    ),
+  ];
+  return (
+    <>
+      <fieldset>
+        <legend>{t('companies.import.roles')}</legend>
+        {preview.roles.length === 0 && <p>{t('companies.import.noRoles')}</p>}
+        <ul>
+          {preview.roles.map((role) => (
+            <li key={role.slug}>
+              <strong id={`${idBase}-${role.slug}`}>{role.name}</strong>
+              <p>{role.description}</p>
+              {role.llmConfig && (
+                // The role's name describes the checkbox, so identical model
+                // labels across roles stay distinguishable.
+                <CheckboxField
+                  aria-describedby={`${idBase}-${role.slug}`}
+                  isSelected={!inheriting.includes(role.slug)}
+                  onChange={(on) =>
+                    onChange(
+                      on
+                        ? inheriting.filter((slug) => slug !== role.slug)
+                        : [...inheriting, role.slug],
+                    )
+                  }
+                >
+                  <CheckboxButton>
+                    {t('companies.import.roleModel', {
+                      provider: role.llmConfig.provider,
+                      model: role.llmConfig.model,
+                    })}
+                  </CheckboxButton>
+                </CheckboxField>
+              )}
+            </li>
+          ))}
+        </ul>
+      </fieldset>
+      <p>
+        {tCount('companies.import.documents', preview.documents.length)}
+        {licences.length > 0 &&
+          ` ${t('companies.import.licences', { licences: licences.join(', ') })}`}
+      </p>
+    </>
   );
 };

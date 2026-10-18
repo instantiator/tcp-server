@@ -10,6 +10,7 @@ import {
   getBlob,
   postFile,
   postFileForJson,
+  postFormForJson,
   postJsonForBlob,
   unwrap,
 } from './client';
@@ -24,7 +25,10 @@ import {
 } from './query-keys';
 import type {
   AddColumn,
+  AddTemplateSource,
   AppendRecordsCsvResult,
+  CompanyTemplatePreview,
+  ImportCompanyOptions,
   RetypeColumn,
   RecordTableRetention,
 } from './dtos';
@@ -347,31 +351,36 @@ export type LocalModelsQuery = Schemas['ListLlmModelsDto'];
 /**
  * The models a local or custom server lists, fetched through tcp-server (the
  * browser can't reach `host.docker.internal`, and the saved key stays there).
- * A POST, so a typed key travels in the body. Disabled for `null`, and not
- * retried: a server that isn't running won't be on the next try either. Bump
- * `revision` to ask again.
+ * A POST, so a typed key travels in the body. Without a company (a form for
+ * one not yet created) it lists through `/api/llm/models`, with only a typed
+ * key. Disabled for `null`, and not retried: a server that isn't running
+ * won't be on the next try either. Bump `revision` to ask again.
  */
 export const useLocalModelsQuery = (
-  companyId: string,
+  companyId: string | undefined,
   query: LocalModelsQuery | null,
   revision = 0,
 ) =>
   useQuery({
     queryKey: queryKeys.localModels(
-      companyId,
+      companyId ?? '',
       query?.provider ?? '',
       query?.baseUrl ?? '',
       query?.roleId,
       revision,
     ),
-    queryFn: () =>
-      unwrap(
-        api.POST('/api/company/{companyId}/llm/models', {
-          params: { path: { companyId } },
-          // `query` is non-null whenever the query is enabled.
-          body: query ?? { provider: '', baseUrl: '' },
-        }),
-      ),
+    queryFn: () => {
+      // `query` is non-null whenever the query is enabled.
+      const body = query ?? { provider: '', baseUrl: '' };
+      return unwrap(
+        companyId === undefined
+          ? api.POST('/api/llm/models', { body })
+          : api.POST('/api/company/{companyId}/llm/models', {
+              params: { path: { companyId } },
+              body,
+            }),
+      );
+    },
     enabled: query !== null,
     retry: false,
   });
@@ -1278,3 +1287,124 @@ export const recordsExportPath = (companyId: string) =>
   `${recordsBase(companyId)}/export`;
 
 export { getBlob, postJsonForBlob };
+
+/** The gallery's templates, with a warning for each source that could not be read. */
+export const useTemplateGalleryQuery = () =>
+  useQuery({
+    queryKey: queryKeys.templateGallery(),
+    queryFn: async () => {
+      let result;
+      try {
+        result = await api.GET('/api/template');
+      } catch (cause) {
+        // The request never landed — same reasoning as `unwrap`'s catch.
+        throw networkError(cause);
+      }
+
+      const { data, error, response } = result;
+      if (!response.ok || data === undefined) throw apiError(response, error);
+
+      return { templates: data, warnings: readWarnings(response) };
+    },
+  });
+
+/** A template to read or import: an uploaded zip, or a gallery entry as `<sourceId>/<name>`. */
+export type TemplateSource = File | string;
+
+/** The form fields that name a template source. */
+const sourceFields = (source: TemplateSource): Record<string, string | File> =>
+  typeof source === 'string' ? { template: source } : { file: source };
+
+/** Whether a response body has the parts of a template preview the dialog reads. */
+const isTemplatePreview = (body: unknown): body is CompanyTemplatePreview =>
+  typeof body === 'object' &&
+  body !== null &&
+  'company' in body &&
+  typeof body.company === 'object' &&
+  body.company !== null &&
+  'name' in body.company &&
+  typeof body.company.name === 'string' &&
+  'roles' in body &&
+  Array.isArray(body.roles) &&
+  'documents' in body &&
+  Array.isArray(body.documents) &&
+  'neededKeys' in body &&
+  Array.isArray(body.neededKeys) &&
+  'warnings' in body &&
+  Array.isArray(body.warnings);
+
+/** Reads a template without creating anything. A `400` message lists what is wrong with it. */
+export const usePreviewTemplateMutation = () =>
+  useMutation({
+    mutationFn: async (
+      source: TemplateSource,
+    ): Promise<CompanyTemplatePreview> => {
+      const { body } = await postFormForJson(
+        '/api/company/import/preview',
+        sourceFields(source),
+      );
+      if (isTemplatePreview(body)) return body;
+      throw networkError(new Error('Unexpected template preview response'));
+    },
+  });
+
+/**
+ * Creates a company from a template. A taken slug is a 409 {@link ApiError}
+ * unless `options.replace` is set; the template's soft warnings come back
+ * beside the company.
+ */
+export const useImportCompanyMutation = () =>
+  useMutation({
+    mutationFn: async ({
+      source,
+      options,
+    }: {
+      source: TemplateSource;
+      options: ImportCompanyOptions;
+    }) => {
+      const { body, warnings } = await postFormForJson('/api/company/import', {
+        ...sourceFields(source),
+        options: JSON.stringify(options),
+      });
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'id' in body &&
+        typeof body.id === 'string'
+      ) {
+        return { id: body.id, warnings };
+      }
+      throw networkError(new Error('Unexpected company import response'));
+    },
+  });
+
+/** The path of a gallery template's zip download. */
+export const templateDownloadPath = (sourceId: string, name: string): string =>
+  `/api/template/${encodeURIComponent(sourceId)}/${encodeURIComponent(name)}`;
+
+/** The path of a company's template export; model settings are left out when `models` is false. */
+export const companyExportPath = (companyId: string, models: boolean): string =>
+  `/api/company/${encodeURIComponent(companyId)}/export${models ? '' : '?models=false'}`;
+
+/** The sources the gallery reads templates from. Admin only. */
+export const useTemplateSourcesQuery = () =>
+  useQuery({
+    queryKey: queryKeys.templateSources(),
+    queryFn: () => unwrap(api.GET('/api/template-source')),
+  });
+
+/** Adds a GitHub repository as a source. A `409` means it is already listed. */
+export const useAddTemplateSourceMutation = () =>
+  useMutation({
+    mutationFn: (body: AddTemplateSource) =>
+      unwrap(api.POST('/api/template-source', { body })),
+  });
+
+/** Removes a source added here. `expectAccepted`: the route answers 204 with no body. */
+export const useRemoveTemplateSourceMutation = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      expectAccepted(
+        api.DELETE('/api/template-source/{id}', { params: { path: { id } } }),
+      ),
+  });

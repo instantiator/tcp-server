@@ -18,6 +18,11 @@ cd tcp-server
 
 The wizard checks your prerequisites, installs dependencies, asks a few configuration questions, and starts the stack — then prints the service URLs and sign-in credentials. See **[Your first company](docs/your-first-company.md)** for what to do next.
 
+The quickest way to a working company is a template: open **Companies → New
+company** in the web app and pick one from the gallery, or run
+`./tcp-cli.sh import-company --template builtin/basic`. See
+**[Company templates](docs/company-templates.md)**.
+
 > [!TIP]
 > To clear down your database and load the test data, use:
 >

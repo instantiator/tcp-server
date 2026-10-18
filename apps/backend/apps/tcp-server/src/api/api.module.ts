@@ -5,6 +5,7 @@ import {
   ConversationMessage,
   KnowledgeChunk,
   KnowledgeIndexState,
+  TemplateSource,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -35,6 +36,10 @@ import { StorageModule } from '../storage/storage.module';
 import { AgentController } from './api.agent.controller';
 import { AssignmentController } from './assignment.controller';
 import { CompanyController } from './api.company.controller';
+import { CompanyTemplateController } from '../templates/company-template/company-template.controller';
+import { CompanyTemplateService } from '../templates/company-template/company-template.service';
+import { TemplateGalleryController } from '../templates/company-template/template-gallery.controller';
+import { TemplateSourceService } from '../templates/company-template/template-source.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { CompanyUserController } from './company-user.controller';
@@ -44,7 +49,10 @@ import { InternalController } from './internal.controller';
 import { InternalTaskController } from './internal-task.controller';
 import { KnowledgeController } from './knowledge.controller';
 import { McpServersController } from './mcp-servers.controller';
-import { LlmModelsController } from './llm-models.controller';
+import {
+  LlmModelsController,
+  NewCompanyLlmModelsController,
+} from './llm-models.controller';
 import { LlmDefaultsController } from './llm-defaults.controller';
 import { LlmModelsService } from './llm-models.service';
 import { ModelController } from './api.model.controller';
@@ -116,9 +124,12 @@ import { TaskService } from './task.service';
       PendingConsultation,
       KnowledgeChunk,
       KnowledgeIndexState,
+      TemplateSource,
     ]),
   ],
   controllers: [
+    CompanyTemplateController,
+    TemplateGalleryController,
     AssignmentController,
     ToolFootprintController,
     CompanyController,
@@ -129,6 +140,7 @@ import { TaskService } from './task.service';
     KnowledgeController,
     McpServersController,
     LlmModelsController,
+    NewCompanyLlmModelsController,
     LlmDefaultsController,
     RecordsController,
     RoleController,
@@ -142,6 +154,8 @@ import { TaskService } from './task.service';
     ModelController,
   ],
   providers: [
+    CompanyTemplateService,
+    TemplateSourceService,
     ApiService,
     LlmModelsService,
     ToolFootprintService,

@@ -375,7 +375,9 @@ small models, and the user can audit them.
 
 ### Company templates
 
-> 📝 **In a draft, not implemented:** [deferred-work.md](../deferred-work.md#company-definitions-as-zip-files) ("Company definitions as zip files") covers company, roles and knowledge, loaded by `tcp-cli`. This gap extends it with MCP services, records, schedules, reports and hooks.
+> ✅ **Format v1 is done, in [002.03](<002.03.01.plan - company template format v1 with import and export.md>):** a company, its roles and their knowledge as a versioned zip; import and export through the API, CLI and web; a gallery with built-in, directory and GitHub sources that New company opens first; and the Blank, Basic and Cottage industry templates. See [company templates](../../company-templates.md).
+
+> 📝 **In a draft, not implemented:** [005.04](<005.04.00.prompt - company templates v2, gallery and create from template (draft).md>) extends the format with MCP services, records, schedules, reports and hooks.
 
 **Today:** `scripts/test-data/companies/*.json` describe the company row only
 (slug, name, description, context, LLM config). Roles and knowledge are added
@@ -457,7 +459,7 @@ localhost or a private network only. Security-sensitive: Opus.
 
 ### Web UI: create a company
 
-> ✅ **A plain form is done, in [002.02](<002.02.01.plan - web ui create and edit a company.md>):** a New company dialog on the Companies page, and Admin → Company to edit, choose the default planner and delete. Starting from a template comes with [002.03](<002.03.00.prompt - company template format v1 with import and export (draft).md>) and [005.04](<005.04.00.prompt - company templates v2, gallery and create from template (draft).md>), which also carry listing required secrets and offering a first task. There is no `region` field on a company.
+> ✅ **A plain form is done, in [002.02](<002.02.01.plan - web ui create and edit a company.md>):** a New company dialog on the Companies page, and Admin → Company to edit, choose the default planner and delete. Starting from a template comes with [002.03](<002.03.00.prompt - company template format v1 with import and export.md>) and [005.04](<005.04.00.prompt - company templates v2, gallery and create from template (draft).md>), which also carry listing required secrets and offering a first task. There is no `region` field on a company.
 
 Already noted in [unplanned.md](<../phase 05 - service quality/unplanned.md>). Today companies are created with
 the TUI or `tcp-cli set-company`. The web flow should start from the

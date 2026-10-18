@@ -7,6 +7,7 @@ import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import * as mammoth from 'mammoth';
+import { DocumentLicence } from '../templates/company-template/format';
 
 /** Extensions `store-knowledge` accepts; each is converted to OKF Markdown server-side. */
 export const SUPPORTED_EXTENSIONS = [
@@ -161,4 +162,54 @@ export function ensureOkfFrontMatter(
     path.basename(filename, path.extname(filename));
 
   return `---\n${dumpYaml({ title })}---\n\n${bodyWithoutFrontMatter}`;
+}
+
+/**
+ * Sets the given licence keys in a document's leading front matter, leaving
+ * every other key (and its order) alone. Returns the input unchanged when
+ * there is nothing to set or no front matter to set it in — storage's OKF
+ * validation refuses the latter anyway.
+ */
+export function withLicenceFrontMatter(
+  markdown: string,
+  licence: DocumentLicence,
+): string {
+  const block = FRONT_MATTER.exec(markdown)?.[0];
+  const entries = Object.entries(licence).filter(([, v]) => v);
+  if (!block || entries.length === 0) return markdown;
+  const loaded = loadYaml(block.replace(/^---\r?\n|\r?\n---\r?\n?$/g, ''));
+  const fm: Record<string, unknown> =
+    typeof loaded === 'object' && loaded !== null
+      ? { ...(loaded as Record<string, unknown>) }
+      : {};
+  for (const [key, value] of entries) fm[key] = value;
+  return `---\n${dumpYaml(fm)}---\n${markdown.slice(block.length)}`;
+}
+
+/** A file converted to OKF Markdown, with the name it is stored under. */
+export interface OkfDocument {
+  filename: string;
+  content: string;
+}
+
+/**
+ * Converts an uploaded file to OKF Markdown, as both a knowledge upload and a
+ * template import store it. `.md` sources pass through unchanged and keep
+ * today's strict behaviour: storage's `validateOkf` gate rejects a missing
+ * title rather than inventing one. Front matter is generated only for
+ * converted formats, which have none of their own. Other formats are stored
+ * under their name with `.md` in place of their extension.
+ */
+export async function toOkfDocument(
+  originalName: string,
+  data: Buffer,
+): Promise<OkfDocument> {
+  const ext = path.extname(originalName).toLowerCase();
+  const converted = await convertToMarkdown(originalName, data);
+  return ext === '.md'
+    ? { filename: originalName, content: converted.body }
+    : {
+        filename: `${path.basename(originalName, ext)}.md`,
+        content: ensureOkfFrontMatter(originalName, converted),
+      };
 }

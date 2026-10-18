@@ -6,10 +6,8 @@
 # reuse the token for every call below.
 TOKEN=$(./tcp-cli.sh get-token)
 
-# init test-company
-./tcp-cli.sh -t "$TOKEN" set-company < scripts/test-data/companies/simple-company.json
-./tcp-cli.sh -t "$TOKEN" set-role -c test-company < scripts/test-data/roles/chicken-assistant.json
-./tcp-cli.sh -t "$TOKEN" set-role -c test-company < scripts/test-data/roles/cat-assistant.json
+# init test-company (the chicken and cat assistants), replacing any earlier copy
+./tcp-cli.sh -t "$TOKEN" import-company scripts/test-data/templates/test-company --replace
 
 # set the planner role
 ./tcp-cli.sh -t "$TOKEN" set-planner -c test-company -r cat-assistant

@@ -15,6 +15,7 @@ import { useSession } from '../auth/useSession';
 import { Icon, WithTooltip } from '../components/Icon/Icon';
 import { ShutdownDialog } from '../components/ShutdownDialog/ShutdownDialog';
 import { SystemHealthDialog } from '../components/SystemHealthDialog/SystemHealthDialog';
+import { TemplateSourcesDialog } from '../components/TemplateSourcesDialog/TemplateSourcesDialog';
 import { ProfileDialog } from '../components/ProfileDialog/ProfileDialog';
 import { t } from '../strings';
 import './Header.css';
@@ -75,7 +76,7 @@ export const Header = () => {
   const session = useSession();
   const companyId = useMatch('/company/:companyId/*')?.params.companyId;
   const [openDialog, setOpenDialog] = useState<
-    'profile' | 'health' | 'shutdown' | null
+    'profile' | 'health' | 'shutdown' | 'templateSources' | null
   >(null);
   // A failed or pending status call leaves the System menu out.
   const isAdmin = useSystemStatus().data?.admin === true;
@@ -90,6 +91,7 @@ export const Header = () => {
 
   const onSystemAction = (key: Key): void => {
     if (key === 'health') setOpenDialog('health');
+    else if (key === 'templateSources') setOpenDialog('templateSources');
     else if (key === 'shutdown') setOpenDialog('shutdown');
   };
 
@@ -124,6 +126,9 @@ export const Header = () => {
             <Popover>
               <Menu onAction={onSystemAction}>
                 <MenuItem id="health">{t('header.system.health')}</MenuItem>
+                <MenuItem id="templateSources">
+                  {t('header.system.templateSources')}
+                </MenuItem>
                 <MenuItem id="shutdown">{t('header.system.shutdown')}</MenuItem>
               </Menu>
             </Popover>
@@ -159,6 +164,13 @@ export const Header = () => {
       )}
       {openDialog === 'health' && (
         <SystemHealthDialog
+          onClose={() => {
+            setOpenDialog(null);
+          }}
+        />
+      )}
+      {openDialog === 'templateSources' && (
+        <TemplateSourcesDialog
           onClose={() => {
             setOpenDialog(null);
           }}

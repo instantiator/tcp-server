@@ -9,6 +9,10 @@ interface DocumentSummary {
   name: string;
   size: number;
   lastModified: string;
+  title?: string;
+  license?: string;
+  source?: string;
+  attribution?: string;
 }
 
 /**

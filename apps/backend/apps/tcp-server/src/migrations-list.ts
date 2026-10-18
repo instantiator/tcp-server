@@ -10,6 +10,7 @@ import { TaskNotifications1784860000000 } from './migrations/1784860000000-TaskN
 import { McpServerToggles1784880000000 } from './migrations/1784880000000-McpServerToggles';
 import { VersionRetentionDays1784890000000 } from './migrations/1784890000000-VersionRetentionDays';
 import { FailureCode1784900000000 } from './migrations/1784900000000-FailureCode';
+import { TemplateSources1784910000000 } from './migrations/1784910000000-TemplateSources';
 
 /**
  * tcp-server's full, ordered migration list — the single source of truth for
@@ -45,4 +46,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   McpServerToggles1784880000000,
   VersionRetentionDays1784890000000,
   FailureCode1784900000000,
+  TemplateSources1784910000000,
 ];

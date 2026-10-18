@@ -1,0 +1,4 @@
+{
+  "name": "Order manager",
+  "description": "Records orders, tracks their status, works out postage and prepares packing lists."
+}

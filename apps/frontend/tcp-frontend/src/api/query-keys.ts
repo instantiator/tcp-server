@@ -194,6 +194,10 @@ export const queryKeys = {
   /** Who the caller is to the system (admin or not) and the shutdown state. */
   systemStatus: () => ['system', 'detail'] as const,
   mcpServers: () => ['system', 'list'] as const,
+  /** The company template gallery, across every source. */
+  templateGallery: () => ['system', 'list', 'templates'] as const,
+  /** The sources the gallery reads templates from. */
+  templateSources: () => ['system', 'list', 'template-sources'] as const,
   llmDefaults: () => ['system', 'detail', 'llm-defaults'] as const,
   /**
    * No API key in it. A typed key changes the answer, so a caller asks again

@@ -49,6 +49,15 @@ const sourceName = (documentPath: string): string =>
 const messageOf = (error: unknown): string =>
   error instanceof ApiError ? error.message : t('records.error.generic');
 
+/** Whether a source is an `https:` link, the only kind worth following from here. */
+const isHttpsUrl = (text: string): boolean => {
+  try {
+    return new URL(text).protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 export interface KnowledgePanelProps {
   /** Whose knowledge: one role's, or the company's shared knowledge. */
   readonly scope: KnowledgeScope;
@@ -326,6 +335,7 @@ export const KnowledgePanel = ({
               <th scope="col">{t('knowledge.column.name')}</th>
               <th scope="col">{t('knowledge.column.size')}</th>
               <th scope="col">{t('knowledge.column.modified')}</th>
+              <th scope="col">{t('knowledge.license.column')}</th>
               <th scope="col">{t('knowledge.column.actions')}</th>
             </tr>
           </thead>
@@ -344,6 +354,14 @@ export const KnowledgePanel = ({
                 </th>
                 <td>{formatSize(doc.size)}</td>
                 <td>{dateFormat.format(new Date(doc.lastModified))}</td>
+                <td>
+                  {doc.license !== undefined &&
+                    (doc.source !== undefined && isHttpsUrl(doc.source) ? (
+                      <a href={doc.source}>{doc.license}</a>
+                    ) : (
+                      doc.license
+                    ))}
+                </td>
                 <td>
                   <RoundIconButton
                     icon={Trash2}

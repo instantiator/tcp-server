@@ -72,6 +72,42 @@ describe('KnowledgeController', () => {
       expect(originators).toEqual({ user: 'user-1', agent: null, task: null });
     });
 
+    it('writes trimmed licence fields into the stored front matter', async () => {
+      await controller.storeRoleKnowledgeFile(
+        roleId,
+        { originalname: 'notes.txt', buffer: Buffer.from('Notes.') },
+        {
+          license: ' CC-BY-4.0 ',
+          source: 'https://example.com',
+          attribution: '',
+        },
+        fakeRequest(),
+        fakeRes() as unknown as Response,
+      );
+
+      const text = knowledge.store.mock.calls[0][2].toString('utf-8');
+      expect(text).toContain('license: CC-BY-4.0');
+      expect(text).toContain('source: https://example.com');
+      expect(text).not.toContain('attribution');
+    });
+
+    it.each([
+      ['license', 501],
+      ['source', 501],
+      ['attribution', 2001],
+    ])('rejects an over-long %s with a 400', async (field, length) => {
+      await expect(
+        controller.storeRoleKnowledgeFile(
+          roleId,
+          { originalname: 'notes.txt', buffer: Buffer.from('Notes.') },
+          { [field]: 'x'.repeat(length) },
+          fakeRequest(),
+          fakeRes() as unknown as Response,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(knowledge.store).not.toHaveBeenCalled();
+    });
+
     it('stores .md uploads under their original filename', async () => {
       await controller.storeRoleKnowledgeFile(
         roleId,

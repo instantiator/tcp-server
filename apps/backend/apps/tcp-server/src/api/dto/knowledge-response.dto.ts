@@ -33,6 +33,18 @@ export class KnowledgeDocumentResponseDto {
   size!: number;
   /** ISO 8601 last-modified timestamp. */
   lastModified!: string;
+  /** Front-matter `title`, when present. */
+  @ApiProperty({ required: false })
+  title?: string;
+  /** Front-matter `license`, when present. */
+  @ApiProperty({ required: false })
+  license?: string;
+  /** Front-matter `source`, when present. */
+  @ApiProperty({ required: false })
+  source?: string;
+  /** Front-matter `attribution`, when present. */
+  @ApiProperty({ required: false })
+  attribution?: string;
 }
 
 /** {@link KnowledgeStatus}, published as a class so the Swagger plugin can read it. */

@@ -145,7 +145,8 @@ export async function apiDownload(
 
 /**
  * Uploads a single file to the given path using `multipart/form-data`.
- * The file is sent in a field named `file`.
+ * The file is sent in a field named `file`; a `null` `data` sends no file
+ * (for routes that take a field instead). `fields` are added as text fields.
  *
  * A document-validation failure (422) carries `errors[].llmHint` —
  * remediation text such as a minimal front-matter template — which is
@@ -156,16 +157,20 @@ export async function apiUpload<T>(
   opts: ApiOptions,
   path: string,
   filename: string,
-  data: Buffer,
+  data: Buffer | null,
   contentType = 'application/octet-stream',
+  fields: Record<string, string> = {},
 ): Promise<T> {
   const url = `${opts.baseUrl.replace(/\/$/, '')}${path}`;
   const form = new FormData();
-  form.append(
-    'file',
-    new Blob([new Uint8Array(data)], { type: contentType }),
-    filename,
-  );
+  if (data) {
+    form.append(
+      'file',
+      new Blob([new Uint8Array(data)], { type: contentType }),
+      filename,
+    );
+  }
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
 
   const headers: Record<string, string> = {};
   if (opts.token) headers['Authorization'] = `Bearer ${opts.token}`;

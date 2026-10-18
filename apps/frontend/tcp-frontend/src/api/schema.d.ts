@@ -52,6 +52,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a company template before importing it */
+        post: operations["CompanyTemplateController_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a company from a template */
+        post: operations["CompanyTemplateController_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export a company as a template */
+        get: operations["CompanyTemplateController_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the templates in the gallery */
+        get: operations["TemplateGalleryController_gallery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template/{sourceId}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a gallery template as a zip */
+        get: operations["TemplateGalleryController_download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the template gallery’s sources */
+        get: operations["TemplateGalleryController_listSources"];
+        put?: never;
+        /** Add a GitHub repository as a template source */
+        post: operations["TemplateGalleryController_addSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/template-source/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a template source */
+        delete: operations["TemplateGalleryController_removeSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assignment": {
         parameters: {
             query?: never;
@@ -720,6 +840,23 @@ export interface paths {
         put?: never;
         /** List the models a local or custom server offers */
         post: operations["LlmModelsController_list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** List the models a local or custom server offers, before a company exists */
+        post: operations["NewCompanyLlmModelsController_list"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1917,6 +2054,87 @@ export interface components {
             expires_in: number;
             refresh_token?: string;
         };
+        LlmConfigDto: {
+            provider: string;
+            model: string;
+            baseUrl?: string;
+            apiKey?: string;
+            contextWindow?: number;
+            timeoutMs?: number;
+        };
+        TemplateCompanyPreviewDto: {
+            timezone: string | null;
+            companyContext: string | null;
+            llmConfig: components["schemas"]["LlmConfigDto"] | null;
+            embeddingConfig: components["schemas"]["LlmConfigDto"] | null;
+            slug: string;
+            name: string;
+            description: string;
+        };
+        TemplateRolePreviewDto: {
+            llmConfig: components["schemas"]["LlmConfigDto"] | null;
+            slug: string;
+            name: string;
+            description: string;
+            documents: number;
+        };
+        TemplateDocumentPreviewDto: {
+            scope: string;
+            name: string;
+            license?: string;
+            source?: string;
+        };
+        CompanyTemplatePreviewDto: {
+            plannerRole: string | null;
+            formatVersion: number;
+            company: components["schemas"]["TemplateCompanyPreviewDto"];
+            roles: components["schemas"]["TemplateRolePreviewDto"][];
+            documents: components["schemas"]["TemplateDocumentPreviewDto"][];
+            neededKeys: string[];
+            slugTaken: boolean;
+            warnings: string[];
+        };
+        CompanyResponseDto: {
+            id: string;
+            slug: string;
+            name: string;
+            description: string;
+            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
+            systemPromptTemplate?: string | null;
+            mcpServerList: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
+            versionRetentionDays?: number | null;
+            timezone?: string | null;
+            companyContext?: string | null;
+            embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
+            runConfig?: Record<string, never> | null;
+            plannerRoleId?: string | null;
+            nextTaskShortcodeIndex: number;
+        };
+        GalleryTemplateDto: {
+            sourceId: string;
+            sourceName: string;
+            name: string;
+            title: string;
+            description: string;
+            roles: number;
+            documents: number;
+        };
+        TemplateSourceDto: {
+            /** @enum {string} */
+            origin: "builtin" | "config" | "user";
+            id: string;
+            name: string;
+            location: string;
+        };
+        AddTemplateSourceDto: {
+            name: string;
+            repo: string;
+            ref?: string;
+            path?: string;
+        };
         AssignmentResponseDto: {
             id: string;
             taskId?: string | null;
@@ -1971,14 +2189,6 @@ export interface components {
             /** @description Conversations awaiting a user reply */
             openEnquiries: number;
         };
-        LlmConfigDto: {
-            provider: string;
-            model: string;
-            baseUrl?: string;
-            apiKey?: string;
-            contextWindow?: number;
-            timeoutMs?: number;
-        };
         CompanyListItemDto: {
             /** Format: uuid */
             id: string;
@@ -2020,25 +2230,6 @@ export interface components {
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
-        };
-        CompanyResponseDto: {
-            id: string;
-            slug: string;
-            name: string;
-            description: string;
-            llmConfig?: components["schemas"]["LlmConfigDto"] | null;
-            systemPromptTemplate?: string | null;
-            mcpServerList: string[];
-            mcpServerToggles?: {
-                [key: string]: boolean;
-            } | null;
-            versionRetentionDays?: number | null;
-            timezone?: string | null;
-            companyContext?: string | null;
-            embeddingConfig?: components["schemas"]["LlmConfigDto"] | null;
-            runConfig?: Record<string, never> | null;
-            plannerRoleId?: string | null;
-            nextTaskShortcodeIndex: number;
         };
         UpdateCompanyDto: {
             llmConfig?: components["schemas"]["LlmConfigDto"] | null;
@@ -2313,6 +2504,10 @@ export interface components {
             feedback?: string;
         };
         KnowledgeDocumentResponseDto: {
+            title?: string;
+            license?: string;
+            source?: string;
+            attribution?: string;
             key: string;
             name: string;
             size: number;
@@ -3000,6 +3195,196 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OidcTokenResponseDto"];
                 };
+            };
+        };
+    };
+    CompanyTemplateController_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The template as a zip.
+                     */
+                    file?: string;
+                    /** @description A gallery template, as <sourceId>/<name>, instead of a file. */
+                    template?: string;
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyTemplatePreviewDto"];
+                };
+            };
+        };
+    };
+    CompanyTemplateController_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The template as a zip.
+                     */
+                    file?: string;
+                    /** @description A gallery template, as <sourceId>/<name>, instead of a file. */
+                    template?: string;
+                    /** @description ImportCompanyOptions as a JSON string: slug, name, description, timezone, companyContext, llmConfig, embeddingConfig, roleModels and replace. Absent fields keep the template’s values. */
+                    options?: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyResponseDto"];
+                };
+            };
+        };
+    };
+    CompanyTemplateController_export: {
+        parameters: {
+            query?: {
+                /** @description Include the company’s and roles’ models (never their keys). Defaults to true. */
+                models?: boolean;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+        };
+    };
+    TemplateGalleryController_gallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryTemplateDto"][];
+                };
+            };
+        };
+    };
+    TemplateGalleryController_download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+        };
+    };
+    TemplateGalleryController_listSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSourceDto"][];
+                };
+            };
+        };
+    };
+    TemplateGalleryController_addSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTemplateSourceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSourceDto"];
+                };
+            };
+        };
+    };
+    TemplateGalleryController_removeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3808,6 +4193,12 @@ export interface operations {
                     file: string;
                     /** @description Stored name. Defaults to the upload's name with a .md extension; giving one also allows overwriting an existing document. */
                     filename?: string;
+                    /** @description Licence identifier, written to the front matter. */
+                    license?: string;
+                    /** @description Where the document came from (URL). */
+                    source?: string;
+                    /** @description Credit line, written to the front matter. */
+                    attribution?: string;
                 };
             };
         };
@@ -3968,6 +4359,12 @@ export interface operations {
                     file: string;
                     /** @description Stored name. Defaults to the upload's name with a .md extension; giving one also allows overwriting an existing document. */
                     filename?: string;
+                    /** @description Licence identifier, written to the front matter. */
+                    license?: string;
+                    /** @description Where the document came from (URL). */
+                    source?: string;
+                    /** @description Credit line, written to the front matter. */
+                    attribution?: string;
                 };
             };
         };
@@ -4117,6 +4514,29 @@ export interface operations {
             path: {
                 companyId: string;
             };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListLlmModelsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelsResponseDto"];
+                };
+            };
+        };
+    };
+    NewCompanyLlmModelsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody: {

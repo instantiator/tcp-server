@@ -76,6 +76,17 @@ export const configSchema = Joi.object({
    * LlmDestinationPolicy.
    */
   LLM_ALLOWED_HOSTS: Joi.string().allow('').default(''),
+  /**
+   * Where the built-in company templates are, relative to the working
+   * directory unless absolute. The image copies them to /app/templates.
+   */
+  TEMPLATES_DIR: Joi.string().empty('').default('templates'),
+  /**
+   * Extra template gallery sources, comma-separated:
+   * `github:<owner>/<repo>[/<path>][#<ref>]` or `dir:<absolute path>`.
+   * Kept in step with the database at boot.
+   */
+  TEMPLATE_SOURCES: Joi.string().allow('').default(''),
   LLM_PROVIDER: Joi.string().empty('').optional(),
   LLM_MODEL: Joi.string().empty('').optional(),
   LLM_BASE_URL: Joi.string().uri().empty('').optional(),

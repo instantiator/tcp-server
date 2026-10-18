@@ -27,8 +27,15 @@ export class LlmModelsService {
     private readonly policy: LlmDestinationPolicy,
   ) {}
 
-  /** The ids `GET {baseUrl}/models` lists, or a 400/404/502 saying why not. */
-  async list(companyId: string, query: ListLlmModelsDto): Promise<string[]> {
+  /**
+   * The ids `GET {baseUrl}/models` lists, or a 400/404/502 saying why not.
+   * Without a company (a form for a company not yet created) only a key the
+   * caller sends is used; there is no saved one to fall back on.
+   */
+  async list(
+    companyId: string | null,
+    query: ListLlmModelsDto,
+  ): Promise<string[]> {
     const kind = findProvider(query.provider)?.kind;
     if (kind !== 'local' && kind !== 'custom') {
       throw new BadRequestException(
@@ -38,7 +45,9 @@ export class LlmModelsService {
     const refusal = this.policy.refusal(query);
     if (refusal) throw new BadRequestException(`baseUrl: ${refusal}`);
 
-    const apiKey = query.apiKey || (await this.savedKey(companyId, query));
+    const apiKey =
+      query.apiKey ||
+      (companyId === null ? undefined : await this.savedKey(companyId, query));
     let res: Response;
     try {
       res = await fetch(`${query.baseUrl.replace(/\/$/, '')}/models`, {

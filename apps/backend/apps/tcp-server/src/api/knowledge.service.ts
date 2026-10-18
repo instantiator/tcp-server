@@ -8,6 +8,7 @@ import {
   TcpRole,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
+  parseFrontMatter,
   resolveRunConfig,
 } from '@tcp/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
@@ -24,6 +25,7 @@ import {
   StorageService,
 } from '../storage/storage.service';
 import { isUUID } from '../utils/ObjectUtils';
+import { documentLicence } from '../templates/company-template/format';
 import { computeEmbeddingConfigWarning } from './validation-warnings';
 
 /** Summary returned by {@link KnowledgeService.list}. */
@@ -36,6 +38,14 @@ export interface DocumentSummary {
   size: number;
   /** ISO 8601 last-modified timestamp. */
   lastModified: string;
+  /** Front-matter `title`, when present. */
+  title?: string;
+  /** Front-matter `license`, when present. */
+  license?: string;
+  /** Front-matter `source`, when present. */
+  source?: string;
+  /** Front-matter `attribution`, when present. */
+  attribution?: string;
 }
 
 /** Identifies which knowledge scope a {@link KnowledgeService} call targets. */
@@ -110,10 +120,16 @@ export class KnowledgeService {
    */
   async list(ref: KnowledgeScopeRef): Promise<DocumentSummary[]> {
     const { company, role } = await this.resolveScope(ref);
-    const objects = await this.storage.listKnowledgeFiles(
-      toStorageScope(company, role),
+    const scope = toStorageScope(company, role);
+    const objects = await this.storage.listKnowledgeFiles(scope);
+    // ponytail: one read per document per listing; move licence to a DB
+    // column if a scope's listing gets slow.
+    return Promise.all(
+      objects.map(async (obj) => {
+        const text = await this.storage.getKnowledgeFile(scope, obj.name);
+        return text === null ? toSummary(obj) : toSummary(obj, text);
+      }),
     );
-    return objects.map(toSummary);
   }
 
   /**
@@ -388,11 +404,15 @@ function toStorageScope(
   return { companySlug: company.slug, roleSlug: role?.slug ?? null };
 }
 
-function toSummary(obj: StorageObject): DocumentSummary {
+/** Builds a summary; `text`, when given, adds the title and licence from its front matter. */
+function toSummary(obj: StorageObject, text?: string): DocumentSummary {
+  const title = text === undefined ? undefined : parseFrontMatter(text)?.title;
   return {
     key: obj.key,
     name: obj.name,
     size: obj.size,
     lastModified: obj.lastModified.toISOString(),
+    ...(typeof title === 'string' && title ? { title } : {}),
+    ...(text === undefined ? {} : documentLicence(text)),
   };
 }

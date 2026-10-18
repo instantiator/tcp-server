@@ -138,13 +138,13 @@ See `your-first-company.md` to get started.
 Providing the `-i` or `--input` option for the `set-company` verb fails:
 
 ```bash
-./tcp-cli.sh set-company -i ./scripts/test-data/companies/home-maintenance.json
+./tcp-cli.sh set-company -i ./scripts/test-data/companies/simple-company.json
 ```
 
 The workaround is to pipe the data in with:
 
 ```bash
-cat ./scripts/test-data/companies/home-maintenance.json | ./tcp-cli.sh set-company
+cat ./scripts/test-data/companies/simple-company.json | ./tcp-cli.sh set-company
 ```
 
 It'd be good to inspect and fix all the input options, as this isn't the only case where an expected option isn't recognised.
@@ -152,7 +152,7 @@ It'd be good to inspect and fix all the input options, as this isn't the only ca
 Another I've noticed is that the `-s` option for the `store-knowledge` verb fails, but the `--source` option succeeds.
 
 ```bash
-./tcp-cli.sh store-knowledge -r diy-assistant -c home-maintenance -s ./scripts/test-data/knowledge/diy-manual.pdf
+./tcp-cli.sh store-knowledge -r diy-assistant -c home-maintenance -s ./scripts/test-data/templates/home-maintenance/roles/diy-assistant/knowledge/diy-manual.pdf
 ```
 
 As a part of the repair, please also unify: `-i`, `--input`, `-s`, `--source` to: `-i`, `--input-path`
@@ -857,7 +857,9 @@ The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with bac
 
 The prompt for 002.02 asked the create flow to list required secrets and offer a first task. A plain company has no roles, no planner and no services that need keys, so 002.02 opens Admin → Roles after creating instead.
 
-**Act when:** 005.04 (create from template) is planned, or 003.00 (secrets) lands. Both are carried forward into the 005.04 prompt.
+Since 002.03, New company opens the template gallery, and a template brings roles and a planner. Importing one still lands on the company page without offering a first task, and the preview names only the model providers that need a key (`neededKeys`), not a service's secrets.
+
+**Act when:** 005.04 is planned, or 003.00 (secrets) lands. Both are carried forward into the 005.04 prompt.
 
 ## App-level model defaults can only be changed in env files
 
@@ -882,3 +884,21 @@ The picker lists a local server's models, but there is no "Test" button. `POST /
 Admin → Language models and the role dialog let every member of a company change its models and API keys. Membership is the only access control (ADR-011).
 
 **Act when:** the permission flags land (phase 06 002.01). Gate model changes on `modify_company` / `define_agent_roles`.
+
+## Listing knowledge reads every document
+
+Knowledge has no database table, so the licence fields (002.03) live in each document's front matter, and `KnowledgeService.list` reads every file to return them. The upload name check calls `list` too.
+
+**Act when:** listing one knowledge scope takes over a second, or a scope passes a few hundred documents. Store title and licence in a column (or object metadata) written on upload.
+
+## GitHub is the only remote template source
+
+Remote gallery sources are public GitHub repositories, downloaded whole from `codeload.github.com` within the 50 MB upload limit. Other hosts, private repositories and larger repositories aren't supported.
+
+**Act when:** someone asks for another host or a private repository, or a template repository passes 50 MB. Read only the templates folder, and add hosts one at a time with the same checks.
+
+## Template prompts are trusted as written
+
+An imported template's role prompts and context are someone else's text, and could carry prompt injection. Import checks the format, not the intent; the docs tell people to read a template from an unknown source first. Built-in templates are reviewed in this repository.
+
+**Act when:** 003.04 (prompt security for untrusted inbound content) is planned; its prompt carries this note.

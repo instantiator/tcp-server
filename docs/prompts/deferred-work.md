@@ -2,6 +2,8 @@
 
 ### Company definitions as zip files
 
+> ✅ Done in [002.03](<phase 04 - utility/002.03.01.plan - company template format v1 with import and export.md>): company templates (see [company-templates.md](../company-templates.md)). Kept here so links still land.
+
 - Contains a company
 - Contains roles
 - Contains knowledge

@@ -126,6 +126,42 @@ describe('LLM model listing and embedding changes (e2e)', () => {
         .expect(404));
   });
 
+  describe('POST /api/llm/models (before a company exists)', () => {
+    const path = '/api/llm/models';
+
+    it('returns 401 without a token', () =>
+      request(app.getHttpServer()).post(path).expect(401));
+
+    it('lists for any signed-in user, sending no key unless one is typed', async () => {
+      // Someone with no companies at all: the form they're filling in is
+      // the one that creates their first.
+      const stranger = `Bearer ${makeTestJwt({ sub: 'no-companies-yet' })}`;
+      await request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', stranger)
+        .send({ provider: 'lm-studio', baseUrl, roleId: otherRoleId })
+        .expect(200)
+        .expect(({ body }) =>
+          expect(body).toEqual({ models: ['gemma', 'qwen'] }),
+        );
+      expect(lastHeaders.authorization).toBeUndefined();
+
+      await request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', stranger)
+        .send({ provider: 'lm-studio', baseUrl, apiKey: 'typed-key' })
+        .expect(200);
+      expect(lastHeaders.authorization).toBe('Bearer typed-key');
+    });
+
+    it('refuses a host the URL policy does not allow', () =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', auth())
+        .send({ provider: 'lm-studio', baseUrl: 'http://10.0.0.5:1234/v1' })
+        .expect(400));
+  });
+
   describe('PUT /api/company/:id with a new embedding model', () => {
     let reindex: jest.SpyInstance;
     const embedding = (model: string) => ({

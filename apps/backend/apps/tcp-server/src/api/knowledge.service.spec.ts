@@ -119,6 +119,38 @@ describe('KnowledgeService', () => {
       });
     });
 
+    it('reads title and licence from front matter, omitting absent fields', async () => {
+      storage.listKnowledgeFiles.mockResolvedValue([
+        makeStorageObject('licensed.md'),
+        makeStorageObject('plain.md'),
+      ]);
+      storage.getKnowledgeFile.mockImplementation(
+        (_scope: unknown, name: string) =>
+          Promise.resolve(
+            name === 'licensed.md'
+              ? '---\ntitle: Licensed\nlicense: MIT\nsource: http://a\nattribution: Ann\n---\nBody'
+              : '---\ntitle: Plain\n---\nBody',
+          ),
+      );
+      const [licensed, plain] = await service.list({
+        kind: 'role',
+        roleId: role.id,
+      });
+      expect(licensed).toMatchObject({
+        title: 'Licensed',
+        license: 'MIT',
+        source: 'http://a',
+        attribution: 'Ann',
+      });
+      expect(Object.keys(plain)).toEqual([
+        'key',
+        'name',
+        'size',
+        'lastModified',
+        'title',
+      ]);
+    });
+
     it('throws NotFoundException when role does not exist', async () => {
       roleRepo.findOneBy.mockResolvedValue(null);
       await expect(

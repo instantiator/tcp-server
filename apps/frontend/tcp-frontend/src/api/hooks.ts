@@ -33,6 +33,7 @@ import {
 import { useMemo } from 'react';
 
 import type {
+  AddTemplateSource,
   AgentDTO,
   AssignmentDTO,
   CompanySpendDTO,
@@ -78,6 +79,12 @@ import {
   useCompanyKnowledgeSearch,
   useCompanyKnowledgeStatus,
   useCreateCompanyMutation,
+  useImportCompanyMutation,
+  usePreviewTemplateMutation,
+  templateDownloadPath,
+  companyExportPath,
+  useAddTemplateSourceMutation,
+  useRemoveTemplateSourceMutation,
   useCreateRoleMutation,
   useDeleteCompanyMutation,
   useDeleteKnowledgeMutation,
@@ -453,6 +460,22 @@ export const useCreateCompany = () => {
   });
 };
 
+/** Reads a template without creating anything; nothing is cached or refetched. */
+export const usePreviewTemplate = usePreviewTemplateMutation;
+
+/** Imports a company from a template; the companies list refetches, as for {@link useCreateCompany}. */
+export const useImportCompany = () => {
+  const queryClient = useQueryClient();
+  const importCompany = useImportCompanyMutation();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof importCompany.mutateAsync>[0]) =>
+      importCompany.mutateAsync(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['company'] });
+    },
+  });
+};
+
 /**
  * Deletes a company. Its detail is dropped rather than refetched, which would
  * only 404; the companies list refetches.
@@ -466,6 +489,39 @@ export const useDeleteCompany = () => {
       queryClient.removeQueries({ queryKey: queryKeys.company(id) });
       void queryClient.invalidateQueries({ queryKey: ['company'] });
     },
+  });
+};
+
+/** The gallery lists templates from every source, so a source change makes it stale too. */
+const useRefreshTemplateSources = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.templateSources(),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.templateGallery(),
+    });
+  };
+};
+
+/** Adds a GitHub repository as a template source. */
+export const useAddTemplateSource = () => {
+  const add = useAddTemplateSourceMutation();
+  const refresh = useRefreshTemplateSources();
+  return useMutation({
+    mutationFn: (body: AddTemplateSource) => add.mutateAsync(body),
+    onSuccess: refresh,
+  });
+};
+
+/** Removes a template source added in the app. */
+export const useRemoveTemplateSource = () => {
+  const remove = useRemoveTemplateSourceMutation();
+  const refresh = useRefreshTemplateSources();
+  return useMutation({
+    mutationFn: (id: string) => remove.mutateAsync(id),
+    onSuccess: refresh,
   });
 };
 
@@ -923,6 +979,8 @@ export {
   useRoleBySlug,
   useSendMessageMutation as useSendMessage,
   useTaskHistory,
+  useTemplateGalleryQuery as useTemplateGallery,
+  useTemplateSourcesQuery as useTemplateSources,
   useToolFootprintQuery as useToolFootprint,
   useTranscriptSearch,
 } from './endpoints';
@@ -1390,6 +1448,25 @@ const saveBlob = (blob: Blob, name: string): void => {
   anchor.download = name;
   anchor.click();
   URL.revokeObjectURL(url);
+};
+
+/** Downloads a gallery template's zip, named after the template. */
+export const downloadTemplate = async (
+  sourceId: string,
+  name: string,
+): Promise<void> => {
+  const { blob } = await getBlob(templateDownloadPath(sourceId, name));
+  saveBlob(blob, `${name}.zip`);
+};
+
+/** Downloads a company as a template zip, named by its slug; `includeModels` keeps its model settings. */
+export const downloadCompanyTemplate = async (
+  companyId: string,
+  slug: string,
+  includeModels: boolean,
+): Promise<void> => {
+  const { blob } = await getBlob(companyExportPath(companyId, includeModels));
+  saveBlob(blob, `${slug}.zip`);
 };
 
 /** Downloads one table as CSV, named in local time by the browser, not the server. */

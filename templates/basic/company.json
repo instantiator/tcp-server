@@ -1,0 +1,7 @@
+{
+  "formatVersion": 1,
+  "slug": "basic",
+  "name": "Basic",
+  "description": "One planner role that plans each task and carries out its steps.",
+  "plannerRole": "planner"
+}

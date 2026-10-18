@@ -87,11 +87,16 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`set-role`](#set-role)                                     | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`                                                                                     | Create or update a role                                                                       |
 | [`delete-company`](#delete-company)                         | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                                                                                      | Delete a company and everything in it                                                         |
 | [`delete-role`](#delete-role)                               | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                                                                                            | Delete a role and everything tied to it                                                       |
+| [`import-company`](#import-company)                         | `import-company (<path>\|--template <sourceId/name>) [--slug <slug>] [--name <name>] [--llm-config <json>] [--no-role-models] [--replace] [--preview]`                        | Create a company from a template                                                              |
+| [`export-company`](#export-company)                         | `export-company (-c <uuid>\|--company-slug <slug>) [--no-models] [-o <file>]`                                                                                                 | Export a company as a template zip                                                            |
+| [`new-template`](#new-template)                             | `new-template <dir>`                                                                                                                                                          | Unpack the blank template into a new directory                                                |
+| [`list-templates`](#list-templates)                         | `list-templates`                                                                                                                                                              | List the templates in the gallery                                                             |
+| [`template-source`](#template-source)                       | `template-source (list\|add <name> <owner/repo> [--ref <ref>] [--path <path>]\|remove <id>)`                                                                                  | Manage the gallery sources                                                                    |
 | [`chat`](#chat)                                             | `chat (-r <uuid>\|--role-slug <slug>) [-q <message>]`                                                                                                                         | Interactive or single-query chat with a role                                                  |
 | [`tui`](#tui)                                               | `tui (-c <uuid>\|--company-slug <slug>)`                                                                                                                                      | Open the full-screen TUI on a company's roster (no role required)                             |
 | [`list-knowledge`](#list-knowledge)                         | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                                                                                | List knowledge-base documents for a role or company (shared knowledge)                        |
 | [`get-knowledge`](#get-knowledge)                           | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                                                                                       | Get a knowledge-base document's content                                                       |
-| [`store-knowledge`](#store-knowledge)                       | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`                                                                                     | Upload a document to a role or company knowledge base (converted to OKF Markdown server-side) |
+| [`store-knowledge`](#store-knowledge)                       | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>] [--license <id>] [--source-url <url>] [--attribution <text>]`                        | Upload a document to a role or company knowledge base (converted to OKF Markdown server-side) |
 | [`delete-knowledge`](#delete-knowledge)                     | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                                                                                | Delete a knowledge-base document by filename                                                  |
 | [`reindex-knowledge`](#reindex-knowledge)                   | `reindex-knowledge --company <slug-or-id>`                                                                                                                                    | Force a full RAG rebuild of every knowledge scope of a company                                |
 | [`get-knowledge-index-status`](#get-knowledge-index-status) | `get-knowledge-index-status (--role <slug-or-id>\|--company <slug-or-id>)`                                                                                                    | Report knowledge-index status for a role, or a company's shared scope plus every role         |
@@ -296,6 +301,81 @@ confirmation before deleting.
 ```bash
 ./tcp-cli.sh -t $TOKEN delete-company --company-slug acme
 ./tcp-cli.sh -t $TOKEN delete-company -c <companyId> --force
+```
+
+### `import-company`
+
+Create a company from a template: a `.zip`, a template directory (zipped in memory; `.DS_Store` is skipped), or a gallery template. Give exactly one of `<path>` and `--template`.
+
+- **stdout**: the created company as JSON, or with `--preview` what the import would create
+- **stderr**: errors and any server warnings
+
+| Flag                         | Description                                                              |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `--template <sourceId/name>` | A gallery template, instead of a path                                    |
+| `--slug <slug>`              | The company's slug (default: the template's)                             |
+| `--name <name>`              | The company's name (default: the template's)                             |
+| `--llm-config <json>`        | The company's model as JSON; the word `null` clears it                   |
+| `--no-role-models`           | Import every role without the template's own model                       |
+| `--replace`                  | Replace an existing company with the same slug (members and admins only) |
+| `--preview`                  | Print what would be created and import nothing                           |
+
+```bash
+./tcp-cli.sh -t $TOKEN import-company ./templates/basic --preview
+./tcp-cli.sh -t $TOKEN import-company ./basic.zip --slug acme --name "Acme"
+./tcp-cli.sh -t $TOKEN import-company --template builtin/basic --no-role-models
+```
+
+### `export-company`
+
+Export a company as a template zip.
+
+- **stdout**: JSON `{ target, size }` for the file written. A "Saved to" line goes to stderr
+
+| Flag                    | Alias | Description                                        |
+| ----------------------- | ----- | -------------------------------------------------- |
+| `--company-id <uuid>`   | `-c`  | Company UUID                                       |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`            |
+| `--no-models`           |       | Leave the models out of the template               |
+| `--output <file>`       | `-o`  | File to write (default: the server's `<slug>.zip`) |
+
+```bash
+./tcp-cli.sh -t $TOKEN export-company --company-slug acme -o acme.zip --no-models
+```
+
+### `new-template`
+
+Start a template: unpack the built-in blank one, which carries the format reference, into `<dir>`. Refuses a directory that exists and is not empty, and any zip entry containing `..` or starting with `/`.
+
+- **stdout**: the files written, one per line
+
+```bash
+./tcp-cli.sh -t $TOKEN new-template ./my-template
+```
+
+### `list-templates`
+
+Print the gallery: every template from every source.
+
+- **stdout**: JSON array of `{ sourceId, sourceName, name, title, description, roles, documents }`
+
+```bash
+./tcp-cli.sh -t $TOKEN list-templates
+```
+
+### `template-source`
+
+Manage where the gallery reads templates from. `list` prints the sources; `add` and `remove` are admin only.
+
+| Subcommand                | Description                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `list`                    | List the sources                                                                                               |
+| `add <name> <owner/repo>` | Add a public GitHub repository; `--ref <ref>` (default `main`), `--path <path>` (folder holding the templates) |
+| `remove <id>`             | Remove a source added with `add` (built-in and configured sources can't be removed)                            |
+
+```bash
+./tcp-cli.sh -t $TOKEN template-source add community acme/templates --path templates
+./tcp-cli.sh -t $TOKEN template-source remove <id>
 ```
 
 ### `delete-role`
@@ -671,6 +751,9 @@ Accepts `.md`, `.txt`, `.html`, `.pdf`, `.docx`, `.csv`, `.json`, and `.yaml`. T
 | `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope)                                                   |
 | `--source <path>`        | `-s`  | **(Required)** Local file path to upload                                                        |
 | `--target <filename>`    | `-t`  | Filename to store as (defaults to the source basename, `.md`-extensioned for converted formats) |
+| `--license <id>`         |       | Licence of the document, recorded in its front matter (e.g. `CC-BY-4.0`)                        |
+| `--source-url <url>`     |       | Where the document came from, recorded as its `source`                                          |
+| `--attribution <text>`   |       | Credit line the licence requires                                                                |
 
 ```bash
 ./tcp-cli.sh -t $TOKEN store-knowledge -r <roleId> -s policy.md

@@ -43,3 +43,15 @@ export function getCurrentUserLabel(req: Request): string {
     .find((claim) => claim !== '');
   return label ?? 'a user';
 }
+
+/**
+ * The name a new company records for its creator: the token's email, then its
+ * username, then its display name, or `null` when it carries none.
+ */
+export function getCurrentUserCreatorName(req: Request): string | null {
+  const user = req.user as Record<string, unknown> | undefined;
+  const name = [user?.email, user?.preferred_username, user?.name].find(
+    (claim): claim is string => typeof claim === 'string',
+  );
+  return name ?? null;
+}

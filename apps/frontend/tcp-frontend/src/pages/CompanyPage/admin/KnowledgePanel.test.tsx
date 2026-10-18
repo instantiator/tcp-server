@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { announce } from '../../../announce/announcer';
+import type { KnowledgeDocumentDTO } from '../../../api/dtos';
 import { t, tCount } from '../../../strings';
 import { expectNoA11yViolations } from '../../../test-support/axe';
 import { fetchMock, installFetchMock } from '../../../test-support/fetch-mock';
@@ -12,7 +13,7 @@ vi.mock('../../../announce/announcer', () => ({ announce: vi.fn() }));
 
 const BASE = '/api/company/c1/knowledge';
 
-const doc = (name: string) => ({
+const doc = (name: string): KnowledgeDocumentDTO => ({
   key: `acme/knowledge/shared/${name}`,
   name,
   size: 2048,
@@ -168,6 +169,28 @@ describe('KnowledgePanel', () => {
       expect.stringContaining('.pdf'),
     );
     await expectNoA11yViolations(document.body);
+  });
+
+  it('shows a document’s licence, linked only when its source is https', async () => {
+    world.docs = [
+      { ...doc('linked.md'), license: 'CC-BY-4.0', source: 'https://x.test/a' },
+      { ...doc('plain.md'), license: 'OGL', source: 'http://x.test/b' },
+      { ...doc('bare.md'), license: 'MIT' },
+      doc('none.md'),
+    ];
+    renderPanel();
+    await screen.findByRole('rowheader', { name: 'linked.md' });
+
+    expect(screen.getByRole('link', { name: 'CC-BY-4.0' })).toHaveAttribute(
+      'href',
+      'https://x.test/a',
+    );
+    expect(screen.getByText('OGL')).toBeVisible();
+    expect(screen.getByText('MIT')).toBeVisible();
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+
+    const none = screen.getByRole('row', { name: /none\.md/ });
+    expect(within(none).getAllByRole('cell')[2]).toBeEmptyDOMElement();
   });
 
   it('uploads a document, announces it, and refreshes the list', async () => {

@@ -4,6 +4,7 @@ import { getAccessToken } from '../auth/access-token';
 import { handleUnauthorized } from '../auth/unauthorized';
 
 import { apiError, networkError } from './errors';
+import { readWarnings } from './warnings';
 import type { paths } from './schema';
 
 /**
@@ -153,6 +154,26 @@ export const postFileForJson = async (
   body.append('file', file);
   const response = await send(path, { method: 'POST', body, signal });
   return response.json().catch(() => null);
+};
+
+/**
+ * Posts a multipart form of text fields and files, for a route that answers
+ * with a JSON body the caller validates. The soft warnings the response
+ * carries come back beside it. Same reasons as {@link postFile} for bypassing
+ * the generated client; `Content-Type` is left to the browser for the same one.
+ */
+export const postFormForJson = async (
+  path: string,
+  fields: Record<string, string | File>,
+  signal?: AbortSignal,
+): Promise<{ body: unknown; warnings: readonly string[] }> => {
+  const body = new FormData();
+  for (const [name, value] of Object.entries(fields)) body.append(name, value);
+  const response = await send(path, { method: 'POST', body, signal });
+  return {
+    body: await response.json().catch(() => null),
+    warnings: readWarnings(response),
+  };
 };
 
 /**
