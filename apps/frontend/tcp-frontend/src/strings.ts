@@ -967,6 +967,13 @@ const strings = {
   'admin.role.error': 'The role could not be saved: {message}',
   'admin.role.announce.created': 'Role added: {name}',
   'admin.role.announce.saved': 'Role saved: {name}',
+  'storage.preview.none':
+    'No preview for this kind of file. Download it to open it.',
+  'storage.preview.tooLarge':
+    'Too large to preview ({size}). Download it to open it.',
+  'storage.preview.truncated': 'Showing the first {count} rows.',
+  'storage.preview.loading': 'the preview',
+  'storage.preview.error': 'The preview could not be loaded.',
   'documents.heading': 'Documents',
   'documents.intro':
     'Folders in the document store. Each link opens the storage browser in a new tab.',
