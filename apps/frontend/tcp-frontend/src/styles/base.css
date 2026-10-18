@@ -211,6 +211,12 @@ body {
   outline-offset: var(--tcp-focus-ring-offset);
 }
 
+/* A row of related toggles (the Companies page's scope switch). */
+.react-aria-ToggleButtonGroup {
+  display: flex;
+  gap: var(--tcp-space-xs);
+}
+
 /*
  * The same gap the radios above fill, for the same reason: React Aria ships
  * no styling, so with no rules at all a selected checkbox is indistinguishable

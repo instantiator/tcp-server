@@ -430,6 +430,16 @@ const strings = {
   'companies.empty.heading': 'You are not a member of any company',
   'companies.empty.body':
     'Create one to get started, or ask someone to add you to theirs.',
+  // The administrator's "All companies" scope, with its own wording: "your"
+  // would be wrong for a list that isn't limited to the caller's companies.
+  'companies.scope.label': 'Which companies',
+  'companies.scope.mine': 'My companies',
+  'companies.scope.all': 'All companies',
+  'companies.loadingAll': 'all companies',
+  'companies.error.failedAll': 'The companies could not be loaded.',
+  'companies.empty.headingAll': 'There are no companies',
+  'companies.empty.bodyAll': 'Create one to get started.',
+  'companies.notMember': 'Not a member',
   // The New company dialog.
   'companies.create.open': 'New company',
   'companies.create.heading': 'New company',
