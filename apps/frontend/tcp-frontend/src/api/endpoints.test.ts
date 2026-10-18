@@ -25,7 +25,12 @@ import {
   useMcpServers,
   useToolFootprintQuery,
   useReindexKnowledgeMutation,
+  useRestoreStorageVersionMutation,
   useRoleKnowledge,
+  useDeleteStorageMutation,
+  useStorageFolder,
+  useUploadStorageFileMutation,
+  storageFilePath,
   useTasks,
   useUpdateCompanyMutation,
   useUpdateRoleMutation,
@@ -573,4 +578,147 @@ describe('the role and knowledge mutations', () => {
       expect(new URL(request.url).pathname).toBe(path);
     },
   );
+});
+
+describe('company storage', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+    queryClient = new QueryClient();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fetchMock.mockReset();
+  });
+
+  /** The URL and options of a call made through the raw `fetch` of `postFile`. */
+  const rawCall = () => {
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    if (!(url instanceof URL)) throw new Error('no request was made');
+    return { url, init };
+  };
+
+  /** Uploads one file; resolves to the rejection, if there was one. */
+  const upload = async (overwrite: boolean): Promise<unknown> => {
+    const { result } = renderHook(() => useUploadStorageFileMutation('c1'), {
+      wrapper: wrapper(queryClient),
+    });
+    let failure: unknown;
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({
+          path: 'resources/a b.md',
+          file: new File(['x'], 'a b.md'),
+          overwrite,
+        });
+      } catch (error) {
+        failure = error;
+      }
+    });
+    return failure;
+  };
+
+  it('useStorageFolder requests GET .../storage/folder?path= and lands under queryKeys.storageFolder', async () => {
+    respondWith({ path: 'resources/', writable: true, folders: [], files: [] });
+
+    const { result } = renderHook(() => useStorageFolder('c1', 'resources/'), {
+      wrapper: wrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const url = new URL(requestMade().url);
+    expect(url.pathname).toBe('/api/company/c1/storage/folder');
+    expect(url.searchParams.get('path')).toBe('resources/');
+    expect(url.search).toBe('?path=resources%2F');
+    expect(
+      queryClient.getQueryData(queryKeys.storageFolder('c1', 'resources/')),
+    ).toEqual({ path: 'resources/', writable: true, folders: [], files: [] });
+  });
+
+  it('storageFilePath encodes the path so it round-trips, and adds versionId only when given', () => {
+    const path = 'a b/ü#1.md';
+    const plain = new URL(storageFilePath('c1', path), 'http://x');
+    expect(plain.pathname).toBe('/api/company/c1/storage/file');
+    expect(plain.hash).toBe('');
+    expect(plain.searchParams.get('path')).toBe(path);
+    expect(plain.searchParams.has('versionId')).toBe(false);
+
+    const versioned = new URL(storageFilePath('c1', path, 'v1'), 'http://x');
+    expect(versioned.searchParams.get('path')).toBe(path);
+    expect(versioned.searchParams.get('versionId')).toBe('v1');
+  });
+
+  it('useUploadStorageFileMutation posts multipart with overwrite=true when overwriting', async () => {
+    respondWith({ path: 'resources/a b.md' });
+
+    await upload(true);
+
+    const { url, init } = rawCall();
+    expect(url.pathname).toBe('/api/company/c1/storage/file');
+    expect(url.searchParams.get('path')).toBe('resources/a b.md');
+    expect(url.searchParams.get('overwrite')).toBe('true');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBeInstanceOf(FormData);
+  });
+
+  it('useUploadStorageFileMutation leaves overwrite off the URL when not overwriting', async () => {
+    respondWith({ path: 'resources/a b.md' });
+
+    await upload(false);
+
+    expect(rawCall().url.searchParams.has('overwrite')).toBe(false);
+  });
+
+  it('an upload onto an existing file rejects with a 409 ApiError', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'exists' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const error = await upload(false);
+
+    expect(error).toBeInstanceOf(ApiError);
+    if (!(error instanceof ApiError)) throw new Error('expected an ApiError');
+    expect(error.status).toBe(409);
+  });
+
+  it('useDeleteStorageMutation sends DELETE with ?path=', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const { result } = renderHook(() => useDeleteStorageMutation('c1'), {
+      wrapper: wrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync('resources/old/');
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('DELETE');
+    const url = new URL(request.url);
+    expect(url.pathname).toBe('/api/company/c1/storage');
+    expect(url.searchParams.get('path')).toBe('resources/old/');
+  });
+
+  it('useRestoreStorageVersionMutation POSTs { path, versionId }', async () => {
+    respondWith({ path: 'a.md' });
+
+    const { result } = renderHook(
+      () => useRestoreStorageVersionMutation('c1'),
+      { wrapper: wrapper(queryClient) },
+    );
+    await act(async () => {
+      await result.current.mutateAsync({ path: 'a.md', versionId: 'v1' });
+    });
+
+    const request = requestMade();
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(
+      '/api/company/c1/storage/restore',
+    );
+    expect(await request.json()).toEqual({ path: 'a.md', versionId: 'v1' });
+  });
 });

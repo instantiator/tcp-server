@@ -14,6 +14,11 @@ export type ConversationDetailDTO =
   components['schemas']['ConversationDetailResponseDto'];
 export type KnowledgeDocumentDTO =
   components['schemas']['KnowledgeDocumentResponseDto'];
+export type StorageFolderDTO = components['schemas']['StorageFolderDto'];
+export type StorageFolderEntryDTO =
+  components['schemas']['StorageFolderEntryDto'];
+export type StorageFileEntryDTO = components['schemas']['StorageFileEntryDto'];
+export type StorageVersionDTO = components['schemas']['StorageVersionDto'];
 export type SpendOverviewDTO = components['schemas']['SpendOverviewDto'];
 export type CompanySpendDTO = components['schemas']['CompanySpendDto'];
 export type NotificationDTO = components['schemas']['TcpNotification'];
