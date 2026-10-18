@@ -404,6 +404,9 @@ const useStorageInvalidation = () => {
   };
 };
 
+/** Refetches every storage listing, version list and preview: the browser's Refresh. */
+export const useRefreshStorage = (): (() => void) => useStorageInvalidation();
+
 /** Uploads a file into company storage; folders and versions refetch on success. */
 export const useUploadStorageFile = (companyId: string) => {
   const upload = useUploadStorageFileMutation(companyId);
