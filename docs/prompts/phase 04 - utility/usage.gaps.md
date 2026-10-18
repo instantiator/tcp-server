@@ -500,6 +500,8 @@ can't attach files to a task or answer an enquiry.
 
 > ✅ **Rows 11–12 done in [000.05](<000.05.01.plan - system menu for health and shutdown.md>):** an admin-only System menu with health, shutdown, restart and cancel, plus `get-health`, `restart` and `cancel-shutdown` in the CLI. That also gives `DELETE /api/system/shutdown` a surface.
 
+> ✅ **Row 2 done in [002.04](<002.04.01.plan - web ui admin view of all companies.md>):** administrators get a **My companies / All companies** toggle on the Companies page (`?scope=all`), and the all view marks companies they aren't a member of.
+
 **Unused API routes:** `POST /api/model/check`, the company-user routes,
 `POST /api/agent/start` (non-chat), `POST /api/agent/resume/:id`, delete role
 by slug, and `DELETE /api/system/shutdown` (cancel a drain). Either give each a

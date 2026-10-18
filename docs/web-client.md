@@ -1241,6 +1241,14 @@ the knowledge table shows each document's licence, and admins manage gallery
 sources from the system menu's **Template sources**
 (`components/TemplateSourcesDialog/`). See [company-templates.md](company-templates.md).
 
+**All companies** (002.04): administrators (`useSystemStatus().data.admin`)
+get a **My companies / All companies** toggle beside **New company**. It is a
+single-selection `ToggleButtonGroup`, so it reaches assistive technology as a
+radio group. The choice lives in the URL as `?scope=all` and is sent as
+`?all=true`; anyone else never sees the toggle, and their `?scope=all` is
+ignored rather than turned into a 403. In the all view, a card whose
+`memberType` is `null` says **Not a member**.
+
 The **Profile** dialog lists your companies with your member type. The
 Memberships dialog and its Account menu item are gone, so the Account menu has
 two items: My profile and Sign out.
