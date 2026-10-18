@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SessionProvider } from '../../auth/session';
 import { t } from '../../strings';
 import {
   fetchMock,
@@ -21,11 +22,14 @@ const company = (overrides: {
   activeAgents?: number;
   tasksByStatus?: Partial<Record<string, number>>;
   openEnquiries?: number;
+  memberType?: 'creator' | 'member' | 'owner' | null;
 }) => ({
   id: overrides.id,
   slug: overrides.id,
   name: overrides.name,
   description: '',
+  memberType:
+    overrides.memberType === undefined ? 'member' : overrides.memberType,
   stats: {
     activeAgents: overrides.activeAgents ?? 0,
     tasksByStatus: {
@@ -42,18 +46,40 @@ const company = (overrides: {
   },
 });
 
-const renderCompaniesPage = () =>
+/**
+ * Renders the page at `route`. Signed out unless `signedIn`, in which case
+ * the system status (and so the admin flag) is fetched, as in the app.
+ */
+const renderCompaniesPage = (route = '/companies', signedIn = false) =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <MemoryRouter>
-        <CompaniesPage />
+      <MemoryRouter initialEntries={[route]}>
+        <SessionProvider session={signedIn ? { userId: 'test-user' } : null}>
+          <CompaniesPage />
+        </SessionProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
+
+/** Answers the status and company routes, so the page can be driven as an admin or not. */
+const respondAs = (admin: boolean, companies: readonly unknown[]) =>
+  respondByRoute([
+    [
+      /\/api\/system\/status/,
+      { body: { admin, shutdown: { state: 'idle', restart: false } } },
+    ],
+    [/\/api\/company/, { body: companies }],
+  ]);
+
+/** The `?all` value of each company request so far. */
+const companyRequests = () =>
+  requestedUrls()
+    .filter((url) => url.includes('/api/company'))
+    .map((url) => new URL(url).searchParams.get('all'));
 
 describe('CompaniesPage', () => {
   beforeEach(() => {
@@ -290,5 +316,145 @@ describe('CompaniesPage', () => {
     expect(
       screen.queryByRole('button', { name: t('companies.gallery.scratch') }),
     ).not.toBeInTheDocument();
+  });
+
+  describe('scope toggle', () => {
+    const scopeGroup = () =>
+      screen.queryByRole('radiogroup', { name: t('companies.scope.label') });
+    const button = (key: 'mine' | 'all') =>
+      screen.getByRole('radio', { name: t(`companies.scope.${key}`) });
+    /** The card holding the company link named `name`. */
+    const card = (name: string): HTMLElement => {
+      const found = screen
+        .getByRole('link', { name })
+        .closest<HTMLElement>('.companies-page__company');
+      if (found === null) throw new Error(`No card for ${name}`);
+      return found;
+    };
+
+    it('is not offered to a non-admin, who never sends ?all', async () => {
+      respondAs(false, [company({ id: 'company-1', name: 'Acme' })]);
+      renderCompaniesPage('/companies', true);
+
+      await screen.findByRole('link', { name: 'Acme' });
+
+      expect(scopeGroup()).not.toBeInTheDocument();
+      expect(companyRequests()).toEqual([null]);
+    });
+
+    it('ignores ?scope=all for a non-admin: own list, no toggle, no ?all', async () => {
+      respondAs(false, [company({ id: 'company-1', name: 'Acme' })]);
+      renderCompaniesPage('/companies?scope=all', true);
+
+      await screen.findByRole('link', { name: 'Acme' });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      expect(scopeGroup()).not.toBeInTheDocument();
+      expect(companyRequests().every((all) => all === null)).toBe(true);
+    });
+
+    it('shows an admin the group with My companies selected', async () => {
+      respondAs(true, [company({ id: 'company-1', name: 'Acme' })]);
+      renderCompaniesPage('/companies', true);
+
+      expect(
+        await screen.findByRole('radiogroup', {
+          name: t('companies.scope.label'),
+        }),
+      ).toBeInTheDocument();
+      expect(button('mine')).toHaveAttribute('aria-checked', 'true');
+      expect(button('all')).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('asks for ?all=true when an admin presses All companies', async () => {
+      respondAs(true, [company({ id: 'company-1', name: 'Acme' })]);
+      const user = userEvent.setup();
+      renderCompaniesPage('/companies', true);
+      await screen.findByRole('link', { name: 'Acme' });
+      await screen.findByRole('radiogroup', {
+        name: t('companies.scope.label'),
+      });
+
+      respondAs(true, [
+        company({ id: 'company-1', name: 'Acme' }),
+        company({ id: 'company-2', name: 'Other', memberType: null }),
+      ]);
+      await user.click(button('all'));
+
+      expect(
+        await screen.findByRole('link', { name: 'Other' }),
+      ).toBeInTheDocument();
+      expect(companyRequests()).toContain('true');
+      expect(button('all')).toHaveAttribute('aria-checked', 'true');
+
+      // Going back removes the scope, so the default view asks for no ?all.
+      await user.click(button('mine'));
+      await waitFor(() =>
+        expect(button('mine')).toHaveAttribute('aria-checked', 'true'),
+      );
+      expect(companyRequests().at(-1)).toBeNull();
+    });
+
+    it('asks for all at once when an admin opens ?scope=all', async () => {
+      respondAs(true, [company({ id: 'company-1', name: 'Acme' })]);
+      renderCompaniesPage('/companies?scope=all', true);
+
+      await waitFor(() =>
+        expect(button('all')).toHaveAttribute('aria-checked', 'true'),
+      );
+      await screen.findByRole('link', { name: 'Acme' });
+      expect(companyRequests()).toContain('true');
+    });
+
+    it('marks a company the admin is not a member of, in the all view only', async () => {
+      const companies = [
+        company({ id: 'company-1', name: 'Mine', memberType: 'member' }),
+        company({ id: 'company-2', name: 'Theirs', memberType: null }),
+      ];
+      respondAs(true, companies);
+      const user = userEvent.setup();
+      renderCompaniesPage('/companies', true);
+      await screen.findByRole('link', { name: 'Theirs' });
+      expect(
+        screen.queryByText(t('companies.notMember')),
+      ).not.toBeInTheDocument();
+
+      await user.click(button('all'));
+      await waitFor(() =>
+        expect(button('all')).toHaveAttribute('aria-checked', 'true'),
+      );
+
+      expect(
+        within(card('Theirs')).getByText(t('companies.notMember')),
+      ).toBeInTheDocument();
+      expect(
+        within(card('Mine')).queryByText(t('companies.notMember')),
+      ).not.toBeInTheDocument();
+    });
+
+    it('uses the all-view wording for an empty list', async () => {
+      respondAs(true, []);
+      renderCompaniesPage('/companies?scope=all', true);
+
+      expect(
+        await screen.findByRole('heading', {
+          name: t('companies.empty.headingAll'),
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(t('companies.empty.bodyAll')),
+      ).toBeInTheDocument();
+    });
+
+    it('has no accessibility violations with the toggle showing', async () => {
+      respondAs(true, [company({ id: 'company-1', name: 'Acme' })]);
+      const { container } = renderCompaniesPage('/companies', true);
+      await screen.findByRole('radiogroup', {
+        name: t('companies.scope.label'),
+      });
+      await screen.findByRole('link', { name: 'Acme' });
+
+      await expectNoA11yViolations(container);
+    });
   });
 });

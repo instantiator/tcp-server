@@ -18,14 +18,19 @@ const hasMachineCredentials = Boolean(TEST_CLIENT_ID && TEST_CLIENT_SECRET);
 /*
  * Literals copied from `strings.ts` by hand, the same way every other
  * browser spec does (`header.account.label`, `header.account.profile`,
- * `profile.subject.label`, `dialog.close`) — needed only by the card
- * navigation fixture below, to read the signed-in human user's own `sub`
- * off the profile dialog.
+ * `profile.subject.label`, `dialog.close`) — the first four are needed only
+ * by the card navigation fixture below, to read the signed-in human user's
+ * own `sub` off the profile dialog; the last three
+ * (`companies.scope.mine`, `companies.scope.all`, `companies.notMember`)
+ * are for the admin view of all companies.
  */
 const ACCOUNT_LABEL = 'Account';
 const MY_PROFILE_LABEL = 'My profile';
 const PROFILE_SUBJECT_LABEL = 'Account identifier';
 const CLOSE_LABEL = 'Close';
+const MY_COMPANIES_LABEL = 'My companies';
+const ALL_COMPANIES_LABEL = 'All companies';
+const NOT_MEMBER_TEXT = 'Not a member';
 
 interface TokenEndpoint {
   token_endpoint: string;
@@ -200,5 +205,76 @@ test.describe('company card navigation', () => {
     // text, is what a pointer actually meets.
     await card.getByText(/active agent/).click({ force: true });
     await expect(page).toHaveURL(new RegExp(`/company/${companyId}$`));
+  });
+});
+
+// 002.04: an admin can switch `/companies` to every company, including ones
+// they are not a member of. The fixture's only member is the machine client,
+// so the signed-in human admin can see it solely through "All companies".
+test.describe('admin view of all companies', () => {
+  let token: string;
+  let companyId: string;
+  let companyName: string;
+
+  test.skip(
+    !hasSignInCredentials || !hasMachineCredentials,
+    'Requires TEST_USERNAME/TEST_PASSWORD (the signed-in session) and ' +
+      'TEST_CLIENT_ID/TEST_CLIENT_SECRET (the machine-token fixture) — see ' +
+      'scripts/run-browser-tests.sh.',
+  );
+
+  test.beforeAll(async ({ request }) => {
+    token = await getMachineToken(request);
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    companyName = `admin view browser test ${suffix}`;
+    const company = await request.post('/api/company', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        name: companyName,
+        slug: `admin-view-${suffix}`,
+        description: 'Created by companies.spec.ts',
+      },
+    });
+    expect(company.status()).toBe(201);
+    companyId = ((await company.json()) as CreatedCompany).id;
+  });
+
+  test.afterAll(async ({ request }) => {
+    await request.delete(`/api/company/${companyId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  });
+
+  test('lists a company the admin is not a member of only under All companies, and keeps that view on reload', async ({
+    page,
+  }) => {
+    const companyLink = page.getByRole('link', { name: companyName });
+    const allToggle = page.getByRole('radio', { name: ALL_COMPANIES_LABEL });
+
+    await gotoSignedIn(page, '/companies');
+    await expect(
+      page.getByRole('radio', { name: MY_COMPANIES_LABEL }),
+    ).toHaveAttribute('aria-checked', 'true');
+    // Wait for the list to finish loading, or "absent" would pass vacuously.
+    await expect(page.locator('.companies-page__list')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
+    await expect(companyLink).toHaveCount(0);
+
+    await allToggle.click();
+    await expect(page).toHaveURL(/scope=all/);
+    await expect(companyLink).toBeVisible();
+    await expect(
+      page.locator('.companies-page__company', { has: companyLink }),
+    ).toContainText(NOT_MEMBER_TEXT);
+
+    // The choice lives in the URL, so a reload must land on the same view.
+    await page.reload();
+    await expect(allToggle).toHaveAttribute('aria-checked', 'true');
+    await expect(companyLink).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 });

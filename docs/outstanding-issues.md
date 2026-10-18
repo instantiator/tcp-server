@@ -902,3 +902,9 @@ Remote gallery sources are public GitHub repositories, downloaded whole from `co
 An imported template's role prompts and context are someone else's text, and could carry prompt injection. Import checks the format, not the intent; the docs tell people to read a template from an unknown source first. Built-in templates are reviewed in this repository.
 
 **Act when:** 003.04 (prompt security for untrusted inbound content) is planned; its prompt carries this note.
+
+## All companies can fetch the wrong list first
+
+The Companies page only asks for `?all=true` once `GET /api/system/status` says the caller is an admin. On a cold load of `/companies?scope=all`, the page may fetch and briefly show "My companies" before the admin flag arrives (002.04). The header usually has the status cached already, so it is rarely seen.
+
+**Act when:** the flash is noticed in real use. Hold the company fetch while the status is pending and `scope=all` is in the URL.

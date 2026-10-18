@@ -55,7 +55,8 @@ company, not just the caller's) and the `/api/system` shutdown routes.
 `TCP_ADMIN_IDENTIFIERS` names who may use them — comma-separated `sub` claims
 and/or email addresses. Administrators also reach any company without a
 membership row, which is how an operator administers a system they are not a
-member of.
+member of. In the web client, administrators get an **All companies** toggle on
+the Companies page and a System menu for the `/api/system` routes.
 
 **It is empty by default: nobody is an administrator.** Forgetting to set it
 costs you an administrative view; it never grants one by accident.
