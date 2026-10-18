@@ -500,6 +500,8 @@ can't attach files to a task or answer an enquiry.
 
 > ✅ **Rows 11–12 done in [000.05](<000.05.01.plan - system menu for health and shutdown.md>):** an admin-only System menu with health, shutdown, restart and cancel, plus `get-health`, `restart` and `cancel-shutdown` in the CLI. That also gives `DELETE /api/system/shutdown` a surface.
 
+> ✅ **Row 8 done in [002.05](<002.05.01.plan - web ui storage browser.md>):** an in-app storage browser in Data → Documents, the task dialog and the office trays: tree, preview, download (a file or a zip), upload (files, folders, drag and drop), delete, and version history with restore. Only `resources/` can be changed. `validate-shared-document` stays in the CLI. Uploading knowledge from the browser is [002.10](<002.10.00.prompt - knowledge uploads from the storage browser (draft).md>); Office files wait for [002.11](<002.11.00.prompt - office documents for agents (draft).md>).
+
 > ✅ **Row 2 done in [002.04](<002.04.01.plan - web ui admin view of all companies.md>):** administrators get a **My companies / All companies** toggle on the Companies page (`?scope=all`), and the all view marks companies they aren't a member of.
 
 **Unused API routes:** `POST /api/model/check`, the company-user routes,
