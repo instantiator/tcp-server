@@ -638,7 +638,8 @@ toggles there), or someone sizes a knowledge-less role near its window limit
 
 The resource tools create, replace, append and edit. None removes a resource.
 A task that should retire a resource (an old price list, a withdrawn policy)
-has no way to do it. A user can still delete the file in the MinIO console, and
+has no way to do it. A user can still delete the file in the web client's
+storage browser (Data → Documents, since 002.05) or the MinIO console, and
 versioning keeps the old version.
 
 **Act when:** a task needs to remove a resource. Add a delete that is a draft

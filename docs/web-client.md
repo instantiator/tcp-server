@@ -594,8 +594,8 @@ past it.
 An event arrives over SSE, `applyEvent` folds it into the query cache, and
 every `useLive*` hook reading that cache re-renders. Its absence is a fact
 about the system, not an oversight: `query-keys.ts` names `role`,
-`company-user`, `knowledge` and `system` as `STATIC_ENTITIES` — nothing streams them, so
-`useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
+`company-user`, `knowledge`, `storage` and `system` as `STATIC_ENTITIES` — nothing streams them, so
+`useCompanyRolesList`, `useCompanyKnowledgeList`, `useRoleState` and `useStorageFolder` carry no
 prefix and answer once, refetching only when asked. Knowledge status is the one
 exception: it has no stream, so `useKnowledgeStatus` polls every 3 s while an
 index is building and stops when it is done.
