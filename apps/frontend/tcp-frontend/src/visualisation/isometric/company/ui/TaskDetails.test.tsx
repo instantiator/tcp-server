@@ -62,6 +62,10 @@ const respond = ({ task = {}, close }: Routes = {}): void => {
     [/\/api\/task\/task-1\/start/, { status: 202, body: taskFixture(task) }],
     [/\/api\/task\/task-1$/, { body: taskFixture(task) }],
     [/\/api\/task\?/, { body: [taskFixture(task)] }],
+    [
+      /\/api\/company\/company-1\/storage\/folder/,
+      { body: { path: '', writable: false, folders: [], files: [] } },
+    ],
     [/\/api\/agent/, { body: [] }],
     [/\/api\/assignment\?/, { body: [] }],
     [/\/api\/company\/company-1\/roles/, { body: [] }],
@@ -69,7 +73,7 @@ const respond = ({ task = {}, close }: Routes = {}): void => {
   ]);
 };
 
-const renderDetails = (onRoomClosed = vi.fn()) => {
+const renderDetails = (onRoomClosed = vi.fn(), portalContainer?: Element) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -83,6 +87,7 @@ const renderDetails = (onRoomClosed = vi.fn()) => {
               taskId={TASK_ID}
               headingId="task-heading"
               onRoomClosed={onRoomClosed}
+              portalContainer={portalContainer}
             />
           </aside>
         </ChatContext.Provider>
@@ -318,5 +323,59 @@ describe('TaskDetails — the outputs link', () => {
       await screen.findByText(t('visualisation.tray.outputsUnconfigured')),
     ).toBeInTheDocument();
     expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('TaskDetails — browsing outputs', () => {
+  beforeEach(() => {
+    installFetchMock();
+  });
+
+  const browseButton = () =>
+    screen.queryByRole('button', {
+      name: t('visualisation.tray.browseOutputs'),
+    });
+
+  it('offers no Browse outputs button until the task has succeeded', async () => {
+    respond();
+    renderDetails();
+
+    await screen.findByText('Reconcile accounts');
+    expect(browseButton()).toBeNull();
+  });
+
+  it('opens the outputs folder in a dialog inside the portal container, and returns focus on close', async () => {
+    respond({ task: { status: 'succeeded' } });
+    const container = document.body.appendChild(document.createElement('div'));
+    const user = userEvent.setup();
+    renderDetails(vi.fn(), container);
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: t('visualisation.tray.browseOutputs'),
+      }),
+    );
+
+    const dialog = await screen.findByRole('dialog', {
+      name: t('storage.dialog.taskOutputs', { shortcode: 'TASK-1' }),
+    });
+    expect(container).toContainElement(dialog);
+    await waitFor(() => {
+      expect(
+        requestedUrls().some((url) =>
+          url.includes('path=tasks%2Ftask-1%2Fcompleted%2F'),
+        ),
+      ).toBe(true);
+    });
+    await expectNoA11yViolations(document.body);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(browseButton()).toHaveFocus();
+    });
+    container.remove();
   });
 });

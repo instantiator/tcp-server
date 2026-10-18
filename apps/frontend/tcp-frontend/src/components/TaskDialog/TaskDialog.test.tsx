@@ -13,6 +13,7 @@ import { expectNoA11yViolations } from '../../test-support/axe';
 import {
   fetchMock,
   installFetchMock,
+  requestedUrls,
   respondByRoute,
   type RouteResponse,
 } from '../../test-support/fetch-mock';
@@ -262,6 +263,7 @@ const TASK_CANCEL_ROUTE = /\/api\/task\/task-1\/cancel/;
 const TASK_ROUTE = /\/api\/task\/task-1(\?|$)/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const ROLES_ROUTE = /\/api\/company\/company-1\/roles/;
+const STORAGE_ROUTE = /\/api\/company\/company-1\/storage\/folder/;
 const HISTORY_A_ROUTE = /\/api\/agent\/agent-a\/history/;
 const HISTORY_B_ROUTE = /\/api\/agent\/agent-b\/history/;
 
@@ -306,6 +308,17 @@ const respondTask = (overrides: TaskRoutes = {}): void => {
           roleFixture(ROLE_A_ID, ROLE_A_NAME),
           roleFixture(ROLE_B_ID, ROLE_B_NAME),
         ],
+      },
+    ],
+    [
+      STORAGE_ROUTE,
+      {
+        body: {
+          path: `tasks/${TASK_ID}/`,
+          writable: false,
+          folders: [],
+          files: [],
+        },
       },
     ],
     [
@@ -467,6 +480,24 @@ describe('TaskDialog', () => {
     expect(
       within(dialog).getByText(statusLabel('in-progress')),
     ).toBeInTheDocument();
+  });
+
+  it("shows the task's files, browsing the task's own folder", async () => {
+    respondTask();
+    const user = userEvent.setup();
+    renderTaskDialog();
+
+    await openTask(user);
+
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByRole('heading', { name: t('task.files.heading') }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        requestedUrls().some((url) => url.includes('path=tasks%2Ftask-1%2F')),
+      ).toBe(true);
+    });
   });
 
   it('renders one panel per assignment, each named by its role and status', async () => {

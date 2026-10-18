@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { t } from '../../../../strings';
 import { expectNoA11yViolations } from '../../../../test-support/axe';
 import {
   installFetchMock,
+  requestedUrls,
   respondByRoute,
   type RouteResponse,
 } from '../../../../test-support/fetch-mock';
@@ -57,10 +59,14 @@ const respond = (overrides: Routes = {}): void => {
   respondByRoute([
     [COMPANY_ROUTE, overrides.company ?? { body: companyFixture() }],
     [TASKS_ROUTE, overrides.tasks ?? { body: [taskFixture()] }],
+    [
+      /\/api\/company\/company-1\/storage\/folder/,
+      { body: { path: '', writable: false, folders: [], files: [] } },
+    ],
   ]);
 };
 
-const renderArchive = () => {
+const renderArchive = (portalContainer?: Element) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -71,7 +77,11 @@ const renderArchive = () => {
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <aside aria-label="Archive test wrapper">
-        <ArchiveDetails companyId={COMPANY_ID} headingId="archive-heading" />
+        <ArchiveDetails
+          companyId={COMPANY_ID}
+          headingId="archive-heading"
+          portalContainer={portalContainer}
+        />
       </aside>
     </QueryClientProvider>,
   );
@@ -214,20 +224,56 @@ describe('ArchiveDetails', () => {
     renderArchive();
 
     const item = await screen.findByRole('listitem');
-    expect(item.textContent).toMatch(/…$/);
-    expect(item.textContent).not.toContain(longRequest);
+    // The row's text node leads the item; the Browse button follows it.
+    const rowText = item.firstChild?.textContent ?? '';
+    expect(rowText).toMatch(/…$/);
+    expect(rowText).not.toContain(longRequest);
   });
 
   it('renders no links, and a note, without storage configuration', async () => {
     respond();
     renderArchive();
 
-    await screen.findByText(taskFixture().shortcode, { exact: false });
+    await screen.findByText(/^TASK-1 — /);
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(
       screen.getByText(t('visualisation.archive.unconfigured')),
     ).toBeInTheDocument();
+  });
+
+  it('browses a task\u2019s outputs in a dialog inside the portal container, returning focus on close', async () => {
+    respond();
+    const container = document.body.appendChild(document.createElement('div'));
+    const user = userEvent.setup();
+    renderArchive(container);
+
+    const button = await screen.findByRole('button', {
+      name: t('visualisation.archive.browse', { shortcode: 'TASK-1' }),
+    });
+    await user.click(button);
+
+    const dialog = await screen.findByRole('dialog', {
+      name: t('storage.dialog.taskOutputs', { shortcode: 'TASK-1' }),
+    });
+    expect(container).toContainElement(dialog);
+    await waitFor(() => {
+      expect(
+        requestedUrls().some((url) =>
+          url.includes('path=tasks%2Ftask-1%2Fcompleted%2F'),
+        ),
+      ).toBe(true);
+    });
+    await expectNoA11yViolations(document.body);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(button).toHaveFocus();
+    });
+    container.remove();
   });
 
   it('shows the empty state with no succeeded tasks', async () => {

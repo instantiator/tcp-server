@@ -6,13 +6,11 @@ import { t } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
   installFetchMock,
-  requestedUrls,
   respondByRoute,
 } from '../../test-support/fetch-mock';
 import { DocumentsPanel } from './DocumentsPanel';
 
 const EARLIER = '2026-08-01T00:00:00.000Z';
-const LATER = '2026-09-01T00:00:00.000Z';
 const TASKS_ROUTE = /\/api\/task\?/;
 
 const task = (overrides: Record<string, unknown>) => ({
@@ -30,6 +28,17 @@ const task = (overrides: Record<string, unknown>) => ({
   createdAt: EARLIER,
   updatedAt: EARLIER,
   ...overrides,
+});
+
+const listing = (path: string, folders: string[]) => ({
+  path,
+  writable: false,
+  folders: folders.map((name) => ({
+    path: `${path}${name}/`,
+    name,
+    purpose: null,
+  })),
+  files: [],
 });
 
 const BASE_CONFIG = {
@@ -50,9 +59,6 @@ const renderPanel = () =>
     </QueryClientProvider>,
   );
 
-/** A link's accessible name: its visible label, then the hidden new-tab suffix. */
-const linkName = (label: string) => `${label} ${t('documents.linkSuffix')}`;
-
 describe('DocumentsPanel', () => {
   beforeEach(() => {
     installFetchMock();
@@ -62,11 +68,20 @@ describe('DocumentsPanel', () => {
         {
           body: [
             task({}),
-            task({ id: 'task-2', shortcode: 'TASK-2', updatedAt: LATER }),
-            task({ id: 'task-3', shortcode: 'TASK-3', status: 'in-progress' }),
+            task({
+              id: 'task-3',
+              shortcode: 'TASK-3',
+              status: 'in-progress',
+              request: 'Plan',
+            }),
           ],
         },
       ],
+      [
+        /\/storage\/folder\?path=$/,
+        { body: listing('', ['resources', 'tasks']) },
+      ],
+      [/path=tasks%2F$/, { body: listing('tasks/', ['task-1', 'task-3']) }],
     ]);
   });
 
@@ -74,58 +89,61 @@ describe('DocumentsPanel', () => {
     window.__TCP_CONFIG__ = BASE_CONFIG;
   });
 
-  it('links the root, the resources and each succeeded task, newest first', async () => {
-    window.__TCP_CONFIG__ = {
-      ...BASE_CONFIG,
-      storageConsoleUrl: 'http://localhost:9001',
-      storageBucket: 'tcp',
-    };
+  it('shows the company folder as a tree named Documents', async () => {
     renderPanel();
 
-    const table = screen.getByRole('table', { name: t('documents.heading') });
-    await within(table).findByRole('link', {
-      name: linkName(
-        t('documents.taskOutputs', {
-          shortcode: 'TASK-2',
-          request: 'Reconcile the accounts',
-        }),
-      ),
-    });
-    const links = within(table).getAllByRole('link');
-    expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      'http://localhost:9001/browser/tcp/acme%2F',
-      'http://localhost:9001/browser/tcp/acme%2Fresources%2F',
-      'http://localhost:9001/browser/tcp/acme%2Ftasks%2Ftask-2%2Fcompleted%2F',
-      'http://localhost:9001/browser/tcp/acme%2Ftasks%2Ftask-1%2Fcompleted%2F',
-    ]);
-    expect(links[0]).toHaveAccessibleName(linkName(t('documents.root')));
-    expect(links[0]).toHaveAttribute('target', '_blank');
+    expect(
+      await screen.findByRole('treegrid', { name: t('documents.heading') }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: /resources/ })).toBeVisible();
     await expectNoA11yViolations(document.body);
   });
 
-  it('refetches the tasks on Refresh', async () => {
+  it('labels each task folder with its shortcode and request', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const tasksRow = await screen.findByRole('row', { name: /tasks/ });
+    await user.click(within(tasksRow).getByRole('button'));
+
+    for (const [shortcode, request] of [
+      ['TASK-1', 'Reconcile the accounts'],
+      ['TASK-3', 'Plan'],
+    ]) {
+      expect(
+        await screen.findByRole('row', {
+          name: new RegExp(
+            t('documents.taskFolder', { shortcode, request }).replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&',
+            ),
+          ),
+        }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('links to the storage console only when it is configured', async () => {
     window.__TCP_CONFIG__ = {
       ...BASE_CONFIG,
       storageConsoleUrl: 'http://localhost:9001',
       storageBucket: 'tcp',
     };
-    const user = userEvent.setup();
     renderPanel();
-    await screen.findAllByRole('link', { name: /TASK-1/ });
-    const before = requestedUrls().filter((u) => TASKS_ROUTE.test(u)).length;
 
-    await user.click(
-      screen.getByRole('button', { name: t('documents.refresh') }),
+    const link = await screen.findByRole('link', {
+      name: `${t('documents.console')} ${t('documents.linkSuffix')}`,
+    });
+    expect(link).toHaveAttribute(
+      'href',
+      'http://localhost:9001/browser/tcp/acme%2F',
     );
-
-    expect(
-      requestedUrls().filter((u) => TASKS_ROUTE.test(u)).length,
-    ).toBeGreaterThan(before);
+    expect(link).toHaveAttribute('target', '_blank');
   });
 
-  it('says so, and links nothing, without the storage browser configured', () => {
+  it('shows no link, and no note, without the console configured', async () => {
     renderPanel();
-    expect(screen.getByText(t('documents.unconfigured'))).toBeInTheDocument();
+    await screen.findByRole('treegrid');
     expect(screen.queryByRole('link')).toBeNull();
   });
 });

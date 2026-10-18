@@ -100,7 +100,11 @@ export const VisualisationTray = forwardRef<
           />
         )}
         {selection.kind === 'archive' && (
-          <ArchiveDetails companyId={companyId} headingId={headingId} />
+          <ArchiveDetails
+            companyId={companyId}
+            headingId={headingId}
+            portalContainer={portalContainer}
+          />
         )}
         {selection.kind === 'records' && (
           <RecordsDetails

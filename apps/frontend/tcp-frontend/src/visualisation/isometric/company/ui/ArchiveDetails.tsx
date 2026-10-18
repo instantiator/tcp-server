@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Button } from 'react-aria-components';
 import {
   useLiveCompanyState,
   useLiveCompanyTasksList,
@@ -5,6 +7,7 @@ import {
 import type { TaskDTO } from '../../../../api/dtos';
 import { taskOutputsUrl } from '../../../../api/storageLink';
 import { shortened } from '../../../../components/ExpandableText/excerpt';
+import { StorageBrowserDialog } from '../../../../components/StorageBrowser/StorageBrowserDialog';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import { t } from '../../../../strings';
 import { TrayPanel } from './TrayPanel';
@@ -12,6 +15,8 @@ import { TrayPanel } from './TrayPanel';
 export interface ArchiveDetailsProps {
   readonly companyId: string;
   readonly headingId: string;
+  /** Where the outputs dialog is portalled; see `VisualisationTrayProps.portalContainer`. */
+  readonly portalContainer?: Element | undefined;
 }
 
 /** Newest first, by `updatedAt`. */
@@ -32,9 +37,11 @@ const byUpdatedAtDescending = (a: TaskDTO, b: TaskDTO): number =>
 export const ArchiveDetails = ({
   companyId,
   headingId,
+  portalContainer,
 }: ArchiveDetailsProps) => {
   const tasksQuery = useLiveCompanyTasksList(companyId);
   const companyQuery = useLiveCompanyState(companyId);
+  const [browsingTask, setBrowsingTask] = useState<TaskDTO | null>(null);
 
   if (tasksQuery.isPending || companyQuery.isPending) {
     return (
@@ -104,10 +111,33 @@ export const ArchiveDetails = ({
                     </span>
                   </a>
                 )}
+                <Button
+                  className="react-aria-Button tcp-button--outline"
+                  onPress={() => {
+                    setBrowsingTask(task);
+                  }}
+                >
+                  {t('visualisation.archive.browse', {
+                    shortcode: task.shortcode,
+                  })}
+                </Button>
               </li>
             );
           })}
         </ul>
+      )}
+      {browsingTask !== null && (
+        <StorageBrowserDialog
+          companyId={companyId}
+          root={`tasks/${browsingTask.id}/completed/`}
+          heading={t('storage.dialog.taskOutputs', {
+            shortcode: browsingTask.shortcode,
+          })}
+          onClose={() => {
+            setBrowsingTask(null);
+          }}
+          portalContainer={portalContainer}
+        />
       )}
     </TrayPanel>
   );

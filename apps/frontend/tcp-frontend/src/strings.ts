@@ -145,6 +145,8 @@ const strings = {
   'task.details.failureReason': 'Why it failed',
   'task.details.waiting': "Why it's waiting",
   'task.details.pausing': 'Pausing — agents stop after their current step',
+  'task.files.heading': 'Files',
+  'task.files.label': 'The task’s files',
   'task.assignments.heading': 'Work on this task',
   'task.assignments.empty.heading': 'No work has started yet',
   'task.assignments.empty.body':
@@ -640,6 +642,7 @@ const strings = {
   'visualisation.tray.close': 'Close details',
   'visualisation.tray.closeRoom': 'Close room',
   'visualisation.tray.outputs': 'Outputs',
+  'visualisation.tray.browseOutputs': 'Browse outputs',
   'visualisation.tray.outputsUnconfigured':
     'The storage browser is not configured, so the outputs link is unavailable.',
 
@@ -651,8 +654,10 @@ const strings = {
   'visualisation.archive.empty': 'No completed tasks yet.',
   'visualisation.archive.row': '{shortcode} — {request}',
   'visualisation.archive.linkSuffix': '(outputs in Silo, opens in a new tab)',
+  'visualisation.archive.browse': 'Browse {shortcode} outputs',
+  'storage.dialog.taskOutputs': 'Task outputs · {shortcode}',
   'visualisation.archive.unconfigured':
-    'The storage browser is not configured, so these are shown as text only.',
+    'The storage console is not configured, so there are no links to it.',
 
   // Assignment modes, the office's word for each — `modeLabel` in
   // `api/modeLabel.ts`, mirroring
@@ -1033,19 +1038,9 @@ const strings = {
   'storage.restored': 'Restored {name} from {date}',
   'storage.restoreFailed': 'Could not restore: {reason}',
   'documents.heading': 'Documents',
-  'documents.intro':
-    'Folders in the document store. Each link opens the storage browser in a new tab.',
-  'documents.refresh': 'Refresh the document links',
-  'documents.column.folder': 'Folder',
-  'documents.column.location': 'Location',
-  'documents.root': 'Everything the company stores',
-  'documents.resources': 'Company resources',
-  'documents.taskOutputs': 'Outputs of {shortcode} — {request}',
-  'documents.linkSuffix': '(opens the storage browser in a new tab)',
-  'documents.unconfigured':
-    'The storage browser is not configured, so there are no links to show.',
-  'documents.loading': 'Loading the tasks',
-  'documents.error': "The tasks' outputs could not be loaded.",
+  'documents.taskFolder': '{shortcode} — {request}',
+  'documents.console': 'Open in the storage console',
+  'documents.linkSuffix': '(opens the storage console in a new tab)',
 
   // Record tables (001.03): the spreadsheet view, its actions and dialogs.
   'dataProtection.duties.heading': 'Your data protection duties',
