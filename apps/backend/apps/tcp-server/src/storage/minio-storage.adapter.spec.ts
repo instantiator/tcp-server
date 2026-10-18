@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectVersionsCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -553,6 +554,118 @@ describe('MinioStorageAdapter', () => {
       await expect(svc.restoreFile('acme/a.txt')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('listFolder', () => {
+    it('lists one level with a delimiter, leaving out soft-deleted entries', async () => {
+      send.mockResolvedValue({
+        CommonPrefixes: [
+          { Prefix: 'acme/resources/' },
+          { Prefix: '_deleted/' },
+        ],
+        Contents: [
+          { Key: 'acme/notes.md', Size: 3, LastModified: new Date(5) },
+          { Key: '_deleted/x.md', Size: 1 },
+        ],
+      });
+      const svc = makeAdapter(makeConfig());
+      const listing = await svc.listFolder('acme/');
+      const [list] = send.mock.calls[0] as [ListObjectsV2Command];
+      expect(list.input).toMatchObject({ Prefix: 'acme/', Delimiter: '/' });
+      expect(listing.folders).toEqual(['acme/resources/']);
+      expect(listing.files).toEqual([
+        {
+          key: 'acme/notes.md',
+          name: 'notes.md',
+          size: 3,
+          lastModified: new Date(5),
+        },
+      ]);
+    });
+
+    it('drops a subfolder left holding only delete markers', async () => {
+      send
+        .mockResolvedValueOnce({
+          CommonPrefixes: [{ Prefix: 'acme/live/' }, { Prefix: 'acme/gone/' }],
+        })
+        .mockResolvedValueOnce({ KeyCount: 1 })
+        .mockResolvedValueOnce({ KeyCount: 0 });
+      const svc = makeAdapter(makeConfig());
+      const listing = await svc.listFolder('acme/');
+      expect(listing.folders).toEqual(['acme/live/']);
+    });
+
+    it('follows continuation tokens to the end', async () => {
+      send
+        .mockResolvedValueOnce({
+          Contents: [{ Key: 'acme/a.md' }],
+          NextContinuationToken: 't1',
+        })
+        .mockResolvedValueOnce({ Contents: [{ Key: 'acme/b.md' }] });
+      const svc = makeAdapter(makeConfig());
+      const listing = await svc.listFolder('acme/');
+      expect(listing.files.map((f) => f.name)).toEqual(['a.md', 'b.md']);
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('listVersions / restoreVersion', () => {
+    const versions = {
+      Versions: [
+        { Key: 'acme/r/a.md', VersionId: 'v2', Size: 4, IsLatest: true },
+        { Key: 'acme/r/a.md.bak', VersionId: 'vx', Size: 9 },
+        { Key: 'acme/r/a.md', VersionId: 'v1', Size: 3, IsLatest: false },
+      ],
+    };
+
+    it('lists only the exact key, in the order S3 gives (newest first)', async () => {
+      send.mockResolvedValue(versions);
+      const svc = makeAdapter(makeConfig());
+      const listed = await svc.listVersions('acme/r/a.md');
+      expect(send).toHaveBeenCalledWith(expect.any(ListObjectVersionsCommand));
+      expect(listed.map((v) => [v.versionId, v.isLatest])).toEqual([
+        ['v2', true],
+        ['v1', false],
+      ]);
+    });
+
+    it('copies an encoded source with the version id', async () => {
+      send
+        .mockResolvedValueOnce({
+          Versions: [{ Key: 'acme/r/a b ü.md', VersionId: 'v1' }],
+        })
+        .mockResolvedValue({});
+      const audit = makeAudit();
+      const reindex = makeReindex();
+      const svc = makeAdapter(makeConfig(), audit, makeCompanyRepo(), reindex);
+      await svc.restoreVersion('acme/r/a b ü.md', 'v1', {
+        user: 'u1',
+        agent: null,
+        task: null,
+      });
+      const [copy] = send.mock.calls[1] as [CopyObjectCommand];
+      expect(copy.input).toMatchObject({
+        CopySource: 'tcp/acme/r/a%20b%20%C3%BC.md?versionId=v1',
+        Key: 'acme/r/a b ü.md',
+      });
+      expect(audit.record).toHaveBeenCalledWith(
+        'company-uuid-1',
+        'storage',
+        null,
+        expect.anything(),
+        expect.objectContaining({ tool: 'restore_version', versionId: 'v1' }),
+      );
+      expect(reindex.bumpByKey).toHaveBeenCalledWith('acme/r/a b ü.md');
+    });
+
+    it('throws NotFoundException for a version the key does not have', async () => {
+      send.mockResolvedValue(versions);
+      const svc = makeAdapter(makeConfig());
+      await expect(
+        svc.restoreVersion('acme/r/a.md', 'nope'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(send).not.toHaveBeenCalledWith(expect.any(CopyObjectCommand));
     });
   });
 

@@ -1440,6 +1440,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/storage/folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List one level of a company storage folder */
+        get: operations["CompanyStorageController_folder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/storage/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a company storage file */
+        get: operations["CompanyStorageController_download"];
+        put?: never;
+        /** Upload a file to company storage */
+        post: operations["CompanyStorageController_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a company storage file or folder */
+        delete: operations["CompanyStorageController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/storage/zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download company storage files as a zip */
+        post: operations["CompanyStorageController_zip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/storage/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the versions of a company storage file */
+        get: operations["CompanyStorageController_versions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/storage/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an old version of a company storage file */
+        post: operations["CompanyStorageController_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/storage/validate": {
         parameters: {
             query?: never;
@@ -2847,6 +2950,43 @@ export interface components {
         };
         MissingFilesResponseDto: {
             missing: string[];
+        };
+        StorageFolderEntryDto: {
+            purpose: string | null;
+            path: string;
+            name: string;
+        };
+        StorageFileEntryDto: {
+            path: string;
+            name: string;
+            size: number;
+            /** Format: date-time */
+            lastModified: string;
+        };
+        StorageFolderDto: {
+            folders: components["schemas"]["StorageFolderEntryDto"][];
+            files: components["schemas"]["StorageFileEntryDto"][];
+            path: string;
+            writable: boolean;
+        };
+        StoredCompanyFileDto: {
+            path: string;
+            size?: number;
+        };
+        StorageZipRequestDto: {
+            root: string;
+            paths: string[];
+        };
+        StorageVersionDto: {
+            versionId: string;
+            size: number;
+            /** Format: date-time */
+            lastModified: string;
+            isLatest: boolean;
+        };
+        StorageRestoreRequestDto: {
+            path: string;
+            versionId: string;
         };
         ValidateSharedDocumentDto: {
             path: string;
@@ -5659,6 +5799,178 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoredObjectResponseDto"];
+                };
+            };
+        };
+    };
+    CompanyStorageController_folder: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageFolderDto"];
+                };
+            };
+        };
+    };
+    CompanyStorageController_download: {
+        parameters: {
+            query: {
+                path: string;
+                versionId?: string;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+        };
+    };
+    CompanyStorageController_upload: {
+        parameters: {
+            query: {
+                path: string;
+                overwrite?: boolean;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredCompanyFileDto"];
+                };
+            };
+        };
+    };
+    CompanyStorageController_remove: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CompanyStorageController_zip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageZipRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+        };
+    };
+    CompanyStorageController_versions: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageVersionDto"][];
+                };
+            };
+        };
+    };
+    CompanyStorageController_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRestoreRequestDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredCompanyFileDto"];
                 };
             };
         };
