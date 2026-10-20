@@ -12,7 +12,8 @@ export function registerUpdateMemory(program: Command): void {
   addCompanyOptions(cmd);
   cmd
     .requiredOption('--id <memoryId>', 'Memory id')
-    .option('-c, --content <text>', 'New memory text')
+    // No `-c`: `addCompanyOptions` already uses it for `--company`.
+    .option('--content <text>', 'New memory text')
     .option('-t, --tags <a,b>', 'New comma-separated tags (replaces existing)');
   cmd.action(
     (cmdOpts: {

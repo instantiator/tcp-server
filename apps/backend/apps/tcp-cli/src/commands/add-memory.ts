@@ -11,10 +11,8 @@ export function registerAddMemory(program: Command): void {
   addRoleOptions(cmd);
   addCompanyOptions(cmd);
   cmd
-    .requiredOption(
-      '-c, --content <text>',
-      'Memory text (max 2,000 characters)',
-    )
+    // No `-c`: `addCompanyOptions` already uses it for `--company`.
+    .requiredOption('--content <text>', 'Memory text (max 2,000 characters)')
     .option('-t, --tags <a,b>', 'Comma-separated tags');
   cmd.action(
     (cmdOpts: {
