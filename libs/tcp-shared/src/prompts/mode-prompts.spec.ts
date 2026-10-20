@@ -3,6 +3,7 @@ import {
   buildAvailableRolesMessage,
   MODE_PROMPTS,
   modePrompt,
+  REMEMBER_LEARNINGS,
   requiredToolForMode,
 } from './mode-prompts';
 
@@ -190,4 +191,30 @@ describe('requiredToolForMode', () => {
   it('requires no tool for chat mode', () => {
     expect(requiredToolForMode('chat')).toEqual([]);
   });
+});
+
+describe('REMEMBER_LEARNINGS', () => {
+  const text = (REMEMBER_LEARNINGS as { text: string }).text;
+
+  it.each(['implement', 'plan', 'qa', 'finalise'] as const)(
+    'is in the %s prompt when memory is available',
+    (mode) => {
+      expect(modePrompt(mode, ['memory'])).toContain(text);
+    },
+  );
+
+  it.each(['implement', 'plan', 'qa', 'finalise'] as const)(
+    'is not in the %s prompt when memory is not available',
+    (mode) => {
+      expect(modePrompt(mode, ['storage', 'records'])).not.toContain(text);
+    },
+  );
+
+  it.each(['implement', 'plan', 'qa', 'finalise'] as const)(
+    'comes before the completion instruction in %s mode',
+    (mode) => {
+      const sections = modePrompt(mode, ['memory']).split('\n\n');
+      expect(sections.indexOf(text)).toBe(sections.length - 2);
+    },
+  );
 });

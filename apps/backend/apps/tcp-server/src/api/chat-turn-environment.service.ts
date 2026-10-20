@@ -6,6 +6,8 @@ import {
   McpClientService,
   buildAgentGraph,
   buildChatModel,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
   resolveMcpServerList,
   resolveMcpServerUrls,
 } from '@tcp/shared';
@@ -52,11 +54,17 @@ export class ChatTurnEnvironmentService {
     const mcpServerUrls = resolveMcpServerUrls(this.config);
     // Additive union: default registry servers, plus any extras from the
     // company and the role (not a precedence chain — every source contributes).
+    const hasEmbeddingModel = !!resolveEmbeddingConfig(
+      company,
+      resolveEnvEmbeddingConfig(this.config),
+    );
+    // Without an embedding model `remember` and `recall` can't work, so don't
+    // offer the memory service at all.
     const mcpServerNames = resolveMcpServerList(
       Object.keys(mcpServerUrls),
       company,
       role,
-    );
+    ).filter((n) => n !== 'memory' || hasEmbeddingModel);
     const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
       agentId: agent.id,
       companyId: agent.companyId,

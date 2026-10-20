@@ -1,8 +1,10 @@
 import { ArtifactResolutionContext } from '../storage/artifact-keys';
 import { MODE_PROMPTS } from './mode-prompts';
 import {
+  MEMORY_INTRO,
   PromptAssemblyStrings,
   buildAssignmentMessage,
+  buildMemoryMessage,
   buildRagMessage,
   buildServicesMessage,
 } from './prompt-assembly';
@@ -191,5 +193,17 @@ describe('buildRagMessage', () => {
     expect(msg).toContain('a.md');
     expect(msg).toContain('alpha');
     expect(msg).toContain('beta');
+  });
+});
+
+describe('buildMemoryMessage', () => {
+  it('starts with the intro and lists each memory with its id', () => {
+    const msg = buildMemoryMessage([
+      { id: 'id-1', content: 'Invoices are due in 14 days' },
+      { id: 'id-2', content: 'Ana prefers short replies' },
+    ]);
+    expect(msg.startsWith(MEMORY_INTRO)).toBe(true);
+    expect(msg).toContain('- Invoices are due in 14 days (memory id-1)');
+    expect(msg).toContain('- Ana prefers short replies (memory id-2)');
   });
 });

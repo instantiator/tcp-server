@@ -8,6 +8,12 @@ import type { McpServerName } from './mode-tools';
  */
 export type ModePromptSection = string | { text: string; needs: McpServerName };
 
+/** The shared nudge, in every assignment mode, to store what was learned. */
+export const REMEMBER_LEARNINGS: ModePromptSection = {
+  needs: 'memory',
+  text: "Before you finish, ask yourself: did you learn anything that would help your role do this kind of work better next time — a fact about the company, a user's preference, or a mistake and its fix? If so, store each one with the `remember` tool as a single short sentence that makes sense on its own. Don't store task progress or anything already in your instructions.",
+};
+
 /**
  * Mode-specific instruction prepended to an agent's assignment-presentation
  * prompt part (see `prompt-assembly.ts`). The agent's mode is its
@@ -44,6 +50,7 @@ export const MODE_PROMPT_SECTIONS: Record<
       text: 'Keep tabular business facts — orders, customers, stock, income — as records, not in files. Call `list_tables` first and use a table that fits; `insert` adds a record, `query` finds records, and `aggregate` gives exact totals. Record changes are saved straight away.',
     },
     'Actually invoke each tool — writing out or describing a tool call in your reply does not count as calling it. Every tool is available to call directly by its exact name; call `describe_server` on a service only if you want fuller detail on its tools.',
+    REMEMBER_LEARNINGS,
     "You MUST finish by doing the work and then calling the `complete_assignment` tool on the tasks service, passing your summary and any artifacts you prepared. Those artifacts must meet or exceed the assignment's expected outputs listed below.",
   ],
 
@@ -61,6 +68,7 @@ export const MODE_PROMPT_SECTIONS: Record<
     },
     "Weave the task's final expected output files and their types into the plan steps themselves, so each is produced in the right format by the assigned agent as it does the work — do not leave format conversion or file assembly to a later pass. If the task expects a specific file type (e.g. a `.csv`), name that exact filename and extension in the producing step's expected output, and use the same filename in any later step's `completed-file` material that reads it.",
     'In this mode you cannot consult other agents, put questions to the user, or change anything — decide the plan from what you already know plus the materials and read-only storage available to you. If a step needs another role, add it to the plan rather than doing it now.',
+    REMEMBER_LEARNINGS,
     '`create_plan` is available to call directly by its exact name (use `describe_server` on the tasks service if you want fuller detail). Actually invoke it — a plan written out or described in your reply does not count. You MUST call `create_plan` before ending.',
   ],
 
@@ -79,6 +87,7 @@ export const MODE_PROMPT_SECTIONS: Record<
       text: 'Records the step changed are already saved, not drafts. If the assignment changes records, check them with `query`.',
     },
     'Then submit your assurance via the `assure_assignment` tool on the tasks service: qa must be exactly `accept` or `reject` — reject with actionable feedback the implementing agent can act on.',
+    REMEMBER_LEARNINGS,
     '`assure_assignment` is available to call directly by its exact name (use `describe_server` on the tasks service if you want fuller detail). Actually invoke it — do not state your verdict only as text; submit it via the tool. You MUST call `assure_assignment` before ending.',
   ],
 
@@ -86,7 +95,7 @@ export const MODE_PROMPT_SECTIONS: Record<
     'You are in a CONVERSATION with a user. Interact naturally: answer their questions, offer advice and options, and think out loud when it helps.',
     {
       needs: 'memory',
-      text: 'Draw on your knowledge base and episodic memory to ground your answers in real material rather than guessing.',
+      text: 'Draw on your knowledge base and memories rather than guessing. When the user tells you something new that matters to your role — a fact, a preference, or a correction — store it straight away with the `remember` tool as a single short sentence that makes sense on its own.',
     },
     {
       needs: 'storage',
@@ -107,7 +116,7 @@ export const MODE_PROMPT_SECTIONS: Record<
   consultee: [
     'Another agent has CONSULTED you — this is usually a question that needs your expertise, not a document to produce. The question (and any context) is below.',
     'Answer it concisely and completely. Return your answer as the `summary` when you complete — you do not need to create any files; only do so if the question genuinely calls for a document, and if you do, reference it in your summary.',
-    { needs: 'memory', text: 'Draw on your knowledge base.' },
+    { needs: 'memory', text: 'Draw on your knowledge base and memories.' },
     {
       needs: 'storage',
       text: "You can read your company's files and resources (`list_resources`, `read_resource`) as references. You can't change resources.",
@@ -137,6 +146,7 @@ export const MODE_PROMPT_SECTIONS: Record<
       needs: 'interactions',
       text: 'For a change you cannot make confidently yourself, consult the role best placed to advise before making it.',
     },
+    REMEMBER_LEARNINGS,
     'When the expected outputs are satisfied, hand the final deliverables over with `complete_assignment` (list them in `prepared`). Actually invoke the tool by its exact name — you MUST call `complete_assignment` before ending.',
   ],
 };

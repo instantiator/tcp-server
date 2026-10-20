@@ -111,4 +111,42 @@ describe('KnowledgeRetrievalService', () => {
       svc.retrieve(ROLE_ID, COMPANY_ID, 'q', EMBEDDING_CONFIG),
     ).resolves.toEqual([]);
   });
+
+  describe('retrieveMemories', () => {
+    it.each([
+      ['null', null],
+      ['undefined', undefined],
+    ])('returns [] and never queries when config is %s', async (_, config) => {
+      const { svc, dataSource, embedding } = makeService();
+      await expect(
+        svc.retrieveMemories(ROLE_ID, COMPANY_ID, 'q', config),
+      ).resolves.toEqual([]);
+      expect(dataSource.query).not.toHaveBeenCalled();
+      expect(embedding.embedQuery).not.toHaveBeenCalled();
+    });
+
+    it('searches episodic_memory filtered by both role and company', async () => {
+      const row = { id: randomUUID(), content: 'a fact', similarity: 0.9 };
+      const { svc, dataSource } = makeService([row]);
+
+      const result = await svc.retrieveMemories(
+        ROLE_ID,
+        COMPANY_ID,
+        'q',
+        EMBEDDING_CONFIG,
+        2,
+        0.7,
+      );
+
+      const [sql, params] = dataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('episodic_memory');
+      expect(sql).toContain('"roleId" = $2');
+      expect(sql).toContain('"companyId" = $3');
+      expect(params.slice(1)).toEqual([ROLE_ID, COMPANY_ID, 0.7, 2]);
+      expect(result).toEqual([row]);
+    });
+  });
 });

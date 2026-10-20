@@ -43,8 +43,8 @@ const PLACEHOLDER_AGENT_ID = '00000000-0000-0000-0000-000000000000';
  * Servers are chosen exactly as tcp-agent chooses them (the toggle-aware
  * {@link resolveMcpServerList}, then the mode's allowlist), and tools are
  * dropped exactly as tcp-agent drops them ({@link filterToolsForMode}).
- * ponytail: `memory` is counted even for a role with no knowledge, where
- * tcp-agent leaves it out — a worst case; ask RagModule if that matters.
+ * ponytail: `memory` is counted even when the company has no embedding model,
+ * where tcp-agent leaves it out.
  */
 @Injectable()
 export class ToolFootprintService {
