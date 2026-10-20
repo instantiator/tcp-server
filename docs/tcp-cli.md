@@ -101,6 +101,10 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`reindex-knowledge`](#reindex-knowledge)                   | `reindex-knowledge --company <slug-or-id>`                                                                                                                                    | Force a full RAG rebuild of every knowledge scope of a company                                |
 | [`get-knowledge-index-status`](#get-knowledge-index-status) | `get-knowledge-index-status (--role <slug-or-id>\|--company <slug-or-id>)`                                                                                                    | Report knowledge-index status for a role, or a company's shared scope plus every role         |
 | [`query-knowledge`](#query-knowledge)                       | `query-knowledge --role <slug-or-id> -q <text> [--top-k <n>] [--threshold <n>]`                                                                                               | Query the RAG index for a role, without invoking any LLM call                                 |
+| [`list-memories`](#list-memories)                           | `list-memories (--role <slug-or-id>\|--company <slug-or-id>)`                                                                                                                 | List a role's memories, newest first                                                          |
+| [`add-memory`](#add-memory)                                 | `add-memory (--role <slug-or-id>\|--company <slug-or-id>) --content <text> [-t <a,b>]`                                                                                        | Add a memory to a role                                                                        |
+| [`update-memory`](#update-memory)                           | `update-memory (--role <slug-or-id>\|--company <slug-or-id>) --id <id> [--content <text>] [-t <a,b>]`                                                                         | Change a memory's content, tags, or both                                                      |
+| [`delete-memory`](#delete-memory)                           | `delete-memory (--role <slug-or-id>\|--company <slug-or-id>) --id <id> [-f]`                                                                                                  | Delete a memory (asks first unless `-f`)                                                      |
 | [`open-document-store`](#open-document-store)               | `open-document-store [--no-open]`                                                                                                                                             | Print (and open) the MinIO console URL                                                        |
 | [`open-swagger`](#open-swagger)                             | `open-swagger --service <name> [--no-open]`                                                                                                                                   | Print (and open) a service's Swagger UI URL                                                   |
 | [`list-tables`](#list-tables)                               | `list-tables (-c <uuid>\|--company-slug <slug>)`                                                                                                                              | List a company's record tables, with their record counts                                      |
@@ -839,6 +843,75 @@ better than a bare keyword ("shelves"). If a search returns nothing, see
 [Tuning RAG retrieval](development.md#tuning-rag-retrieval) — a threshold above
 the embedding model's score range filters out everything, silently.
 
+### `list-memories`
+
+List what a role's agents have remembered, newest first. The list stops at the newest 500.
+
+- **stdout**: JSON `{ memories, truncated, canWrite }`. Each memory is `{ id, content, tags, agentId, version, createdAt, updatedAt }`; `agentId` is `null` for a memory a person added. `canWrite` is `false` when the company has no embedding model.
+
+| Flag                     | Alias | Description                                           |
+| ------------------------ | ----- | ----------------------------------------------------- |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                                     |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (needed when the role is a slug) |
+
+```bash
+./tcp-cli.sh -t $TOKEN list-memories -r <roleId>
+./tcp-cli.sh -t $TOKEN list-memories --company acme --role analyst
+```
+
+### `add-memory`
+
+Add a memory to a role. Use the long `--content`: `-c` means `--company` here, as everywhere else. It is embedded with the company's embedding model, so the command fails (422) when the company has none. There is no duplicate check: a person decides.
+
+- **stdout**: the created memory as JSON
+
+| Flag                     | Alias | Description                                                  |
+| ------------------------ | ----- | ------------------------------------------------------------ |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                                            |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (needed when the role is a slug)        |
+| `--content <text>`       |       | **(Required)** Memory text, at most 2,000 characters         |
+| `--tags <a,b>`           | `-t`  | Comma-separated tags: at most 10, each at most 40 characters |
+
+```bash
+./tcp-cli.sh -t $TOKEN add-memory -r <roleId> --content "Invoices go to accounts@acme.test"
+./tcp-cli.sh -t $TOKEN add-memory --company acme --role analyst --content "Prefers short summaries" --tags style,preference
+```
+
+### `update-memory`
+
+Change a memory's content, its tags, or both. Only the fields given change. A content change re-embeds the memory. Giving neither flag fails without making a request.
+
+- **stdout**: the updated memory as JSON
+
+| Flag                     | Alias | Description                                           |
+| ------------------------ | ----- | ----------------------------------------------------- |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                                     |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (needed when the role is a slug) |
+| `--id <memoryId>`        |       | **(Required)** Memory id                              |
+| `--content <text>`       |       | New memory text                                       |
+| `--tags <a,b>`           | `-t`  | New comma-separated tags (replaces the existing tags) |
+
+```bash
+./tcp-cli.sh -t $TOKEN update-memory -r <roleId> --id <memoryId> --content "Invoices go to billing@acme.test"
+```
+
+### `delete-memory`
+
+Delete one of a role's memories. Asks for y/n confirmation first unless `--force` is given. A declined confirmation prints `Aborted.` and makes no request.
+
+- **stdout**: `Deleted memory <id>`
+
+| Flag                     | Alias | Description                                           |
+| ------------------------ | ----- | ----------------------------------------------------- |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                                     |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (needed when the role is a slug) |
+| `--id <memoryId>`        |       | **(Required)** Memory id                              |
+| `--force`                | `-f`  | Skip the confirmation prompt                          |
+
+```bash
+./tcp-cli.sh -t $TOKEN delete-memory -r <roleId> --id <memoryId> -f
+```
+
 ### `open-document-store`
 
 Print the MinIO console URL and open it in the default browser. Useful for browsing stored files during development.
@@ -1394,7 +1467,7 @@ Tool schemas are counted by tcp-server, which can reach the MCP servers
 role's tools the way tcp-agent would, after the company's and role's
 `mcpServerToggles` and the mode's allowlist, and stderr lists the cost per
 server, so it's clear which servers are worth switching off. It counts
-`memory` even for a role with no knowledge (tcp-agent drops it then), so it's a
+`memory` even for a company with no embedding model (tcp-agent drops it then), so it's a
 worst case. With `--from-file` there's no server to ask: pass `--tool-tokens`. Reuses the same tiktoken-based `ContextBudgetService`
 the server uses to decide when to compact context mid-run — no separate
 counting logic.

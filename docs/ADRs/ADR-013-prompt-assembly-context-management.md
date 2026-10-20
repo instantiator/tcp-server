@@ -24,11 +24,11 @@ The intended prompt for each agent turn consists of eight parts, assembled in or
 | 3   | Services available      | Dynamic list generated from `role.mcpServerList`; directs agent to call `describe_server`                                                                                                                                  | ✅ Implemented |
 | 4   | Assignment presentation | Mode prompt (`modePrompt(mode, serverNames)`, see the [001.02 amendment](#amendment-as-implemented-p04-001-02)) + assignment prompt + Materials/Expected lists (see [010.2.4 amendment](#amendments-as-implemented-01024)) | ✅ Implemented |
 | 5   | RAG data                | Top-k chunks retrieved via pgvector cosine similarity for the current query                                                                                                                                                | ✅ Implemented |
-| 6   | MCP responses           | Tool responses pre-fetched before the turn                                                                                                                                                                                 | ❌ Not yet     |
+| 6   | Recalled memories       | The role's best 3 episodic memories above its RAG threshold, recalled for the opening prompt (and again for each chat message)                                                                                             | ✅ Implemented |
 | 7   | Conversation history    | Maintained implicitly via the LangGraph PostgreSQL checkpoint                                                                                                                                                              | ✅ Implemented |
 | 8   | Final instruction       | A fixed suffix HumanMessage instructing the agent what to do next                                                                                                                                                          | ✅ Implemented |
 
-Part 6 (pre-fetched MCP responses) remains unimplemented; agents call MCP tools reactively via the LangGraph tool node instead.
+Part 6 was first planned as pre-fetched MCP responses, which were never built; agents call MCP tools reactively via the LangGraph tool node. Since 002.06 the part holds recalled episodic memories instead, and it is present whenever the agent has the `memory` server.
 
 Part 3 (services available) directs the agent to a server's `describe_server` tool for detail. From 008.6 to 010.2.8, that detail (the server's other tools' full schemas) was only actually bound to the model once `describe_server` had been called, for a bounded number of iterations; that describe-then-reveal gating was removed in 010.2.8.2 — every mode-filtered tool's schema is now bound from turn 1 (see [Amendments](#amendments-as-implemented-010282)).
 
@@ -149,7 +149,7 @@ _2026-07-13._
 - **`@tcp/shared` `mode-tools.ts`** (`MODE_TOOLS`) is the single source of truth for which MCP servers — and, for `storage`, whether the scope is read-only — each mode gets. `filterToolsForMode` applies this to the tool list `McpClientService.loadTools` binds, and the same map drives the server-side storage read-only check, so the client-side filter and the server-side enforcement can't drift apart.
 - **Forced tool calls for work modes.** `plan`/`implement`/`qa` now bind with `tool_choice: 'required'`, so a model can't narrate an action instead of calling the tool that performs it.
 - **`plan` mode is read-only planning.** It drops the `interactions` server entirely (no consultation or user queries) and gets read-only storage — a planning run can no longer stall waiting on a human, or short-circuit by writing files instead of producing a plan.
-- **The `memory` service is skipped for empty-knowledge-base roles** (`AgentRagService.hasKnowledge`), rather than being bound and immediately failing every `recall`/`search_knowledge` call.
+- **The `memory` service is skipped for empty-knowledge-base roles** (`AgentRagService.hasKnowledge`), rather than being bound and immediately failing every `recall`/`search_knowledge` call. _Superseded in 002.06: `memory` is now dropped only when the company has no embedding model, and part 6 holds recalled memories._
 
 This section supersedes the 008.6 tool-schema-gating bullet above and the Part 3 row's earlier description; see also [ADR-010's 010.2.8.2 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-010282), which this work was originally recorded under.
 
