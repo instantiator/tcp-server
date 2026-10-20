@@ -812,6 +812,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/role/{roleId}/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a role's memories, newest first */
+        get: operations["MemoryController_list"];
+        put?: never;
+        /** Add a memory to a role */
+        post: operations["MemoryController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/role/{roleId}/memory/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a memory */
+        delete: operations["MemoryController_remove"];
+        options?: never;
+        head?: never;
+        /** Change a memory's content or tags */
+        patch: operations["MemoryController_update"];
+        trace?: never;
+    };
     "/api/mcp-servers": {
         parameters: {
             query?: never;
@@ -2645,6 +2681,31 @@ export interface components {
         CompanyKnowledgeStatusResponseDto: {
             roles: components["schemas"]["RoleKnowledgeStatusResponseDto"][];
             shared: components["schemas"]["KnowledgeStatusResponseDto"];
+        };
+        MemoryDto: {
+            tags: string[];
+            /** Format: uuid */
+            agentId: string | null;
+            id: string;
+            content: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        MemoryListDto: {
+            memories: components["schemas"]["MemoryDto"][];
+            truncated: boolean;
+            canWrite: boolean;
+        };
+        CreateMemoryDto: {
+            content: string;
+            tags?: string[];
+        };
+        UpdateMemoryDto: {
+            content?: string;
+            tags?: string[];
         };
         McpServerResponseDto: {
             /** @description The registry name, e.g. `storage`. */
@@ -4624,6 +4685,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeReindexResponseDto"];
+                };
+            };
+        };
+    };
+    MemoryController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryListDto"];
+                };
+            };
+        };
+    };
+    MemoryController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMemoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDto"];
+                };
+            };
+        };
+    };
+    MemoryController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roleId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MemoryController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roleId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDto"];
                 };
             };
         };
