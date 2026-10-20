@@ -1,6 +1,10 @@
 import {
   AuditEventType,
+  DUPLICATE_MEMORY_SIMILARITY,
   EmbeddingService,
+  MAX_MEMORY_LENGTH,
+  MAX_MEMORY_TAG_LENGTH,
+  MAX_MEMORY_TAGS,
   TcpCompany,
   TcpRole,
   AuditClientService,
@@ -51,6 +55,13 @@ function interpolate(template: string, vars: Record<string, string>): string {
     /\{\{(\w+)\}\}/g,
     (_, key: string) => vars[key] ?? '',
   );
+}
+
+/** What `remember` did, so the caller can audit a write and reply. */
+interface StoreOutcome {
+  text: string;
+  /** Set when a row was written; absent when nothing was stored. */
+  write?: { action: 'created' | 'updated'; memoryId: string };
 }
 
 interface MemoryRow {
@@ -192,15 +203,27 @@ export class MemoryToolsService {
           companyId: z
             .uuid()
             .describe('The company ID (used to load embedding config).'),
-          content: z.string().describe('The content to remember.'),
+          content: z
+            .string()
+            .trim()
+            .min(1)
+            .max(MAX_MEMORY_LENGTH)
+            .describe('The fact to remember, as one short sentence.'),
           agentId: z
             .uuid()
             .optional()
             .describe('The agent storing the memory.'),
           tags: z
-            .array(z.string())
+            .array(z.string().max(MAX_MEMORY_TAG_LENGTH))
+            .max(MAX_MEMORY_TAGS)
             .optional()
             .describe('Optional classification tags.'),
+          replaces: z
+            .uuid()
+            .optional()
+            .describe(
+              'The id of one of your memories that this one corrects. It is updated in place.',
+            ),
         },
       },
       async ({
@@ -209,22 +232,38 @@ export class MemoryToolsService {
         content,
         agentId,
         tags,
+        replaces,
       }): Promise<ToolResult> => {
-        const text = await this.storeMemory(
+        const outcome = await this.storeMemory(
           companyId,
           roleId,
           content,
           agentId ?? null,
           tags ?? null,
+          replaces ?? null,
         );
+        const roleName = await this.auditRoleName(roleId);
         this.audit.record(
           companyId,
-          await this.auditRoleName(roleId),
+          roleName,
           agentId ?? null,
           AuditEventType.ToolCall,
           { tool: 'remember' },
         );
-        return { content: [{ type: 'text', text }] };
+        if (outcome.write) {
+          // The company stream turns this into a content-free memory signal,
+          // so an open Memories tab can offer a reload. No agentId: the tool
+          // call above already names the agent, and this row would otherwise
+          // show as a blank status line in the agent's transcript.
+          this.audit.record(
+            companyId,
+            roleName,
+            null,
+            AuditEventType.StateChange,
+            { source: 'memory', roleId, ...outcome.write },
+          );
+        }
+        return { content: [{ type: 'text', text: outcome.text }] };
       },
     );
   }
@@ -252,7 +291,8 @@ export class MemoryToolsService {
          SELECT 'episodic', id::text, '' AS path, content,
                 1 - (embedding <=> $1::vector) AS similarity
          FROM episodic_memory
-         WHERE "roleId" = $2::uuid AND embedding IS NOT NULL
+         WHERE "roleId" = $2::uuid AND "companyId" = $3::uuid
+           AND embedding IS NOT NULL
        ) combined
        WHERE similarity >= 0.5
        ORDER BY similarity DESC
@@ -291,37 +331,84 @@ export class MemoryToolsService {
     );
   }
 
+  /**
+   * Stores a memory for the role, or corrects one with `replaces`. A new
+   * memory too close to one the role already has is refused, quoting the
+   * existing one, so repeated runs don't fill the table with copies.
+   */
   async storeMemory(
     companyId: string,
     roleId: string,
     content: string,
     agentId: string | null,
     tags: string[] | null,
-  ): Promise<string> {
+    replaces: string | null = null,
+  ): Promise<StoreOutcome> {
     const embeddingConfig = await this.loadEmbeddingConfig(companyId);
-    if (!embeddingConfig) return memoryPrompts.no_embedding_config_store;
+    if (!embeddingConfig)
+      return { text: memoryPrompts.no_embedding_config_store };
 
     const vector = await this.embedding.embedTexts(embeddingConfig, [content]);
     const vec = pgvector.toSql(vector[0]);
+    const tagsJson = tags ? JSON.stringify(tags) : null;
+
+    if (replaces) {
+      // TypeORM's Postgres runner returns [rows, rowCount] for an UPDATE.
+      const [rows] = await this.dataSource.query<[{ id: UUID }[], number]>(
+        `UPDATE episodic_memory
+         SET content = $4, tags = $5::jsonb, embedding = $6::vector,
+             version = version + 1, "updatedAt" = now()
+         WHERE id = $1::uuid AND "roleId" = $2::uuid AND "companyId" = $3::uuid
+         RETURNING id`,
+        [replaces, roleId, companyId, content, tagsJson, vec],
+      );
+      if (rows.length === 0) {
+        return {
+          text: interpolate(memoryPrompts.memory_replace_not_found, {
+            id: replaces,
+          }),
+        };
+      }
+      return {
+        text: interpolate(memoryPrompts.memory_replaced, { id: replaces }),
+        write: { action: 'updated', memoryId: replaces },
+      };
+    }
+
+    const [nearest] = await this.dataSource.query<
+      { id: UUID; content: string; similarity: number }[]
+    >(
+      `SELECT id, content, 1 - (embedding <=> $1::vector) AS similarity
+       FROM episodic_memory
+       WHERE "roleId" = $2::uuid AND "companyId" = $3::uuid
+         AND embedding IS NOT NULL
+       ORDER BY embedding <=> $1::vector
+       LIMIT 1`,
+      [vec, roleId, companyId],
+    );
+    if (nearest && Number(nearest.similarity) >= DUPLICATE_MEMORY_SIMILARITY) {
+      return {
+        text: interpolate(memoryPrompts.memory_duplicate, {
+          id: nearest.id,
+          content: nearest.content,
+        }),
+      };
+    }
 
     const rows = await this.dataSource.query<{ id: UUID }[]>(
       `INSERT INTO episodic_memory ("companyId", "roleId", "agentId", content, tags, embedding)
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5::jsonb, $6::vector)
        RETURNING id`,
-      [
-        companyId,
-        roleId,
-        agentId,
-        content,
-        tags ? JSON.stringify(tags) : null,
-        vec,
-      ],
+      [companyId, roleId, agentId, content, tagsJson, vec],
     );
 
     this.logger.debug(
       `Stored episodic memory ${rows[0].id} for role ${roleId}`,
     );
-    return interpolate(memoryPrompts.memory_stored, { id: rows[0].id });
+    return {
+      text: interpolate(memoryPrompts.memory_stored, { id: rows[0].id }),
+      write: { action: 'created', memoryId: rows[0].id },
+    };
   }
 
   private async loadEmbeddingConfig(companyId: string) {
@@ -342,7 +429,7 @@ export class MemoryToolsService {
         const header =
           r.source === 'knowledge'
             ? `[${i + 1}] source: knowledge | similarity: ${Number(r.similarity).toFixed(2)} | path: ${r.path}`
-            : `[${i + 1}] source: episodic  | similarity: ${Number(r.similarity).toFixed(2)}`;
+            : `[${i + 1}] source: episodic  | similarity: ${Number(r.similarity).toFixed(2)} | memory: ${r.id}`;
         return `${header}\n"${r.content.slice(0, 500)}${r.content.length > 500 ? '…' : ''}"`;
       })
       .join('\n\n');

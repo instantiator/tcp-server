@@ -65,7 +65,11 @@ export class ToolFootprintService {
       resolveMcpServerList(Object.keys(urls), company, role),
       mode,
     );
-    const context = { agentId: PLACEHOLDER_AGENT_ID, companyId: company.id };
+    const context = {
+      agentId: PLACEHOLDER_AGENT_ID,
+      companyId: company.id,
+      roleId: role.id,
+    };
     const servers = await Promise.all(
       names.map(async (name): Promise<ServerFootprint> => {
         try {

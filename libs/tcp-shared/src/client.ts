@@ -174,3 +174,10 @@ export {
   ASSIGNMENT_COMPLETE_LABEL,
 } from './transcript/format';
 export { wrapText } from './transcript/text-wrap';
+
+// -- Memory limits: memory-limits.ts imports nothing --
+export {
+  MAX_MEMORY_LENGTH,
+  MAX_MEMORY_TAGS,
+  MAX_MEMORY_TAG_LENGTH,
+} from './memory/memory-limits';

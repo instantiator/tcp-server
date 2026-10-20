@@ -63,6 +63,22 @@ export function toRecordSignal(
 }
 
 /**
+ * The company-stream copy of a memory change (002.06): which role's memories
+ * changed and how. The memory's content stays out, as with records, since
+ * memories can hold anything an agent or person wrote. `undefined` for
+ * anything that isn't a memory change.
+ */
+export function toMemorySignal(
+  wire: AuditWireEvent,
+): AuditWireEvent | undefined {
+  const { source, action, roleId } = wire.payload;
+  if (source !== 'memory' || wire.eventType !== AuditEventType.StateChange) {
+    return undefined;
+  }
+  return { ...wire, payload: { entity: 'memory', action, roleId } };
+}
+
+/**
  * The single live-publish point for audit events. Every write flows through
  * here after it is persisted (see `AuditService.write`), so the live stream
  * and history are one source of truth (`docs/prompts/010.5.1` A.7).
@@ -72,8 +88,8 @@ export function toRecordSignal(
  * - task channel: rows with a `taskId` whose `payload.entity` is `task` or
  *   `assignment`;
  * - company channel: rows whose `payload.entity` is in
- *   {@link COMPANY_CHANNEL_ENTITIES}, plus records changes cut down by
- *   {@link toRecordSignal}.
+ *   {@link COMPANY_CHANNEL_ENTITIES}, plus records and memory changes cut
+ *   down by {@link toRecordSignal} and {@link toMemorySignal}.
  */
 @Injectable()
 export class AuditEventPublisher {
@@ -97,7 +113,7 @@ export class AuditEventPublisher {
     if (typeof entity === 'string' && COMPANY_CHANNEL_ENTITIES.has(entity)) {
       this.companyEvents.emit(wire.companyId, { type: 'audit', event: wire });
     }
-    const signal = toRecordSignal(wire);
+    const signal = toRecordSignal(wire) ?? toMemorySignal(wire);
     if (signal) {
       this.companyEvents.emit(wire.companyId, { type: 'audit', event: signal });
     }

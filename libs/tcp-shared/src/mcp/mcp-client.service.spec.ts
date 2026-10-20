@@ -524,6 +524,38 @@ describe('McpClientService', () => {
         expect(shape).toHaveProperty('question');
       });
 
+      it("hides roleId and injects the agent's own role when context supplies it", async () => {
+        const clientInstance = makeConsultationTool();
+        MockClient.mockImplementation(
+          () => clientInstance as unknown as Client,
+        );
+
+        const [mcpTool] = await service.loadTools(
+          ['interactions'],
+          { interactions: 'http://localhost:3012' },
+          {
+            agentId: 'real-agent-id',
+            companyId: 'real-company-id',
+            roleId: 'real-role-id',
+          },
+        );
+        const shape = (
+          mcpTool.tool.schema as { shape: Record<string, unknown> }
+        ).shape;
+        expect(shape).not.toHaveProperty('roleId');
+
+        await mcpTool.tool.invoke({ question: 'q', roleId: 'guessed-role-id' });
+        expect(clientInstance.callTool).toHaveBeenLastCalledWith({
+          name: 'request_agent_consultation',
+          arguments: {
+            agentId: 'real-agent-id',
+            companyId: 'real-company-id',
+            roleId: 'real-role-id',
+            question: 'q',
+          },
+        });
+      });
+
       it('injects the real agentId/companyId on every call, overriding anything the LLM supplies', async () => {
         const clientInstance = makeConsultationTool();
         MockClient.mockImplementation(

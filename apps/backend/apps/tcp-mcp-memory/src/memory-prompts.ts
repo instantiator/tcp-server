@@ -9,6 +9,9 @@ export interface MemoryPrompts {
   no_embedding_config_store: string;
   no_results: string;
   memory_stored: string;
+  memory_replaced: string;
+  memory_duplicate: string;
+  memory_replace_not_found: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */

@@ -119,7 +119,11 @@ export class AgentRunEnvironmentService {
       await this.mcp.loadTools(
         this.serverNames(agent, mode, mcpServerUrls, hasKnowledge),
         mcpServerUrls,
-        { agentId: agent.id, companyId: agent.companyId },
+        {
+          agentId: agent.id,
+          companyId: agent.companyId,
+          roleId: agent.role.id,
+        },
         // A run without a server it needs can't finish its step, so it fails
         // naming the service rather than carrying on without those tools —
         // whether the server is down at the start or goes down mid-run.

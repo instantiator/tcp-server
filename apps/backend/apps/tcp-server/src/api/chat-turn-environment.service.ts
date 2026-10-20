@@ -60,6 +60,7 @@ export class ChatTurnEnvironmentService {
     const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
       agentId: agent.id,
       companyId: agent.companyId,
+      roleId: role.id,
     });
     const langchainTools = mcpTools.map((t) => t.tool);
 
