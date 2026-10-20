@@ -1,4 +1,4 @@
-import type { RecordTableDefinition, TimedRecord } from './dtos';
+import type { RecordTableDefinition } from './dtos';
 
 /** How the rows on screen differ from a fresher copy read in the background. */
 export interface RowChanges {
@@ -18,16 +18,19 @@ export const NO_ROW_CHANGES: RowChanges = {
 };
 
 /**
- * Compares the rows on screen with a fresher copy, by id and version (001.05).
+ * Compares the rows on screen (record rows or a role's memories: anything with
+ * an id and a version) with a fresher copy, by id and version (001.05).
  * Only a *higher* version counts as changed: a row edited here is patched in
  * both copies, and a copy read before that edit landed is older, not newer.
  *
  * A `truncated` copy holds only the newest rows, so a row missing from it may
  * just have been pushed out by newer ones: nothing is called deleted then.
  */
-export const compareRows = (
-  shown: readonly TimedRecord[],
-  fresh: readonly TimedRecord[],
+export const compareRows = <
+  T extends { readonly id: string; readonly version: number },
+>(
+  shown: readonly T[],
+  fresh: readonly T[],
   truncated = false,
 ): RowChanges => {
   const freshById = new Map(fresh.map((row) => [row.id, row]));

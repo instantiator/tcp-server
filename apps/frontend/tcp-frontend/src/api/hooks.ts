@@ -40,6 +40,8 @@ import type {
   ConversationDetailDTO,
   ConversationDTO,
   KnowledgeDocumentDTO,
+  MemoryDto,
+  MemoryList,
   RecordTableDefinition,
   RecordSearchResult,
   RecordTableRetention,
@@ -63,7 +65,12 @@ import {
   latestSearches,
   type LatestRecordTable,
 } from './record-changes';
+import { forgetLatestMemories, type LatestMemories } from './memory-changes';
 import {
+  useCreateMemoryMutation,
+  useDeleteMemoryMutation,
+  useRoleMemories,
+  useUpdateMemoryMutation,
   useAgent,
   useAgentByAssignment,
   useAgents,
@@ -1592,4 +1599,105 @@ export const downloadRecordSelection = async (
       ? recordsDownloadName(companySlug, names[0], 'csv')
       : recordsDownloadName(companySlug, 'tables', 'zip'),
   );
+};
+
+/**
+ * A role's memories. Live through the out-of-date notice, not patched in
+ * place: a change elsewhere is read into a fresher copy and compared
+ * ({@link useLiveRoleMemoryChanges}), and **Reload** shows it (ADR-027).
+ */
+export const useLiveRoleMemories = (roleId: string) => useRoleMemories(roleId);
+
+/** What a role's memory list shows against its fresher copy. */
+export interface LiveMemoryChanges extends RowChanges {
+  /** Whether anything differs at all. */
+  readonly any: boolean;
+}
+
+const NO_MEMORY_CHANGES: LiveMemoryChanges = { ...NO_ROW_CHANGES, any: false };
+
+/**
+ * Compares the memories on screen with the copy read when they last changed
+ * elsewhere. Live, but it never fetches: the company stream does that
+ * (`memoryChanged`), and only for lists someone has open.
+ */
+export const useLiveRoleMemoryChanges = (
+  roleId: string,
+  shown: MemoryList | undefined,
+): LiveMemoryChanges => {
+  const latest = useQuery<LatestMemories>({
+    queryKey: queryKeys.roleMemoriesLatest(roleId),
+    queryFn: skipToken,
+  });
+  return useMemo(() => {
+    if (!latest.data || shown === undefined) return NO_MEMORY_CHANGES;
+    const changes = compareRows(
+      shown.memories,
+      latest.data.memories,
+      latest.data.truncated,
+    );
+    return {
+      ...changes,
+      any: changes.changed.size + changes.deleted.size + changes.added > 0,
+    };
+  }, [latest.data, shown]);
+};
+
+/** Edits patch the shown list and its fresher copy, so an edit made here is never reported as made elsewhere. */
+const useMemoryCache = (roleId: string) => {
+  const queryClient = useQueryClient();
+  return (change: (memories: MemoryDto[]) => MemoryDto[]) => {
+    const apply = (list: MemoryList | undefined) =>
+      list && { ...list, memories: change(list.memories) };
+    queryClient.setQueryData<MemoryList>(queryKeys.roleMemories(roleId), apply);
+    queryClient.setQueryData<LatestMemories>(
+      queryKeys.roleMemoriesLatest(roleId),
+      (current) => (current ? apply(current) : current),
+    );
+  };
+};
+
+/** Returns a function that reloads the open list; the UI's explicit "Reload". */
+export const useReloadRoleMemories = (roleId: string) => {
+  const queryClient = useQueryClient();
+  return () => {
+    forgetLatestMemories(queryClient, roleId);
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.roleMemories(roleId),
+    });
+  };
+};
+
+/** Adds a memory at the start of the list. */
+export const useCreateMemory = (roleId: string) => {
+  const edit = useMemoryCache(roleId);
+  const create = useCreateMemoryMutation(roleId);
+  return useMutation({
+    mutationFn: (body: Parameters<typeof create.mutateAsync>[0]) =>
+      create.mutateAsync(body),
+    onSuccess: (memory: MemoryDto) => edit((all) => [memory, ...all]),
+  });
+};
+
+/** Replaces the edited memory, keeping its place; the server's copy has the bumped version. */
+export const useUpdateMemory = (roleId: string) => {
+  const edit = useMemoryCache(roleId);
+  const update = useUpdateMemoryMutation(roleId);
+  return useMutation({
+    mutationFn: (input: Parameters<typeof update.mutateAsync>[0]) =>
+      update.mutateAsync(input),
+    onSuccess: (memory: MemoryDto) =>
+      edit((all) => all.map((m) => (m.id === memory.id ? memory : m))),
+  });
+};
+
+/** Removes the deleted memory from the list. */
+export const useDeleteMemory = (roleId: string) => {
+  const edit = useMemoryCache(roleId);
+  const remove = useDeleteMemoryMutation(roleId);
+  return useMutation({
+    mutationFn: (id: string) => remove.mutateAsync(id),
+    onSuccess: (_: unknown, id: string) =>
+      edit((all) => all.filter((m) => m.id !== id)),
+  });
 };

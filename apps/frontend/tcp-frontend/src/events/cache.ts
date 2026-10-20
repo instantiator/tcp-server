@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { AuditWireEvent, WireEvent } from '@tcp/shared/client';
 
 import { EVENT_ENTITIES, type EventEntity } from '../api/query-keys';
+import { memoryChanged } from '../api/memory-changes';
 import { recordChanged } from '../api/record-changes';
 
 /** Narrows to a plain object, so a property can be read without an `any` cast. */
@@ -110,6 +111,13 @@ export const applyEvent = (
       event.event.companyId,
       typeof table === 'string' ? table : undefined,
     );
+    return;
+  }
+
+  // Memory is compared too, never patched: the signal names the role only.
+  if (entity === 'memory') {
+    const { roleId } = event.event.payload;
+    memoryChanged(queryClient, typeof roleId === 'string' ? roleId : undefined);
     return;
   }
 

@@ -40,6 +40,11 @@ export type AddColumn = components['schemas']['AddColumnDto'];
 export type RetypeColumn = components['schemas']['RetypeColumnDto'];
 export type DoNotStoreEntry = components['schemas']['DoNotStoreEntryDto'];
 
+/** One thing a role remembers (002.06). */
+export type MemoryDto = components['schemas']['MemoryDto'];
+/** A role's memories, with whether the caller may change them. */
+export type MemoryList = components['schemas']['MemoryListDto'];
+
 /** What importing a company template would do, before anything is created (002.03). */
 export type CompanyTemplatePreview =
   components['schemas']['CompanyTemplatePreviewDto'];

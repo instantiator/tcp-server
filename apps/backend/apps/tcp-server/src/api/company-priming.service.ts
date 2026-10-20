@@ -181,6 +181,21 @@ export class CompanyPrimingService {
           payload: { entity: 'record', reason: 'replay' },
         },
       },
+      // Likewise memories: any open memory list may have changed while the
+      // client was away.
+      {
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId,
+          role: 'system',
+          agentId: null,
+          assignmentId: null,
+          taskId: null,
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'memory', reason: 'replay' },
+        },
+      },
     ];
   }
 }

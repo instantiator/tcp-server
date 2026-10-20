@@ -40,6 +40,8 @@ export const EVENT_ENTITIES = [
   'notification',
   'spend',
   'record',
+  // A role's memories: the signal names the role and carries no content.
+  'memory',
 ] as const;
 
 /**
@@ -195,6 +197,15 @@ export const queryKeys = {
    */
   doNotStore: (companyId: string) =>
     ['record', 'list', { companyId, doNotStore: true }] as const,
+
+  /** A role's memories, newest first (002.06). */
+  roleMemories: (roleId: string) => ['memory', 'list', { roleId }] as const,
+  /**
+   * A fresher copy of an open memory list, read in the background when it
+   * changes elsewhere. Never shown: the panel compares it with what it shows.
+   */
+  roleMemoriesLatest: (roleId: string) =>
+    ['memory', 'latest', { roleId }] as const,
 
   /** Application-wide usage totals and every provider's cap progress. */
   spendOverview: () => ['spend', 'status'] as const,

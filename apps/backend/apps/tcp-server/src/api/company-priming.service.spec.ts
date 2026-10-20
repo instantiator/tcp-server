@@ -100,7 +100,7 @@ describe('CompanyPrimingService', () => {
   // open table, since changes made while the stream was down were missed.
   it('primes the company and a record re-check when nothing is running', async () => {
     const events = await service.prime(companyId);
-    expect(entities(events)).toEqual(['company', 'record']);
+    expect(entities(events)).toEqual(['company', 'record', 'memory']);
   });
 
   describe('with every list populated', () => {
@@ -118,7 +118,7 @@ describe('CompanyPrimingService', () => {
       events = await service.prime(companyId);
     });
 
-    it('primes all six groups in list order, then the record re-check', () => {
+    it('primes all six groups in list order, then the record and memory re-checks', () => {
       expect(entities(events)).toEqual([
         'company',
         'task',
@@ -127,18 +127,27 @@ describe('CompanyPrimingService', () => {
         'enquiry',
         'notification',
         'record',
+        'memory',
       ]);
     });
 
     it('replays only active notifications, with the row as their summary', () => {
       expect(notifications.listForCompany).toHaveBeenCalledWith(companyId);
-      // Second to last: the record re-check always comes after it.
-      const replayed = events.at(-2);
+      // Third to last: the record and memory re-checks always come after it.
+      const replayed = events.at(-3);
       expect(replayed?.type === 'audit' && replayed.event.payload).toEqual({
         entity: 'notification',
         newStatus: 'active',
         reason: 'replay',
         summary: notice,
+      });
+    });
+
+    it('ends with the memory re-check', () => {
+      const last = events.at(-1);
+      expect(last?.type === 'audit' && last.event.payload).toEqual({
+        entity: 'memory',
+        reason: 'replay',
       });
     });
 
@@ -209,6 +218,7 @@ describe('CompanyPrimingService', () => {
         'Analyst',
         'Analyst',
         'Analyst',
+        'system',
         'system',
         'system',
       ]);

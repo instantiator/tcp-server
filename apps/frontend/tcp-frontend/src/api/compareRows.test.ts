@@ -121,3 +121,21 @@ describe('sameColumns', () => {
     ).toBe(false);
   });
 });
+
+describe('compareRows on memories', () => {
+  const memory = (id: string, version = 1) => ({
+    id,
+    version,
+    content: `memory ${id}`,
+  });
+
+  it('reports changed, deleted and added memories', () => {
+    const changes = compareRows(
+      [memory('a'), memory('b')],
+      [memory('a', 2), memory('c')],
+    );
+    expect([...changes.changed]).toEqual(['a']);
+    expect([...changes.deleted]).toEqual(['b']);
+    expect(changes.added).toBe(1);
+  });
+});

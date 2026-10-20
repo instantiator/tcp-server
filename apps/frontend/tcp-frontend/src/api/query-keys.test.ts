@@ -29,6 +29,7 @@ it('EVENT_ENTITIES lists exactly the payload.entity values tcp-server publishes'
     'notification',
     'spend',
     'record',
+    'memory',
   ]);
 });
 
@@ -86,6 +87,8 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   recordTableLatest: queryKeys.recordTableLatest('company-1', 'orders'),
   recordSearchLatest: queryKeys.recordSearchLatest('company-1', 'Ann Lee'),
   doNotStore: queryKeys.doNotStore('company-1'),
+  roleMemories: queryKeys.roleMemories('role-1'),
+  roleMemoriesLatest: queryKeys.roleMemoriesLatest('role-1'),
   roleKnowledge: queryKeys.roleKnowledge('role-1'),
   roleKnowledgeStatus: queryKeys.roleKnowledgeStatus('role-1'),
   roleKnowledgeSearch: queryKeys.roleKnowledgeSearch('role-1', 'a question'),
