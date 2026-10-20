@@ -85,16 +85,22 @@ export function consumeSse<T>(
   });
 }
 
-/** The record re-check every company stream primes last (001.05). */
-const isRecordCheck = (event: WireEvent): boolean =>
+/**
+ * The re-checks every company stream primes last: records (001.05), then
+ * memories (002.06). They tell the client to look again, and carry no state.
+ */
+const RE_CHECKS = ['record', 'memory'];
+
+const isReCheck = (event: WireEvent): boolean =>
   event.type === 'audit' &&
-  event.event.payload.entity === 'record' &&
+  RE_CHECKS.includes(String(event.event.payload.entity)) &&
   event.event.payload.reason === 'replay';
 
 /**
  * {@link consumeSse} for a company stream, for tests that aren't about
- * records: reads one more event to cover the primed record re-check, and
- * drops it, so `count` stays the number of events the test cares about.
+ * records or memories: reads enough extra events to cover the primed
+ * re-checks, and drops them, so `count` stays the number of events the test
+ * cares about.
  */
 export async function consumeCompanySse(
   app: INestApplication,
@@ -107,8 +113,8 @@ export async function consumeCompanySse(
     app,
     path,
     headers,
-    count + 1,
+    count + RE_CHECKS.length,
     timeoutMs,
   );
-  return events.filter((event) => !isRecordCheck(event));
+  return events.filter((event) => !isReCheck(event));
 }
