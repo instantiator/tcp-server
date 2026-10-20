@@ -53,6 +53,76 @@ type Editing =
   | { readonly kind: 'add' }
   | { readonly kind: 'edit'; readonly memory: MemoryDto };
 
+/** The memories as a table: each row's content is its header, so focus can land on it. */
+const MemoryTable = ({
+  memories,
+  canWrite,
+  labelledBy,
+  rowRefs,
+  onEdit,
+  onDelete,
+}: {
+  readonly memories: readonly MemoryDto[];
+  /** Without an embedding model a memory can be deleted but not reworded. */
+  readonly canWrite: boolean;
+  readonly labelledBy: string;
+  /** Row headers by memory id, for the panel's focus moves. */
+  readonly rowRefs: Map<string, HTMLTableCellElement>;
+  readonly onEdit: (memory: MemoryDto) => void;
+  readonly onDelete: (memory: MemoryDto) => void;
+}) => (
+  <table className="tcp-table" aria-labelledby={labelledBy}>
+    <thead>
+      <tr>
+        <th scope="col">{t('memory.column.content')}</th>
+        <th scope="col">{t('memory.column.tags')}</th>
+        <th scope="col">{t('memory.column.source')}</th>
+        <th scope="col">{t('memory.column.updated')}</th>
+        <th scope="col">{t('memory.column.actions')}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {memories.map((memory) => (
+        <tr key={memory.id}>
+          <th
+            scope="row"
+            tabIndex={-1}
+            ref={(cell) => {
+              if (cell === null) rowRefs.delete(memory.id);
+              else rowRefs.set(memory.id, cell);
+            }}
+          >
+            {memory.content}
+          </th>
+          <td>{memory.tags.join(', ')}</td>
+          <td>
+            {t(
+              memory.agentId === null
+                ? 'memory.source.person'
+                : 'memory.source.agent',
+            )}
+          </td>
+          <td>{dateFormat.format(new Date(memory.updatedAt))}</td>
+          <td>
+            {canWrite && (
+              <RoundIconButton
+                icon={Pencil}
+                label={t('memory.edit', { preview: preview(memory.content) })}
+                onPress={() => onEdit(memory)}
+              />
+            )}
+            <RoundIconButton
+              icon={Trash2}
+              label={t('memory.delete', { preview: preview(memory.content) })}
+              onPress={() => onDelete(memory)}
+            />
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
 /**
  * One role's memories (002.06): what its agents recall when they start work.
  * The role dialog's Memories tab renders it.
@@ -176,60 +246,14 @@ export const MemoryPanel = ({ roleId }: { readonly roleId: string }) => {
         </EmptyState>
       ) : (
         <>
-          <table className="tcp-table" aria-labelledby={headingId}>
-            <thead>
-              <tr>
-                <th scope="col">{t('memory.column.content')}</th>
-                <th scope="col">{t('memory.column.tags')}</th>
-                <th scope="col">{t('memory.column.source')}</th>
-                <th scope="col">{t('memory.column.updated')}</th>
-                <th scope="col">{t('memory.column.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {memories.map((memory) => (
-                <tr key={memory.id}>
-                  <th
-                    scope="row"
-                    tabIndex={-1}
-                    ref={(cell) => {
-                      if (cell === null) rowRefs.current.delete(memory.id);
-                      else rowRefs.current.set(memory.id, cell);
-                    }}
-                  >
-                    {memory.content}
-                  </th>
-                  <td>{memory.tags.join(', ')}</td>
-                  <td>
-                    {t(
-                      memory.agentId === null
-                        ? 'memory.source.person'
-                        : 'memory.source.agent',
-                    )}
-                  </td>
-                  <td>{dateFormat.format(new Date(memory.updatedAt))}</td>
-                  <td>
-                    {canWrite && (
-                      <RoundIconButton
-                        icon={Pencil}
-                        label={t('memory.edit', {
-                          preview: preview(memory.content),
-                        })}
-                        onPress={() => setEditing({ kind: 'edit', memory })}
-                      />
-                    )}
-                    <RoundIconButton
-                      icon={Trash2}
-                      label={t('memory.delete', {
-                        preview: preview(memory.content),
-                      })}
-                      onPress={() => setDeleting(memory)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <MemoryTable
+            memories={memories}
+            canWrite={canWrite}
+            labelledBy={headingId}
+            rowRefs={rowRefs.current}
+            onEdit={(memory) => setEditing({ kind: 'edit', memory })}
+            onDelete={setDeleting}
+          />
           {list.data.truncated && <p>{t('memory.truncated')}</p>}
         </>
       )}

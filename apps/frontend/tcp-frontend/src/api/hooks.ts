@@ -1679,7 +1679,7 @@ export const useCreateMemory = (roleId: string) => {
   });
 };
 
-/** Replaces the edited memory, keeping its place; the server's copy has the bumped version. */
+/** Rewords a memory, keeping its row where it is. */
 export const useUpdateMemory = (roleId: string) => {
   const edit = useMemoryCache(roleId);
   const update = useUpdateMemoryMutation(roleId);
