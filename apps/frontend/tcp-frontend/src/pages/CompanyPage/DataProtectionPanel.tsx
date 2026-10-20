@@ -27,7 +27,7 @@ import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { TextField } from '../../components/Field/TextField';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
 import { DeleteRowsDialog } from '../../components/RecordSheet/DeleteRowsDialog';
-import { OutOfDateNotice } from '../../components/RecordSheet/OutOfDateNotice';
+import { OutOfDateNotice } from '../../components/OutOfDateNotice/OutOfDateNotice';
 import type { StaleRow } from '../../components/RecordSheet/RecordSheet';
 import {
   TABLE_WORDS,

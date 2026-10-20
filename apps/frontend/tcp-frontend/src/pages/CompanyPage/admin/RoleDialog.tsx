@@ -42,6 +42,7 @@ import { slugify } from '../../../components/Field/slugify';
 import { t } from '../../../strings';
 import './RoleDialog.css';
 import { KnowledgePanel } from './KnowledgePanel';
+import { MemoryPanel } from './MemoryPanel';
 
 /** The announcer channel for this dialog; this component is its one writer. */
 const CHANNEL = 'role-dialog';
@@ -295,7 +296,7 @@ const RoleEditor = ({
         className="react-aria-Tabs"
         selectedKey={tab}
         onSelectionChange={setTab}
-        disabledKeys={adding ? ['knowledge'] : []}
+        disabledKeys={adding ? ['knowledge', 'memories'] : []}
       >
         <TabList
           aria-label={t('admin.role.tabs')}
@@ -306,6 +307,9 @@ const RoleEditor = ({
           </Tab>
           <Tab id="knowledge" className="react-aria-Tab">
             {t('admin.role.tab.knowledge')}
+          </Tab>
+          <Tab id="memories" className="react-aria-Tab">
+            {t('admin.role.tab.memories')}
           </Tab>
         </TabList>
         {adding && <p>{t('admin.role.knowledgeDisabled')}</p>}
@@ -458,6 +462,9 @@ const RoleEditor = ({
               headingLevel={3}
             />
           )}
+        </TabPanel>
+        <TabPanel id="memories" className="react-aria-TabPanel">
+          {saved !== null && <MemoryPanel roleId={saved.id} />}
         </TabPanel>
       </Tabs>
     </Dialog>

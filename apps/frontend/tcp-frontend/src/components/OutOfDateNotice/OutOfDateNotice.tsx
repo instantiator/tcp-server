@@ -3,9 +3,7 @@ import { Button } from 'react-aria-components';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
 import type { StringKey, StringParams } from '../../strings';
 import { t } from '../../strings';
-
-/** The announcer channel for changes made elsewhere to what is on screen. */
-const CHANNEL = 'records-remote';
+import './OutOfDateNotice.css';
 
 export interface OutOfDateNoticeProps {
   /** What changed, in words. */
@@ -15,10 +13,13 @@ export interface OutOfDateNoticeProps {
   readonly announcementParams?: StringParams;
   /** Shows a Reload button; it moves focus somewhere stable itself. */
   readonly onReload?: () => void;
+  /** The announcer channel; each kind of table keeps its own. */
+  readonly channel?: string;
 }
 
 /**
- * Says that what is on screen has changed elsewhere (001.05), rather than
+ * Says that what is on screen has changed elsewhere (001.05; memories since
+ * 002.06), rather than
  * replacing it under the reader (ADR-027). One polite announcement when it
  * appears, and none for later changes: the notice's text keeps count, and a
  * reader who wants the detail can find it here.
@@ -31,6 +32,7 @@ export const OutOfDateNotice = ({
   announcement,
   announcementParams,
   onReload,
+  channel = 'records-remote',
 }: OutOfDateNoticeProps) => {
   // Keyed on what is said, not on "have I run?": a table deleted after it
   // changed is worth a second announcement; more changes of the same kind
@@ -40,12 +42,12 @@ export const OutOfDateNotice = ({
     if (announced.current === announcement) return;
     announced.current = announcement;
     announce({
-      channel: CHANNEL,
+      channel,
       change: announcement,
       params: announcementParams,
       throttleMs: ANNOUNCE_IMMEDIATE_MS,
     });
-  }, [announcement, announcementParams]);
+  }, [announcement, announcementParams, channel]);
 
   return (
     <div
