@@ -41,6 +41,7 @@ export const MemoryDialog = ({
 
   const submit = async (event: SubmitEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (saving) return;
     if (content.trim() === '') {
       setMissing(true);
       contentRef.current?.focus();
@@ -104,11 +105,12 @@ export const MemoryDialog = ({
           </p>
         )}
         <ButtonRow>
-          <Button
-            className="react-aria-Button"
-            type="submit"
-            isPending={saving}
-          >
+          {/*
+            Not `isPending`: React Aria announces that by pointing at the
+            button's id, and this dialog closes on success, leaving the
+            announcement labelled by nothing (axe: role-img-alt).
+          */}
+          <Button className="react-aria-Button" type="submit">
             {t('memory.dialog.save')}
           </Button>
           <Button

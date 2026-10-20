@@ -177,7 +177,8 @@ step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
 # --dev-ports: the smoke tier (apps/backend/test/smoke/smoke.spec.ts) hits the MCP servers
 # directly on their host ports, so they must be published for this run.
-"$SCRIPTS/start-deployment.sh" \
+# STUB_LLM: the browser tier's fixtures embed memories with the stub model.
+STUB_LLM=true "$SCRIPTS/start-deployment.sh" \
   --project "$DEPLOYMENT_PROJECT" \
   --env-file "$REPO_ROOT/.env.testing" \
   --rebuild \
