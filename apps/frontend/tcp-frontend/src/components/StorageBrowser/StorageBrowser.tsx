@@ -1,24 +1,11 @@
-import {
-  ChevronRight,
-  Download,
-  FileText,
-  Folder,
-  FolderUp,
-  Lock,
-  RefreshCw,
-  Trash2,
-  Upload,
-} from 'lucide-react';
-import { createContext, useContext, useId, useRef, useState } from 'react';
+import { Download, FolderUp, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
 import {
   Button,
   DropZone,
   FileTrigger,
   Text,
   Toolbar,
-  Tree,
-  TreeItem,
-  TreeItemContent,
   type Key,
 } from 'react-aria-components';
 import {
@@ -27,8 +14,6 @@ import {
   useDeleteStorage,
   useRefreshStorage,
   useStorageFolder,
-  type StorageFileEntryDTO,
-  type StorageFolderEntryDTO,
 } from '../../api/hooks';
 import { ApiError } from '../../api/errors';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
@@ -40,6 +25,7 @@ import { Icon } from '../Icon/Icon';
 import { LoadingState } from '../LoadingState/LoadingState';
 import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { FilePreview } from './FilePreview';
+import { FolderTree } from './FolderTree';
 import { formatSize, savedAt } from './format';
 import { isWritablePath, parentOf } from './paths';
 import {
@@ -62,21 +48,6 @@ export interface StorageBrowserProps {
   /** Where dialogs and tooltips portal, inside the office view's full screen. */
   readonly portalContainer?: Element | undefined;
 }
-
-/** What every row needs, without threading it through React Aria's collection. */
-interface BrowserContextValue {
-  readonly companyId: string;
-  readonly expanded: ReadonlySet<Key>;
-  readonly folderLabel?: (path: string) => string | undefined;
-}
-
-const BrowserContext = createContext<BrowserContextValue | null>(null);
-
-const useBrowser = (): BrowserContextValue => {
-  const value = useContext(BrowserContext);
-  if (value === null) throw new Error('A storage row outside StorageBrowser');
-  return value;
-};
 
 /** The server's own words for a refusal, or a generic line. */
 const reasonOf = (error: unknown): string =>
@@ -107,90 +78,6 @@ const sayFailed = (
   });
 
 /**
- * One folder's subfolders, then its files, as tree rows. It is rendered only
- * while its folder is expanded, so a folder's listing is fetched on demand.
- */
-const FolderContents = ({ path }: { readonly path: string }) => {
-  const { companyId } = useBrowser();
-  const listing = useStorageFolder(companyId, path);
-  if (listing.data === undefined) {
-    const text = listing.isError ? t('storage.error') : t('storage.loading');
-    return (
-      <TreeItem id={`${path}\u0000status`} textValue={text} isDisabled>
-        <TreeItemContent>
-          <span className="storage-browser__status">{text}</span>
-        </TreeItemContent>
-      </TreeItem>
-    );
-  }
-  return (
-    <>
-      {listing.data.folders.map((entry) => (
-        <FolderItem key={entry.path} entry={entry} />
-      ))}
-      {listing.data.files.map((entry) => (
-        <FileItem key={entry.path} entry={entry} />
-      ))}
-    </>
-  );
-};
-
-/**
- * A folder row: expand with its chevron or the arrow keys; select with a
- * click or Space. Top-level folders that can't be changed carry a lock.
- */
-const FolderItem = ({ entry }: { readonly entry: StorageFolderEntryDTO }) => {
-  const { expanded, folderLabel } = useBrowser();
-  const name = folderLabel?.(entry.path) ?? entry.name;
-  return (
-    <TreeItem
-      id={entry.path}
-      textValue={name}
-      hasChildItems
-      className="react-aria-TreeItem storage-browser__row"
-    >
-      <TreeItemContent>
-        {({ level }) => (
-          <>
-            <Button slot="chevron" className="storage-browser__chevron">
-              <Icon icon={ChevronRight} />
-            </Button>
-            <Icon icon={Folder} />
-            <span className="storage-browser__name">{name}</span>
-            {level === 1 && !isWritablePath(entry.path) && (
-              <span className="storage-browser__lock">
-                <Icon icon={Lock} />
-                <span className="visually-hidden">{t('storage.readOnly')}</span>
-              </span>
-            )}
-            {entry.purpose !== null && (
-              <span className="storage-browser__purpose">{entry.purpose}</span>
-            )}
-          </>
-        )}
-      </TreeItemContent>
-      {expanded.has(entry.path) && <FolderContents path={entry.path} />}
-    </TreeItem>
-  );
-};
-
-/** A file row, with its size. */
-const FileItem = ({ entry }: { readonly entry: StorageFileEntryDTO }) => (
-  <TreeItem
-    id={entry.path}
-    textValue={entry.name}
-    className="react-aria-TreeItem storage-browser__row"
-  >
-    <TreeItemContent>
-      <span className="storage-browser__chevron" />
-      <Icon icon={FileText} />
-      <span className="storage-browser__name">{entry.name}</span>
-      <span className="storage-browser__size">{formatSize(entry.size)}</span>
-    </TreeItemContent>
-  </TreeItem>
-);
-
-/**
  * The storage browser (002.05): a company's shared storage as a tree rooted
  * at `root`, with a preview of the one file selected. It works in a page's
  * main area, a tab or a dialog: below 720px wide the preview stacks under
@@ -212,7 +99,6 @@ export const StorageBrowser = ({
   folderLabel,
   portalContainer,
 }: StorageBrowserProps) => {
-  const [expanded, setExpanded] = useState<ReadonlySet<Key>>(new Set());
   const [selected, setSelected] = useState<ReadonlySet<Key>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const treeRef = useRef<HTMLDivElement>(null);
@@ -291,204 +177,196 @@ export const StorageBrowser = ({
       {t('storage.empty.body')}
     </EmptyState>
   ) : (
-    <Tree
+    <FolderTree
       ref={treeRef}
-      aria-label={label}
-      className="react-aria-Tree storage-browser__tree"
-      selectionMode="multiple"
+      companyId={companyId}
+      root={root}
+      label={label}
+      folderLabel={folderLabel}
       selectedKeys={selected}
-      onSelectionChange={(keys) => {
-        // Select-all would pick every row of every open folder; ignore it.
-        if (keys !== 'all') setSelected(new Set(keys));
-      }}
-      expandedKeys={expanded}
-      onExpandedChange={(keys) => setExpanded(new Set(keys))}
-    >
-      <FolderContents path={root} />
-    </Tree>
+      onSelectionChange={setSelected}
+    />
   );
 
   return (
-    <BrowserContext.Provider value={{ companyId, expanded, folderLabel }}>
-      <div className="storage-browser">
-        <Toolbar
-          aria-label={t('storage.toolbar')}
-          className="react-aria-Toolbar storage-browser__toolbar"
+    <div className="storage-browser">
+      <Toolbar
+        aria-label={t('storage.toolbar')}
+        className="react-aria-Toolbar storage-browser__toolbar"
+      >
+        {writableSomewhere && (
+          <>
+            <FileTrigger
+              allowsMultiple
+              onSelect={(files) =>
+                files !== null &&
+                void uploads.start(itemsFromFiles(files, target), targetName)
+              }
+            >
+              <Button
+                className="react-aria-Button tcp-button--outline"
+                isDisabled={!canUpload}
+                isPending={uploads.busy}
+              >
+                <Icon icon={Upload} /> {t('storage.uploadFiles')}
+              </Button>
+            </FileTrigger>
+            <FileTrigger
+              acceptDirectory
+              onSelect={(files) =>
+                files !== null &&
+                void uploads.start(itemsFromFiles(files, target), targetName)
+              }
+            >
+              <Button
+                className="react-aria-Button tcp-button--outline"
+                isDisabled={!canUpload}
+                isPending={uploads.busy}
+              >
+                <Icon icon={FolderUp} /> {t('storage.uploadFolder')}
+              </Button>
+            </FileTrigger>
+          </>
+        )}
+        <Button
+          className="react-aria-Button tcp-button--outline"
+          isDisabled={rootListing.data === undefined}
+          onPress={download}
         >
-          {writableSomewhere && (
-            <>
-              <FileTrigger
-                allowsMultiple
-                onSelect={(files) =>
-                  files !== null &&
-                  void uploads.start(itemsFromFiles(files, target), targetName)
-                }
-              >
-                <Button
-                  className="react-aria-Button tcp-button--outline"
-                  isDisabled={!canUpload}
-                  isPending={uploads.busy}
-                >
-                  <Icon icon={Upload} /> {t('storage.uploadFiles')}
-                </Button>
-              </FileTrigger>
-              <FileTrigger
-                acceptDirectory
-                onSelect={(files) =>
-                  files !== null &&
-                  void uploads.start(itemsFromFiles(files, target), targetName)
-                }
-              >
-                <Button
-                  className="react-aria-Button tcp-button--outline"
-                  isDisabled={!canUpload}
-                  isPending={uploads.busy}
-                >
-                  <Icon icon={FolderUp} /> {t('storage.uploadFolder')}
-                </Button>
-              </FileTrigger>
-            </>
-          )}
+          <Icon icon={Download} />{' '}
+          {paths.length === 0
+            ? t('storage.downloadAll')
+            : t('storage.download')}
+        </Button>
+        {writableSomewhere && (
           <Button
             className="react-aria-Button tcp-button--outline"
-            isDisabled={rootListing.data === undefined}
-            onPress={download}
+            isDisabled={!canDelete}
+            isPending={remove.isPending}
+            onPress={() => setConfirmDelete(true)}
           >
-            <Icon icon={Download} />{' '}
-            {paths.length === 0
-              ? t('storage.downloadAll')
-              : t('storage.download')}
+            <Icon icon={Trash2} /> {t('storage.delete')}
           </Button>
-          {writableSomewhere && (
-            <Button
-              className="react-aria-Button tcp-button--outline"
-              isDisabled={!canDelete}
-              isPending={remove.isPending}
-              onPress={() => setConfirmDelete(true)}
-            >
-              <Icon icon={Trash2} /> {t('storage.delete')}
-            </Button>
-          )}
-          <RoundIconButton
-            icon={RefreshCw}
-            outline
-            label={t('storage.refresh')}
-            portalContainer={portalContainer}
-            onPress={refresh}
-          />
-          {paths.length > 0 && (
-            <span className="storage-browser__count">
-              {tCount('storage.selected', paths.length)}
-            </span>
-          )}
-        </Toolbar>
-        <p className="storage-browser__target">
-          {!writableSomewhere
-            ? t('storage.readOnlyHere')
-            : canUpload
-              ? t('storage.target', { folder: targetName })
-              : t('storage.target.readOnly', { folder: targetName })}
-        </p>
-        {uploads.failures.length > 0 && (
-          <ul className="storage-browser__failures">
-            {uploads.failures.map(({ name, reason }) => (
-              <li key={name}>
-                {t('storage.uploadFailedItem', { name, reason })}
-              </li>
-            ))}
-          </ul>
         )}
+        <RoundIconButton
+          icon={RefreshCw}
+          outline
+          label={t('storage.refresh')}
+          portalContainer={portalContainer}
+          onPress={refresh}
+        />
+        {paths.length > 0 && (
+          <span className="storage-browser__count">
+            {tCount('storage.selected', paths.length)}
+          </span>
+        )}
+      </Toolbar>
+      <p className="storage-browser__target">
+        {!writableSomewhere
+          ? t('storage.readOnlyHere')
+          : canUpload
+            ? t('storage.target', { folder: targetName })
+            : t('storage.target.readOnly', { folder: targetName })}
+      </p>
+      {uploads.failures.length > 0 && (
+        <ul className="storage-browser__failures">
+          {uploads.failures.map(({ name, reason }) => (
+            <li key={name}>
+              {t('storage.uploadFailedItem', { name, reason })}
+            </li>
+          ))}
+        </ul>
+      )}
 
-        <div className="storage-browser__panes">
-          <div className="storage-browser__tree-pane">
-            {tree}
-            {canUpload && (
-              <DropZone
-                className="react-aria-DropZone storage-browser__drop"
-                getDropOperation={() => 'copy'}
-                onDrop={(event) =>
-                  void itemsFromDrop(event.items, target).then((items) =>
-                    uploads.start(items, targetName),
-                  )
-                }
-              >
-                <Text slot="label">
-                  {t('storage.dropZone', { folder: targetName })}
-                </Text>
-              </DropZone>
-            )}
-          </div>
-
-          {previewEntry !== undefined && (
-            <section
-              className="storage-browser__preview"
-              aria-labelledby={previewId}
+      <div className="storage-browser__panes">
+        <div className="storage-browser__tree-pane">
+          {tree}
+          {canUpload && (
+            <DropZone
+              className="react-aria-DropZone storage-browser__drop"
+              getDropOperation={() => 'copy'}
+              onDrop={(event) =>
+                void itemsFromDrop(event.items, target).then((items) =>
+                  uploads.start(items, targetName),
+                )
+              }
             >
-              <h3 id={previewId} className="storage-browser__preview-name">
-                {previewEntry.name}
-              </h3>
-              <p className="storage-browser__meta">
-                {t('storage.preview.meta', {
-                  size: formatSize(previewEntry.size),
-                  date: savedAt(previewEntry.lastModified),
-                })}
-              </p>
-              <div className="storage-browser__preview-actions">
-                <RoundIconButton
-                  icon={Download}
-                  outline
-                  label={t('storage.preview.download', {
-                    name: previewEntry.name,
-                  })}
-                  portalContainer={portalContainer}
-                  onPress={download}
-                />
-              </div>
-              {isWritablePath(previewEntry.path) && (
-                <VersionHistory
-                  key={previewEntry.path}
-                  companyId={companyId}
-                  file={previewEntry}
-                  portalContainer={portalContainer}
-                />
-              )}
-              <FilePreview companyId={companyId} file={previewEntry} />
-            </section>
+              <Text slot="label">
+                {t('storage.dropZone', { folder: targetName })}
+              </Text>
+            </DropZone>
           )}
         </div>
 
-        <ConfirmDialog
-          isOpen={uploads.clashes !== null}
-          heading={t('storage.replace.heading', {
-            files: tCount(
-              'storage.fileCount',
-              uploads.clashes?.items.length ?? 0,
-            ),
-          })}
-          message={t('storage.replace.message', {
-            names: (uploads.clashes?.items ?? [])
-              .map((item) => item.path.split('/').pop())
-              .join(', '),
-            folder: uploads.clashes?.folder ?? '',
-          })}
-          confirmLabel={t('storage.replace.confirm')}
-          cancelLabel={t('storage.replace.skip')}
-          portalContainer={portalContainer}
-          onConfirm={() => void uploads.replace()}
-          onCancel={uploads.skip}
-        />
-        <ConfirmDialog
-          isOpen={confirmDelete}
-          heading={t('storage.delete.heading', {
-            items: tCount('storage.itemCount', paths.length),
-          })}
-          message={t('storage.delete.message')}
-          confirmLabel={t('storage.delete')}
-          portalContainer={portalContainer}
-          onConfirm={() => void deleteSelected()}
-          onCancel={() => setConfirmDelete(false)}
-        />
+        {previewEntry !== undefined && (
+          <section
+            className="storage-browser__preview"
+            aria-labelledby={previewId}
+          >
+            <h3 id={previewId} className="storage-browser__preview-name">
+              {previewEntry.name}
+            </h3>
+            <p className="storage-browser__meta">
+              {t('storage.preview.meta', {
+                size: formatSize(previewEntry.size),
+                date: savedAt(previewEntry.lastModified),
+              })}
+            </p>
+            <div className="storage-browser__preview-actions">
+              <RoundIconButton
+                icon={Download}
+                outline
+                label={t('storage.preview.download', {
+                  name: previewEntry.name,
+                })}
+                portalContainer={portalContainer}
+                onPress={download}
+              />
+            </div>
+            {isWritablePath(previewEntry.path) && (
+              <VersionHistory
+                key={previewEntry.path}
+                companyId={companyId}
+                file={previewEntry}
+                portalContainer={portalContainer}
+              />
+            )}
+            <FilePreview companyId={companyId} file={previewEntry} />
+          </section>
+        )}
       </div>
-    </BrowserContext.Provider>
+
+      <ConfirmDialog
+        isOpen={uploads.clashes !== null}
+        heading={t('storage.replace.heading', {
+          files: tCount(
+            'storage.fileCount',
+            uploads.clashes?.items.length ?? 0,
+          ),
+        })}
+        message={t('storage.replace.message', {
+          names: (uploads.clashes?.items ?? [])
+            .map((item) => item.path.split('/').pop())
+            .join(', '),
+          folder: uploads.clashes?.folder ?? '',
+        })}
+        confirmLabel={t('storage.replace.confirm')}
+        cancelLabel={t('storage.replace.skip')}
+        portalContainer={portalContainer}
+        onConfirm={() => void uploads.replace()}
+        onCancel={uploads.skip}
+      />
+      <ConfirmDialog
+        isOpen={confirmDelete}
+        heading={t('storage.delete.heading', {
+          items: tCount('storage.itemCount', paths.length),
+        })}
+        message={t('storage.delete.message')}
+        confirmLabel={t('storage.delete')}
+        portalContainer={portalContainer}
+        onConfirm={() => void deleteSelected()}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </div>
   );
 };
