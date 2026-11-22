@@ -1,8 +1,8 @@
 import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
-import { ARCHIVE_FURNITURE_IDS } from '../scene/TcpCompanyScene';
 import type { HoverEvent } from '../TcpPhaserEventBus';
+import { ARCHIVE_FURNITURE_IDS } from '../world/layout';
 import type { OfficeWorld } from '../world/types';
 import { describeTarget } from './officeDescriptions';
 

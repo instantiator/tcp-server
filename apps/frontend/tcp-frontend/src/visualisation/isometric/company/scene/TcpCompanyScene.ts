@@ -10,10 +10,10 @@ import type {
 import { furnitureIsLit, tileIsLit } from '../rules/roomLighting';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import {
-  ARCHIVE_BOOKSHELF_ID,
-  ARCHIVE_CABINET_ID,
-  ARCHIVE_RESOURCES_ID,
+  ARCHIVE_FURNITURE_IDS,
+  ARCHIVE_FURNITURE_KINDS,
   mapBounds,
+  type ArchiveFurnitureKind,
 } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
@@ -60,16 +60,6 @@ function statusKey(status: OfficeStatus): string {
  * standing in the doorway takes the pointer rather than the door.
  */
 const DOOR_ZONE_DEPTH_OFFSET = 0.5;
-
-const ARCHIVE_FURNITURE_KINDS = ['archive', 'records', 'resources'] as const;
-type ArchiveFurnitureKind = (typeof ARCHIVE_FURNITURE_KINDS)[number];
-
-/** The furniture id each archive selection stands for, the one source of truth. */
-export const ARCHIVE_FURNITURE_IDS: Record<ArchiveFurnitureKind, string> = {
-  archive: ARCHIVE_BOOKSHELF_ID,
-  records: ARCHIVE_CABINET_ID,
-  resources: ARCHIVE_RESOURCES_ID,
-};
 
 /** Furniture a click selects, and what it selects. */
 const SELECTABLE_FURNITURE = new Map(

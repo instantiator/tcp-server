@@ -53,6 +53,21 @@ export const ARCHIVE_CABINET_ID = `${ARCHIVE_ROOM_ID}:filingCabinet`;
 /** The archive's plan chest, which holds the company's resources. */
 export const ARCHIVE_RESOURCES_ID = `${ARCHIVE_ROOM_ID}:resourcesChest`;
 
+/** The archive's selectable furniture, as the selection kinds that stand for it. */
+export const ARCHIVE_FURNITURE_KINDS = [
+  'archive',
+  'records',
+  'resources',
+] as const;
+export type ArchiveFurnitureKind = (typeof ARCHIVE_FURNITURE_KINDS)[number];
+
+/** The furniture id each archive selection stands for, the one source of truth. */
+export const ARCHIVE_FURNITURE_IDS: Record<ArchiveFurnitureKind, string> = {
+  archive: ARCHIVE_BOOKSHELF_ID,
+  records: ARCHIVE_CABINET_ID,
+  resources: ARCHIVE_RESOURCES_ID,
+};
+
 /** The id of the room for a task. */
 export const taskRoomId = (taskId: string): string => `task:${taskId}`;
 
