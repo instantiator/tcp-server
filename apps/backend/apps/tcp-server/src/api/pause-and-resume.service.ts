@@ -197,6 +197,18 @@ export class PauseAndResumeService {
       // for (via the calling agent's own assignment) — see TcpAssignment.parentAssignmentId.
       parentAssignmentId: callingAgent.assignmentId,
     });
+    // The consulted agent's transcript opens with the question, like a chat.
+    await this.audit.record(
+      companyId,
+      role.name,
+      consultAgent.id,
+      AuditEventType.Input,
+      {
+        text: initialPrompt,
+        source: 'consultation',
+        fromRoleName: callingRole?.name ?? 'agent',
+      },
+    );
 
     // Record the link between the paused caller and the new consulting agent.
     const consultation = await this.consultRepo.save(
@@ -223,6 +235,7 @@ export class PauseAndResumeService {
         reason: 'consultation',
         consultedAgentId: consultAgent.id,
         consultedRoleName: role.name,
+        question,
       },
     );
 
@@ -282,10 +295,11 @@ export class PauseAndResumeService {
       status: 'complete',
       result: resolvedOutput,
     });
-
-    await this.resumeCallingAgentIfPaused(
+    await this.answerCallingAgent(
       consultation.callingAgentId,
-      'with consultation result',
+      { agentId, roleName: role?.name ?? 'agent' },
+      resolvedOutput,
+      false,
     );
   }
 
@@ -331,35 +345,46 @@ export class PauseAndResumeService {
       status: 'failed',
       result: reason,
     });
-
-    await this.resumeCallingAgentIfPaused(
+    await this.answerCallingAgent(
       consultation.callingAgentId,
-      'after consultation failure',
+      { agentId, roleName: role?.name ?? 'agent' },
+      reason,
+      true,
     );
   }
 
   /**
-   * Resumes the agent that requested a consultation, once the consultation has
-   * resolved either way. A calling agent that is no longer paused has already
-   * moved on, so it is left alone.
-   *
-   * The orchestrator decides what resuming means: the agent stays paused while
-   * other requests are still outstanding, and aggregates every response since
-   * the pause once this was the last one.
-   *
-   * Deliberately fire-and-forget — the database state is already consistent by
-   * this point, so the caller must not block (or fail) on Redis being
-   * available.
-   *
-   * @param reason - Completes the log line describing why the resume happened.
+   * Gives the agent that asked a consultation its answer (or the failure):
+   * records it on that agent's transcript, then resumes the agent if it is
+   * still paused. One that is no longer paused has already moved on.
    */
-  private async resumeCallingAgentIfPaused(
+  private async answerCallingAgent(
     callingAgentId: UUID,
-    reason: string,
+    consulted: { agentId: UUID; roleName: string },
+    text: string,
+    failed: boolean,
   ): Promise<void> {
     const calling = await this.agentRepo.findOneBy({ id: callingAgentId });
-    if (calling?.status !== AgentStatus.Paused) return;
+    if (!calling) return;
+    const callingRole = await this.roleRepo.findOneBy({ id: calling.roleId });
+    await this.audit.record(
+      calling.companyId,
+      callingRole?.name ?? 'agent',
+      calling.id,
+      AuditEventType.Input,
+      {
+        text,
+        source: 'consultation',
+        consultedAgentId: consulted.agentId,
+        consultedRoleName: consulted.roleName,
+        failed,
+      },
+    );
+    if (calling.status !== AgentStatus.Paused) return;
 
+    const reason = failed
+      ? 'after consultation failure'
+      : 'with consultation result';
     void this.orchestration
       .resumeAgent(callingAgentId)
       .then(() =>

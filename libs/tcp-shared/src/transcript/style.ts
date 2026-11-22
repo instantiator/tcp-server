@@ -7,7 +7,14 @@
 
 /** The visual role of a rendered line, mapped to a colour by the backend. */
 export type EntryStyle =
-  'heading' | 'state' | 'llm' | 'json' | 'reasoning' | 'response' | 'user';
+  | 'heading'
+  | 'state'
+  | 'llm'
+  | 'json'
+  | 'reasoning'
+  | 'response'
+  | 'user'
+  | 'consultation';
 
 /** Paints and escapes text for one output surface. The only home for colour codes. */
 export interface StyleBackend {

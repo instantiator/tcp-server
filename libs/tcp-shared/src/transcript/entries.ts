@@ -18,6 +18,7 @@ const BLOCK_STYLES: ReadonlySet<EntryStyle> = new Set<EntryStyle>([
   'response',
   'user',
   'json',
+  'consultation',
 ]);
 
 /**
@@ -37,6 +38,16 @@ export interface LogEntry {
   json?: boolean;
   /** The key facts of a tool call or result, for surfaces that show a summary before the JSON. */
   tool?: ToolSummary;
+  /** Set on `consultation` entries: which agent was consulted, and this entry's step. */
+  consultation?: ConsultationStep;
+}
+
+/** One step of a consultation, as seen by the agent that asked. */
+export interface ConsultationStep {
+  /** The consulted agent's id, shared by the steps of one consultation. */
+  agentId: string;
+  roleName: string;
+  kind: 'asked' | 'answered' | 'failed';
 }
 
 /** What a tool entry is about, read from its payload; any field the payload lacks is absent. */

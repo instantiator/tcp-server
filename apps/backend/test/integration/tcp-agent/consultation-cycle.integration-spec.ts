@@ -3,6 +3,7 @@ import { createServer, type AddressInfo } from 'node:net';
 import {
   AgentStatus,
   AuditClientService,
+  AuditEvent,
   PendingConsultation,
   TcpAgent,
   TcpAssignment,
@@ -59,6 +60,7 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
   let agentRepo: Repository<TcpAgent>;
   let assignmentRepo: Repository<TcpAssignment>;
   let consultRepo: Repository<PendingConsultation>;
+  let auditRepo: Repository<AuditEvent>;
   let orchestration: AgentOrchestrationService;
 
   let companyId: UUID;
@@ -275,6 +277,7 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     agentRepo = serverModuleRef.get(getRepositoryToken(TcpAgent));
     assignmentRepo = serverModuleRef.get(getRepositoryToken(TcpAssignment));
     consultRepo = serverModuleRef.get(getRepositoryToken(PendingConsultation));
+    auditRepo = serverModuleRef.get(getRepositoryToken(AuditEvent));
     orchestration = serverModuleRef.get(AgentOrchestrationService);
 
     // Both agents' tools are built per run from the identity the agent loop
@@ -460,6 +463,22 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     it('resolves the consultation with the consulting agent’s answer', async () => {
       const consultation = await waitForResolvedConsultation(callerAgentId);
       expect(consultation.result).toContain(ORACLE_ANSWER);
+    }, 60_000);
+
+    it('records the answer on the caller’s transcript', async () => {
+      const consultation = await waitForResolvedConsultation(callerAgentId);
+      const answers = await auditRepo.findBy({
+        agentId: callerAgentId,
+        eventType: 'input',
+      });
+      expect(answers.map((row) => row.payload)).toEqual([
+        expect.objectContaining({
+          source: 'consultation',
+          consultedAgentId: consultation.consultationAgentId,
+          failed: false,
+          text: expect.stringContaining(ORACLE_ANSWER) as string,
+        }),
+      ]);
     }, 60_000);
 
     it('resumes the caller with the answer rather than a blank response', async () => {

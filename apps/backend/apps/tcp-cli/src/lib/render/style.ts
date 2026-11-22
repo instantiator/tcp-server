@@ -22,6 +22,7 @@ const ANSI: Record<EntryStyle, string> = {
   reasoning: '\x1b[90m', // grey
   response: '\x1b[37m', // white
   user: '\x1b[92m', // bright green
+  consultation: '\x1b[93m', // bright yellow
 };
 const ANSI_RESET = '\x1b[0m';
 
@@ -39,6 +40,7 @@ const MARKUP: Record<EntryStyle, string> = {
   reasoning: '^K', // grey
   response: '', // default foreground
   user: '^G', // green
+  consultation: '^Y', // yellow
 };
 
 export const markupStyle: StyleBackend = {

@@ -144,6 +144,96 @@ describe('renderAuditEvent', () => {
     });
   });
 
+  describe('consultations', () => {
+    const consultedAgentId = 'consulted-1';
+
+    it('turns a pause to consult, with its question, into an asked entry', () => {
+      const [entry] = renderAuditEvent(
+        ev('state_change', {
+          entity: 'agent',
+          newStatus: 'paused',
+          reason: 'consultation',
+          consultedAgentId,
+          consultedRoleName: 'Analyst',
+          question: 'What is the VAT rate on books?',
+        }),
+        fresh(),
+      );
+      expect(entry).toMatchObject({
+        style: 'consultation',
+        label: 'consultation:asked Analyst',
+        text: 'What is the VAT rate on books?',
+        consultation: {
+          agentId: consultedAgentId,
+          roleName: 'Analyst',
+          kind: 'asked',
+        },
+      });
+    });
+
+    it('keeps the old pause line for a consultation pause with no question', () => {
+      const [entry] = renderAuditEvent(
+        ev('state_change', {
+          entity: 'agent',
+          newStatus: 'paused',
+          reason: 'consultation',
+          consultedAgentId,
+        }),
+        fresh(),
+      );
+      expect(entry).toMatchObject({
+        style: 'state',
+        text: 'paused (waiting for a consultation)',
+      });
+      expect(entry.consultation).toBeUndefined();
+    });
+
+    it.each([
+      [false, 'answered', 'consultation:Analyst answered'],
+      [true, 'failed', "consultation:Analyst couldn't answer"],
+    ])(
+      'turns the answer row (failed: %s) into a %s entry',
+      (failed, kind, label) => {
+        const [entry] = renderAuditEvent(
+          ev('input', {
+            text: 'Books are zero-rated.',
+            source: 'consultation',
+            consultedAgentId,
+            consultedRoleName: 'Analyst',
+            failed,
+          }),
+          fresh(),
+        );
+        expect(entry).toMatchObject({
+          style: 'consultation',
+          label,
+          text: 'Books are zero-rated.',
+          consultation: {
+            agentId: consultedAgentId,
+            roleName: 'Analyst',
+            kind,
+          },
+        });
+      },
+    );
+
+    it('shows the question to the consulted agent as a message from the asking role', () => {
+      const [entry] = renderAuditEvent(
+        ev('input', {
+          text: 'Question: What is the VAT rate on books?',
+          source: 'consultation',
+          fromRoleName: 'Planner',
+        }),
+        fresh(),
+      );
+      expect(entry).toMatchObject({
+        style: 'user',
+        label: 'input:from Planner',
+        text: 'Question: What is the VAT rate on books?',
+      });
+    });
+  });
+
   it('keeps the assignment-complete label for agent_loop_completion', () => {
     const [entry] = renderAuditEvent(
       ev('agent_loop_completion', { summary: 'done' }),
