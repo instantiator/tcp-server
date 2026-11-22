@@ -238,6 +238,69 @@ describe('useTranscript', () => {
       expect(await virtual.spokenPhraseLog()).toHaveLength(2);
     });
 
+    it.each([
+      [
+        'asked',
+        {
+          eventType: 'state_change',
+          payload: {
+            reason: 'consultation',
+            consultedAgentId: 'analyst-1',
+            consultedRoleName: 'Analyst',
+            question: 'VAT?',
+          },
+        },
+        'transcript.announce.consulting',
+      ],
+      [
+        'answered',
+        {
+          eventType: 'input',
+          payload: {
+            source: 'consultation',
+            consultedAgentId: 'analyst-1',
+            consultedRoleName: 'Analyst',
+            text: 'Zero-rated.',
+            failed: false,
+          },
+        },
+        'transcript.announce.consultationAnswered',
+      ],
+      [
+        'failed',
+        {
+          eventType: 'input',
+          payload: {
+            source: 'consultation',
+            consultedAgentId: 'analyst-1',
+            consultedRoleName: 'Analyst',
+            text: 'Unreachable.',
+            failed: true,
+          },
+        },
+        'transcript.announce.consultationFailed',
+      ],
+    ] as const)(
+      'announces a consultation %s on arrival, naming the role but not the text, once under StrictMode',
+      async (_kind, event, change) => {
+        await renderTranscript();
+        await virtual.start({ container: document.body });
+        await virtual.clearSpokenPhraseLog();
+
+        act(() => {
+          emit?.({
+            type: 'audit',
+            event: auditEvent({ id: `audit-${change}`, ...event }),
+          });
+        });
+        await vi.advanceTimersByTimeAsync(15_000);
+
+        expect(await virtual.spokenPhraseLog()).toEqual([
+          `polite: ${t(change, { role: 'Analyst' })}`,
+        ]);
+      },
+    );
+
     it('says nothing for history, however much of it there is', async () => {
       await virtual.start({ container: document.body });
       await virtual.clearSpokenPhraseLog();
