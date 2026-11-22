@@ -64,6 +64,14 @@ describe('extractText', () => {
     },
   );
 
+  it('starts with content, not a page break that would read as front matter', async () => {
+    const { markdown } = await extractText(
+      'price-list.xlsx',
+      fixture('price-list.xlsx'),
+    );
+    expect(markdown.startsWith('---')).toBe(false);
+  });
+
   it.each(['xlsx', 'ods'])('reads a %s as Markdown tables', async (format) => {
     const { markdown } = await extractText(
       `price-list.${format}`,

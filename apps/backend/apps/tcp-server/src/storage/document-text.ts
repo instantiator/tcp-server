@@ -99,6 +99,9 @@ const { OfficeParser } = require('officeparser');
 });
 `;
 
+/** `---` breaks (and blank lines) before a document's first content. */
+const LEADING_BREAKS = /^(?:\s*---[ \t]*\n)+\s*/;
+
 /** The error a parse stopped at the timeout reports. */
 const TIMED_OUT = 'TIMED_OUT';
 
@@ -140,11 +143,12 @@ export async function extractText(
           : `isn't a readable ${path.extname(name).slice(1)} file.`,
     );
   }
-  const truncated = reply.markdown.length > limits.maxOutputChars;
+  // Pages, sheets and slides open with a `---` break. Leading, it would read
+  // as the start of a front-matter block, so it goes.
+  const text = reply.markdown.replace(LEADING_BREAKS, '');
+  const truncated = text.length > limits.maxOutputChars;
   return {
-    markdown: truncated
-      ? reply.markdown.slice(0, limits.maxOutputChars)
-      : reply.markdown,
+    markdown: truncated ? text.slice(0, limits.maxOutputChars) : text,
     truncated,
   };
 }

@@ -894,7 +894,7 @@ const strings = {
   'knowledge.introShared':
     'Every role can draw on these documents. A role’s own knowledge is in its dialog, on the Knowledge tab.',
   'knowledge.uploadHint':
-    'Upload Markdown, text, HTML, PDF, Word, CSV, JSON or YAML, up to 50 MB, into the files below. Each one is turned into Markdown and indexed.',
+    'Upload Markdown, text, HTML, PDF, Word, Excel, PowerPoint, OpenDocument, CSV, JSON or YAML, up to 50 MB, into the files below. Each one is turned into Markdown and indexed.',
   'knowledge.refresh': 'Refresh the index status',
   'knowledge.rebuild': 'Rebuild the index',
   'knowledge.status.documents.one': '{count} document',

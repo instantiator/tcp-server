@@ -11,7 +11,7 @@ export function registerStoreKnowledge(program: Command): void {
   const cmd = program
     .command('store-knowledge')
     .description(
-      'Upload a document (.md, .txt, .html, .pdf, .docx, .csv, .json, .yaml) to a role or company (shared knowledge) knowledge base',
+      'Upload a document (.md, .txt, .html, .pdf, .docx, .xlsx, .pptx, .odt, .ods, .odp, .csv, .json, .yaml) to a role or company (shared knowledge) knowledge base',
     );
   addRoleOptions(cmd);
   addCompanyOptions(cmd);
