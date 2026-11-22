@@ -1163,6 +1163,15 @@ const strings = {
   'tables.empty':
     'No record tables yet. Agents make them when they keep records such as orders or stock.',
   'visualisation.resources.heading': 'Company resources',
+  'visualisation.resources.description':
+    'Documents the company keeps, such as price lists and policies. Choose a folder to open it.',
+  'visualisation.resources.browseAll': 'Browse all resources',
+  'visualisation.resources.refresh': 'Refresh resources',
+  'visualisation.resources.consoleLink': 'Open in the storage console',
+  'visualisation.resources.consoleLinkSuffix': '(opens in a new tab)',
+  'visualisation.resources.empty.heading': 'No resource folders yet',
+  'visualisation.resources.empty.body':
+    'Folders made under resources appear here. Browse all resources to add one.',
   'records.tray.heading': 'Record tables',
   'records.tray.column.table': 'Table',
   'records.tray.column.records': 'Records',

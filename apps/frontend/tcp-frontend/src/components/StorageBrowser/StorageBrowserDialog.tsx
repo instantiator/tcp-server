@@ -7,6 +7,8 @@ export interface StorageBrowserDialogProps {
   readonly root: string;
   /** The dialog's title; it also names the tree. Already resolved through `t`. */
   readonly heading: string;
+  /** A line under the heading saying what the folder is for (its purpose). */
+  readonly description?: string | undefined;
   readonly onClose: () => void;
   /** Keeps the dialog inside the office view in full screen. */
   readonly portalContainer?: Element | undefined;
@@ -21,10 +23,14 @@ export const StorageBrowserDialog = ({
   companyId,
   root,
   heading,
+  description,
   onClose,
   portalContainer,
 }: StorageBrowserDialogProps) => (
   <Dialog heading={heading} onClose={onClose} portalContainer={portalContainer}>
+    {description !== undefined && (
+      <p className="storage-browser__description">{description}</p>
+    )}
     <StorageBrowser
       companyId={companyId}
       root={root}

@@ -218,3 +218,9 @@
   display: inline-flex;
   margin-inline-start: auto;
 }
+
+/* What the folder is for, under the dialog's heading (002.08). */
+.storage-browser__description {
+  margin: 0 0 var(--tcp-space-sm);
+  color: var(--tcp-color-text-muted);
+}
