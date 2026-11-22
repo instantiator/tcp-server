@@ -18,12 +18,12 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                                        | Signature                                                                               | Description                                                  |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [`describe_server`](#describe_server)                       | `describe_server()`                                                                     | Overview of the interactions service                         |
-| [`list_available_contacts`](#list_available_contacts)       | `list_available_contacts(companyId, kind?)`                                             | List human users and/or agent roles available to ask/consult |
-| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`                  | Pause and submit a question to human users                   |
-| [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)` | Consult another agent role                                   |
+| Tool                                                        | Signature                                                                                      | Description                                                  |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`describe_server`](#describe_server)                       | `describe_server()`                                                                            | Overview of the interactions service                         |
+| [`list_available_contacts`](#list_available_contacts)       | `list_available_contacts(companyId, kind?)`                                                    | List human users and/or agent roles available to ask/consult |
+| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`                         | Pause and submit a question to human users                   |
+| [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, consultRoleId, question, context?, roleName?)` | Consult another agent role                                   |
 
 Assignment completion moved to [tcp-mcp-tasks](tcp-mcp-tasks.md) (`complete_assignment`) in task-orchestration part 5 — this server no longer owns a `complete_task` tool.
 
@@ -106,20 +106,20 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 **Arguments:**
 
-| Parameter   | Type   | Required | Description                                                                                                                             |
-| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                                                                |
-| `companyId` | UUID   | yes      | The company UUID                                                                                                                        |
-| `roleId`    | UUID   | yes      | The id of the role to consult (from `list_available_contacts`) — role names aren't unique within a company, so the id is the lookup key |
-| `question`  | string | yes      | The question to pose to the consulting agent                                                                                            |
-| `context`   | string | no       | Optional context for the consultation                                                                                                   |
-| `roleName`  | string | no       | Optional human-readable label, used only for friendlier logging                                                                         |
+| Parameter       | Type   | Required | Description                                                                                                                                                                                                        |
+| --------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agentId`       | UUID   | yes      | The calling agent's UUID                                                                                                                                                                                           |
+| `companyId`     | UUID   | yes      | The company UUID                                                                                                                                                                                                   |
+| `consultRoleId` | UUID   | yes      | The id of the role to consult (from `list_available_contacts`) — role names aren't unique within a company, so the id is the lookup key. Not named `roleId`, which the MCP client fills with the caller's own role |
+| `question`      | string | yes      | The question to pose to the consulting agent                                                                                                                                                                       |
+| `context`       | string | no       | Optional context for the consultation                                                                                                                                                                              |
+| `roleName`      | string | no       | Optional human-readable label, used only for friendlier logging                                                                                                                                                    |
 
 **Returns:** A confirmation message containing the consultation ID and the resolved role name.
 
 **What happens internally:**
 
-1. `POST /internal/pause` on tcp-server — looks up the role by `roleId` (scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
+1. `POST /internal/pause` on tcp-server — looks up the role by `consultRoleId` (sent as `roleId`, scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
 2. When the consulting agent calls `complete_assignment`, tcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
 3. Consulting agents are created with `requiredToolCalls: ['complete_assignment']`. If the consultation fails (error, timeout, or the required call never fires despite reminders), the calling agent is resumed with a `Consultation FAILED: <reason>` message instead of staying paused — see [Consultation failure](cross-agent-consultations.md#consultation-failure)
 

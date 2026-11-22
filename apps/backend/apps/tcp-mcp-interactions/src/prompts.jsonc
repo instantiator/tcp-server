@@ -11,7 +11,7 @@
   // Returned on successful agent-consultation pause. {{roleName}} and {{consultationId}} are replaced.
   "paused_consultation": "Paused. Consultation request dispatched to '{{roleName}}' (id: {{consultationId}}). Your task will resume automatically when the consulting agent responds.",
 
-  // Returned when request_agent_consultation fails. {{roleName}} is replaced (falls back to the roleId if no name was given).
+  // Returned when request_agent_consultation fails. {{roleName}} is replaced (falls back to the consultRoleId if no name was given).
   "error_consultation": "Could not dispatch consultation to '{{roleName}}'. Check the role id (from list_available_contacts) and try again.",
 
   // Returned when list_available_contacts fails to retrieve one of its collections.

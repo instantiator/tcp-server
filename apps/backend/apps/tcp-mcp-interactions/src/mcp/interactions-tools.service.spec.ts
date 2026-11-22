@@ -227,7 +227,7 @@ describe('InteractionsToolsService', () => {
   });
 
   describe('request_agent_consultation', () => {
-    it('calls POST /internal/pause with the roleId and returns the resolved role name', async () => {
+    it('calls POST /internal/pause with consultRoleId as the roleId and returns the resolved role name', async () => {
       const consultationId = randomUUID();
       const roleId = randomUUID();
       mockedAxios.post.mockResolvedValue({
@@ -237,7 +237,7 @@ describe('InteractionsToolsService', () => {
       const text = await callTool(service, 'request_agent_consultation', {
         agentId,
         companyId,
-        roleId,
+        consultRoleId: roleId,
         question: 'Is this legal?',
       });
 
@@ -253,7 +253,7 @@ describe('InteractionsToolsService', () => {
       expect(text).toContain('Paused');
     });
 
-    it('forwards an optional roleName label alongside roleId', async () => {
+    it('forwards an optional roleName label alongside the role to consult', async () => {
       const consultationId = randomUUID();
       const roleId = randomUUID();
       mockedAxios.post.mockResolvedValue({
@@ -263,7 +263,7 @@ describe('InteractionsToolsService', () => {
       await callTool(service, 'request_agent_consultation', {
         agentId,
         companyId,
-        roleId,
+        consultRoleId: roleId,
         roleName: 'legal-advisor',
         question: 'Is this legal?',
       });
@@ -275,19 +275,41 @@ describe('InteractionsToolsService', () => {
       );
     });
 
-    it('falls back to roleId in the error message when the request fails and no roleName was given', async () => {
+    it('falls back to consultRoleId in the error message when the request fails and no roleName was given', async () => {
       const roleId = randomUUID();
       mockedAxios.post.mockRejectedValue(new Error('Network error'));
 
       const text = await callTool(service, 'request_agent_consultation', {
         agentId,
         companyId,
-        roleId,
+        consultRoleId: roleId,
         question: 'Is this legal?',
       });
 
       expect(text).toContain('Error');
       expect(text).toContain(roleId);
+    });
+
+    it('consults the role it names, whatever roleId the client injects (002.06 regression)', async () => {
+      const target = randomUUID();
+      mockedAxios.post.mockResolvedValue({
+        data: { consultationId: randomUUID(), roleName: 'Legal Advisor' },
+      });
+
+      await callTool(service, 'request_agent_consultation', {
+        agentId,
+        companyId,
+        consultRoleId: target,
+        // What the MCP client would add if the tool declared `roleId`.
+        roleId: randomUUID(),
+        question: 'Is this legal?',
+      });
+
+      expect(axiosPost).toHaveBeenCalledWith(
+        'http://tcp-server:3000/internal/pause',
+        expect.objectContaining({ roleId: target }),
+        expect.any(Object),
+      );
     });
 
     it('relays a 4xx corrective message (e.g. unknown role naming valid roles) so the model can retry', async () => {
