@@ -857,9 +857,27 @@ Admin → Roles and the knowledge panel let every member of a company delete rol
 
 ## Knowledge uploads show no progress
 
-`fetch` reports no upload progress, so the panel says what is uploading and offers Cancel, but not how far along it is.
+`fetch` reports no upload progress, so the storage browser shows its upload buttons as busy, but not how far along an upload is. Since 002.10 knowledge uploads go through the storage browser, which can't cancel an upload either.
 
-**Act when:** people upload files big enough that the wait is confusing (tens of MB on a slow link). Switch the upload to `XMLHttpRequest`, which reports progress.
+**Act when:** people upload files big enough that the wait is confusing (tens of MB on a slow link). Switch uploads to `XMLHttpRequest`, which reports progress, and add Cancel.
+
+## Knowledge documents no longer list their licence
+
+Before 002.10 the knowledge panel's table had a Licence column, linked to an `https` source. The storage browser that replaced the table shows file names and sizes, so a document's licence is only in its front matter, which the preview shows.
+
+**Act when:** someone needs to see licences at a glance, or a template's knowledge is checked for attribution. Show the front matter's licence and source in the browser's preview header, or as a row description.
+
+## Task materials can't be deleted from the browser
+
+002.10 lets the browser add a task's materials through `POST /api/task/:id/materials`, but there is no route to remove one, so `materials/` shows no Delete.
+
+**Act when:** someone asks to remove a material before a task starts, or a materials delete route is added. Route deletes in `materials/` through it, as knowledge deletes go through the knowledge route.
+
+## The browser copies the server's knowledge naming
+
+`storedName` in `apps/frontend/tcp-frontend/src/components/StorageBrowser/paths.ts` copies `toOkfDocument`'s rule (`knowledge-conversion.ts`) so "Replace?" can be asked before upload: `.md` keeps its name, anything else becomes `{name}.md`, with the extension matched in lower case (`SCAN.PDF` becomes `SCAN.PDF.md`).
+
+**Act when:** `toOkfDocument`'s naming changes, or an upload is refused with a 409 the browser didn't predict. Change both together, or have the route return the stored name.
 
 ## Storage uploads are read whole before their size is checked
 
