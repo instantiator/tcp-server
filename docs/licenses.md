@@ -39,6 +39,7 @@
 | json5                                    | MIT          | git+https://github.com/json5/json5.git                         | Aseem Kishore <aseem.kishore@gmail.com>                                | 2.2.3     | ^2.2.3    |
 | jwks-rsa                                 | MIT          | git+https://github.com/auth0/node-jwks-rsa.git                 | Auth0                                                                  | 4.1.0     | ^4.1.0    |
 | mammoth                                  | BSD-2-Clause | git+https://github.com/mwilliamson/mammoth.js.git              | Michael Williamson <mike@zwobble.org>                                  | 1.12.0    | ^1.12.0   |
+| officeparser                             | MIT          | git+https://github.com/harshankur/officeParser.git             | Harsh Ankur                                                            | 8.9.0     | 8.9.0     |
 | passport                                 | MIT          | git://github.com/jaredhanson/passport.git                      | Jared Hanson jaredhanson@gmail.com https://www.jaredhanson.me/         | 0.7.0     | ^0.7.0    |
 | passport-jwt                             | MIT          | git+https://github.com/mikenicholson/passport-jwt.git          | Mike Nicholson                                                         | 4.0.1     | ^4.0.1    |
 | pdf-parse                                | Apache-2.0   | git+https://github.com/mehmet-kozan/pdf-parse.git              | Mehmet Kozan                                                           | 2.4.5     | ^2.4.5    |
