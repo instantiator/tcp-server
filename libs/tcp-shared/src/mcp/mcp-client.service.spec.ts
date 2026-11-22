@@ -484,11 +484,11 @@ describe('McpClientService', () => {
     });
 
     describe('identity context (agentId / companyId)', () => {
-      function makeConsultationTool() {
+      function makeRoleScopedTool() {
         return makeClientInstance([
           {
-            name: 'request_agent_consultation',
-            description: 'Consult another role',
+            name: 'remember',
+            description: 'Store a memory for your role',
             inputSchema: {
               type: 'object',
               properties: {
@@ -504,7 +504,7 @@ describe('McpClientService', () => {
       }
 
       it('hides agentId/companyId from the LangChain-facing schema when context supplies them', async () => {
-        const clientInstance = makeConsultationTool();
+        const clientInstance = makeRoleScopedTool();
         MockClient.mockImplementation(
           () => clientInstance as unknown as Client,
         );
@@ -525,7 +525,7 @@ describe('McpClientService', () => {
       });
 
       it("hides roleId and injects the agent's own role when context supplies it", async () => {
-        const clientInstance = makeConsultationTool();
+        const clientInstance = makeRoleScopedTool();
         MockClient.mockImplementation(
           () => clientInstance as unknown as Client,
         );
@@ -546,7 +546,7 @@ describe('McpClientService', () => {
 
         await mcpTool.tool.invoke({ question: 'q', roleId: 'guessed-role-id' });
         expect(clientInstance.callTool).toHaveBeenLastCalledWith({
-          name: 'request_agent_consultation',
+          name: 'remember',
           arguments: {
             agentId: 'real-agent-id',
             companyId: 'real-company-id',
@@ -557,7 +557,7 @@ describe('McpClientService', () => {
       });
 
       it('injects the real agentId/companyId on every call, overriding anything the LLM supplies', async () => {
-        const clientInstance = makeConsultationTool();
+        const clientInstance = makeRoleScopedTool();
         MockClient.mockImplementation(
           () => clientInstance as unknown as Client,
         );
@@ -578,7 +578,7 @@ describe('McpClientService', () => {
         });
 
         expect(clientInstance.callTool).toHaveBeenCalledWith({
-          name: 'request_agent_consultation',
+          name: 'remember',
           arguments: {
             agentId: 'real-agent-id',
             companyId: 'real-company-id',
@@ -618,7 +618,7 @@ describe('McpClientService', () => {
       });
 
       it('does not strip or override fields when no context is given', async () => {
-        const clientInstance = makeConsultationTool();
+        const clientInstance = makeRoleScopedTool();
         MockClient.mockImplementation(
           () => clientInstance as unknown as Client,
         );

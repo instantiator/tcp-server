@@ -214,7 +214,9 @@ export class InteractionsToolsService {
             .min(1)
             .optional()
             .describe('The company slug, as an alternative to companyId.'),
-          roleId: z
+          // Not `roleId`: the MCP client overwrites any argument of that name
+          // with the caller's own role (002.06), which would consult itself.
+          consultRoleId: z
             .uuid()
             .optional()
             .describe(
@@ -225,7 +227,7 @@ export class InteractionsToolsService {
             .min(1)
             .optional()
             .describe(
-              'The slug of the role to consult, as an alternative to roleId (unique within the company, not globally).',
+              'The slug of the role to consult, as an alternative to consultRoleId (unique within the company, not globally).',
             ),
           roleName: z
             .string()
@@ -248,7 +250,7 @@ export class InteractionsToolsService {
         agentId,
         companyId,
         companySlug,
-        roleId,
+        consultRoleId,
         roleSlug,
         roleName,
         question,
@@ -269,7 +271,7 @@ export class InteractionsToolsService {
               agentId,
               companyId,
               companySlug,
-              roleId,
+              roleId: consultRoleId,
               roleSlug,
               roleName,
               question,
@@ -294,7 +296,7 @@ export class InteractionsToolsService {
           return relay4xxOrError(
             e,
             interpolate(interactionPrompts.error_consultation, {
-              roleName: roleName ?? roleId ?? roleSlug ?? 'unknown role',
+              roleName: roleName ?? consultRoleId ?? roleSlug ?? 'unknown role',
             }),
           );
         }
