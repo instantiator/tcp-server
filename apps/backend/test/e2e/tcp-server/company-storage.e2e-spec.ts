@@ -3,6 +3,8 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { unzipSync } from 'fflate';
+import * as fs from 'fs';
+import * as nodePath from 'path';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
@@ -126,6 +128,7 @@ describe('CompanyStorageController (e2e)', () => {
       ['get', '/folder?path='],
       ['get', '/file?path=resources/x.md'],
       ['get', '/versions?path=resources/x.md'],
+      ['get', '/text?path=resources/x.docx'],
       ['post', '/zip'],
       ['post', '/restore'],
       ['delete', '?path=resources/x.md'],
@@ -179,6 +182,56 @@ describe('CompanyStorageController (e2e)', () => {
         .get(`${base()}/file?path=resources/up/missing.txt`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(404);
+    });
+  });
+
+  describe('text preview', () => {
+    const text = (path: string) =>
+      http()
+        .get(`${base()}/text?path=${encodeURIComponent(path)}`)
+        .set('Authorization', `Bearer ${jwt}`);
+
+    beforeAll(async () => {
+      await http()
+        .post(
+          `${base()}/file?path=${encodeURIComponent('resources/price-list.docx')}`,
+        )
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach(
+          'file',
+          fs.readFileSync(
+            nodePath.join(
+              __dirname,
+              '../../../apps/tcp-server/src/storage/__fixtures__/price-list.docx',
+            ),
+          ),
+          'price-list.docx',
+        )
+        .expect(201);
+    });
+
+    it('gives an Office file’s text as Markdown, unsniffable', async () => {
+      const res = await text('resources/price-list.docx').expect(200);
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      const body = res.body as { markdown: string; truncated: boolean };
+      expect(body.markdown).toContain('# Price list');
+      expect(body.markdown).toContain('| Tea | 3 |');
+      expect(body.truncated).toBe(false);
+    }, 30_000);
+
+    it.each(['resources/photo.png', 'resources/report.pdf'])(
+      'has no text preview for %s',
+      async (path) => {
+        await text(path).expect(415);
+      },
+    );
+
+    it('404s for a missing file', async () => {
+      await text('resources/missing.docx').expect(404);
+    });
+
+    it('refuses a path that climbs out of the company folder', async () => {
+      await text('../other/x.docx').expect(400);
     });
   });
 

@@ -726,6 +726,26 @@ export const useStorageVersions = (
       ),
   });
 
+/**
+ * An Office or OpenDocument file's text as Markdown, extracted by the server
+ * (002.11), so the browser never parses the file itself.
+ */
+export const useStorageText = (
+  companyId: string,
+  path: string,
+  options: StorageReadOptions = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.storageText(companyId, path),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/storage/text', {
+          params: { path: { companyId }, query: { path } },
+        }),
+      ),
+  });
+
 /** One stored file's bytes, for a preview. */
 export const useStorageFileBlob = (
   companyId: string,

@@ -1024,6 +1024,11 @@ const strings = {
   'storage.preview.truncated': 'Showing the first {count} rows.',
   'storage.preview.loading': 'the preview',
   'storage.preview.error': 'The preview could not be loaded.',
+  /** Above an Office file's text, which the server extracted (002.11). */
+  'storage.preview.office.textOnly':
+    'Text only. Download the file for its original layout.',
+  'storage.preview.office.truncated':
+    'The text is cut short here. Download the file for the rest.',
   /** The preview's size and date line. */
   'storage.preview.meta': '{size} · changed {date}',
   'storage.preview.download': 'Download {name}',

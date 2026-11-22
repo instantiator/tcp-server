@@ -168,6 +168,9 @@ export const queryKeys = {
     ['storage', 'history', { companyId, path }] as const,
   storageFile: (companyId: string, path: string) =>
     ['storage', 'detail', { companyId, path }] as const,
+  /** An Office file's extracted text, for its preview (002.11). */
+  storageText: (companyId: string, path: string) =>
+    ['storage', 'detail', { companyId, path, as: 'text' }] as const,
 
   /** One company's active notifications, with the application-wide ones. A dismissal patches the row in place, so there is no separate detail key. */
   notifications: (companyId: string) =>

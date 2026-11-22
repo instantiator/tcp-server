@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useStorageFileBlob, type StorageFileEntryDTO } from '../../api/hooks';
+import { ApiError } from '../../api/errors';
+import {
+  useStorageFileBlob,
+  useStorageText,
+  type StorageFileEntryDTO,
+} from '../../api/hooks';
 import { t } from '../../strings';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { LoadingState } from '../LoadingState/LoadingState';
@@ -132,9 +137,53 @@ const MediaPreview = ({
 };
 
 /**
+ * An Office or OpenDocument file as the text the server extracted from it,
+ * rendered as Markdown under a line saying it is text only (002.11). Nothing
+ * of the file itself is parsed or run in the browser. A file the server
+ * can't read gives its reason.
+ */
+const OfficePreview = ({
+  companyId,
+  file,
+}: {
+  readonly companyId: string;
+  readonly file: StorageFileEntryDTO;
+}) => {
+  const query = useStorageText(companyId, file.path);
+  if (query.isError)
+    return (
+      <ErrorState
+        message={
+          query.error instanceof ApiError && query.error.status === 422
+            ? query.error.message
+            : t('storage.preview.error')
+        }
+        channel="storage"
+        onRetry={() => void query.refetch()}
+      />
+    );
+  if (query.data === undefined)
+    return <LoadingState label={t('storage.preview.loading')} />;
+  return (
+    <>
+      <p className="file-preview__note">
+        {t('storage.preview.office.textOnly')}
+      </p>
+      <Markdown text={query.data.markdown} />
+      {query.data.truncated && (
+        <p className="file-preview__note">
+          {t('storage.preview.office.truncated')}
+        </p>
+      )}
+    </>
+  );
+};
+
+/**
  * A stored file's content shown in place: markdown rendered, CSV as a table,
  * text literally (HTML included, never rendered), images and PDFs from an
- * object URL. Files with no preview, or too large, say so instead.
+ * object URL, Office files as their extracted text. Files with no preview,
+ * or too large, say so instead.
  */
 export const FilePreview = ({
   companyId,
@@ -145,7 +194,7 @@ export const FilePreview = ({
 }) => {
   const kind = previewKind(file.name, file.size);
   const query = useStorageFileBlob(companyId, file.path, {
-    enabled: kind !== 'none' && kind !== 'tooLarge',
+    enabled: kind !== 'none' && kind !== 'tooLarge' && kind !== 'office',
   });
 
   if (kind === 'none') return <p>{t('storage.preview.none')}</p>;
@@ -155,6 +204,8 @@ export const FilePreview = ({
         {t('storage.preview.tooLarge', { size: formatMegabytes(file.size) })}
       </p>
     );
+  if (kind === 'office')
+    return <OfficePreview companyId={companyId} file={file} />;
   if (query.isError)
     return (
       <ErrorState

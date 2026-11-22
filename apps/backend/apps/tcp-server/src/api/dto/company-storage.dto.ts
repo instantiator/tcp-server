@@ -46,6 +46,14 @@ export class StorageVersionDto {
   isLatest!: boolean;
 }
 
+/** `GET …/storage/text`: an Office file's text, for its preview (002.11). */
+export class StorageTextDto {
+  /** The file's text as Markdown. Untrusted: render it, never run it. */
+  markdown!: string;
+  /** Whether the text was cut at the extraction limit. */
+  truncated!: boolean;
+}
+
 /** Where an upload or restore landed. */
 export class StoredCompanyFileDto {
   /** Relative to the company folder. */

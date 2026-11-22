@@ -16,3 +16,8 @@ iframe.file-preview__media {
   height: 60vh;
   border: 0;
 }
+
+/* "Text only" above an Office file's extracted text, and "cut short" below. */
+.file-preview__note {
+  color: var(--tcp-color-text-muted);
+}
