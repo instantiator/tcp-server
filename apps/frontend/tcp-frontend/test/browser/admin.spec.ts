@@ -40,7 +40,8 @@ const getMachineToken = async (request: APIRequestContext): Promise<string> => {
  */
 const ADD_ROLE = 'Add role';
 const KNOWLEDGE_TAB = 'Knowledge';
-const UPLOAD = 'Upload a document';
+const UPLOAD = 'Upload';
+const UPLOAD_QUESTION = 'Upload 1 file to knowledge?';
 const SHARED_HEADING = 'Shared knowledge';
 const DELETE_ONE = 'Delete 1 selected role';
 const DELETE_CONFIRM = 'Delete';
@@ -118,14 +119,19 @@ test.describe('company administration', () => {
     const saved = page.getByRole('dialog', { name });
     await expect(saved).toBeVisible();
     await saved.getByRole('tab', { name: KNOWLEDGE_TAB }).click();
-    await saved.getByLabel(UPLOAD).setInputFiles({
-      name: 'notes.md',
-      mimeType: 'text/markdown',
-      buffer: Buffer.from('---\ntitle: Notes\n---\n\nSome notes.'),
-    });
-    await expect(
-      saved.getByRole('rowheader', { name: 'notes.md' }),
-    ).toBeVisible();
+    // The tab's storage browser takes the file after one question (002.10).
+    await saved
+      .locator('input[type=file]:not([webkitdirectory])')
+      .setInputFiles({
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        buffer: Buffer.from('---\ntitle: Notes\n---\n\nSome notes.'),
+      });
+    await page
+      .getByRole('alertdialog', { name: UPLOAD_QUESTION })
+      .getByRole('button', { name: UPLOAD, exact: true })
+      .click();
+    await expect(saved.getByRole('row', { name: /^notes\.md/ })).toBeVisible();
 
     await saved.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(saved).toHaveCount(0);
