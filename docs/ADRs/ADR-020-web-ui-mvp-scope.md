@@ -187,3 +187,7 @@ What is still deferred:
 - adding, editing and removing users, and the permission flags ([phase 06 002.01](<../prompts/phase%2006%20-%20web%20ui%20quality/002.01.00.prompt%20-%20company%20configuration%20view%20(draft).md>)).
 
 So onboarding a company still needs `tcp-cli` to create it; after that, its roles and knowledge can be set up in the browser.
+
+## Amendment as implemented (002.07, phase 04) <a id="amendment-as-implemented-p04-002-07"></a>
+
+[002.07](../prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md) retired the TUI. Point 2 above compared the web UI with `tcp-cli tui`'s multiple panes. That comparison is now history: the web UI is the live overview, and the CLI keeps `chat` and `eavesdrop` for the terminal.

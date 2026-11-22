@@ -283,3 +283,11 @@ amendment described — an agent waiting for a model slot, not stalled. See
 - **Volume.** That is one small event per records change. The client gathers them for 1s per company, then refetches the table summaries once and reads each _open_ table or search once. A table nobody has open costs one summary refetch.
 - **Recovery is still primed.** `CompanyPrimingService.prime` ends with `{entity: 'record', reason: 'replay'}`, which names no table, so a reconnect re-checks every open table and search. The client still holds no state across a reconnect.
 - **A `record` event never patches the cache.** `applyEvent` sends it to `recordChanged` before the generic path. What is on screen is compared with the fresh copy and is replaced only on Reload ([ADR-027](ADR-027-screen-reader-strategy.md#amendment-as-implemented-p04-001-05)).
+
+## Amendment as implemented (002.07, phase 04) <a id="amendment-as-implemented-p04-002-07"></a>
+
+[002.07](../prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md) showed consultations in the transcript without opening another stream. It applied the [008.02 budget policy](#amendment-as-implemented-00802) rather than changing it.
+
+- **A consultation costs no extra stream.** Everything the asking agent's transcript shows about it arrives on that agent's own stream: the pause carries the `question`, and when the consultation resolves the server records an `input` row (`source: 'consultation'`, with the consulted agent's id and role, and a `failed` flag) before the agent resumes. Opening the consulted agent's conversation ("Open conversation with {Role}") is a normal read-only chat view, so the usual one-stream-per-mounted-transcript rule applies.
+- **The consulted agent's reasoning is not merged inline.** That would need the server to merge the consulted agent's channel into the asking agent's stream. It is the third option in the plan's stream-budget list, and it waits until people ask for it. See [outstanding-issues.md](../outstanding-issues.md).
+- **`MAX_STREAMS = 12` stands.**

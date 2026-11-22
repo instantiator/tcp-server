@@ -421,12 +421,34 @@ the company default, because the DTO has no way to say "none".
 
 **Act when:** a user needs to clear a task's planner.
 
-## The TUI has no pause or resume keys
+## The Consultations list leaves out task consultations
 
-The TUI has `s` (start) and `c` (cancel) only. `pause-task` and `resume-task`
-exist in the CLI and the web dialog (000.04). The TUI is due to retire in 002.07.
+The web Consultations list shows consultations with no task. `hooks.ts`
+(`apps/frontend/tcp-frontend/src/api/hooks.ts`, about line 296) filters on
+`taskId: 'null'`, so a consultation made during a task's assignment is not
+listed there. It does show in the asking agent's transcript (002.07).
 
-**Act when:** 002.07 is dropped. Then add the keys.
+**Act when:** someone looks for a task's consultation in the list and can't
+find it. Then drop the filter, or add a task column.
+
+## No live view of the consulted agent's reasoning inside the asking transcript
+
+The asking agent's transcript shows the question and the answer (002.07). To
+see the consulted agent think, you open its conversation. The inline view
+would need the server to merge the consulted agent's events into the asking
+agent's stream while the consultation is pending: option 3 in the
+[002.07 plan's "Stream budget"](prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md#stream-budget-the-prompt-asked-for-options).
+
+**Act when:** people ask to watch the consulted agent's reasoning inline.
+
+## No live company-wide view in the terminal
+
+The TUI's roster was the only terminal view of a whole company's activity. It
+is gone (002.07). `eavesdrop` takes one agent, assignment or task, not a
+company.
+
+**Act when:** someone scripting asks for a company-wide live view. Add an
+`eavesdrop --company` verb.
 
 ## `sprintf-js` advisory has no fix (21 moderate `npm audit` findings)
 

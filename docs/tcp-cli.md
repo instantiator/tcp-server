@@ -93,7 +93,6 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`list-templates`](#list-templates)                         | `list-templates`                                                                                                                                                              | List the templates in the gallery                                                             |
 | [`template-source`](#template-source)                       | `template-source (list\|add <name> <owner/repo> [--ref <ref>] [--path <path>]\|remove <id>)`                                                                                  | Manage the gallery sources                                                                    |
 | [`chat`](#chat)                                             | `chat (-r <uuid>\|--role-slug <slug>) [-q <message>]`                                                                                                                         | Interactive or single-query chat with a role                                                  |
-| [`tui`](#tui)                                               | `tui (-c <uuid>\|--company-slug <slug>)`                                                                                                                                      | Open the full-screen TUI on a company's roster (no role required)                             |
 | [`list-knowledge`](#list-knowledge)                         | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                                                                                | List knowledge-base documents for a role or company (shared knowledge)                        |
 | [`get-knowledge`](#get-knowledge)                           | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                                                                                       | Get a knowledge-base document's content                                                       |
 | [`store-knowledge`](#store-knowledge)                       | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>] [--license <id>] [--source-url <url>] [--attribution <text>]`                        | Upload a document to a role or company knowledge base (converted to OKF Markdown server-side) |
@@ -410,13 +409,10 @@ confirmation before deleting. `--role-slug` requires `--company-id`/
 ### `chat`
 
 Initiate a conversation with an agent running a given role. `chat` always
-means a talkable session with a role — to browse a company's roster and pick
-a role interactively without committing to one up front, use
-[`tui`](#tui) instead.
+means a talkable session with a role.
 
 Conversation history is maintained server-side in the LangGraph checkpoint store.
-Every agent a chat session creates (the initial one, plus any started later from
-the roster) is deleted when the session ends. If the access token expires
+The agent a chat session creates is deleted when the session ends. If the access token expires
 mid-session, it is renewed automatically using the refresh token (provided via
 `-T` or obtained from the initial username+password grant).
 
@@ -429,8 +425,7 @@ is reported back to your agent, which decides how to proceed — you get a real 
 turn runs on the server and everything it does is streamed back live over the
 agent's Server-Sent Events stream (`GET /api/agent/:id/events`). The CLI opens
 that stream and renders each event until the terminal `completed` (or
-`failed`) event arrives — either in the full-screen TUI (default on a TTY) or
-as colour-coded scrolling text (piped output, or `--no-tui`); see below. The
+`failed`) event arrives, as colour-coded scrolling text; see below. The
 SSE parser and reader (`parseWireEvents`, `readWireStream`) live in
 `@tcp/shared`, not in tcp-cli itself — the same implementation is re-exported
 as `@tcp/shared/client` for the web client's event streams, so the two clients
@@ -438,191 +433,34 @@ cannot drift on what an event means (ADR-025).
 
 **Following consultations.** When your agent pauses to consult another role,
 the CLI automatically opens a second stream for the consulted agent and
-renders its activity too — as its own tab in the TUI, or interleaved into the
-plain renderer's output. Nested consultations are followed recursively either
-way.
+interleaves its activity into the output, on stderr. Nested consultations are
+followed recursively. The asking agent's own stream also carries each step of
+the consultation as a line of its own, see [Consultation lines](#consultation-lines).
 
-| Flag                        | Alias | Description                                                                                                           |
-| --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
-| `--role-id <uuid>`          | `-r`  | Role UUID for the agent                                                                                               |
-| `--role-slug <slug>`        |       | Role slug instead of `--role-id` (needs `--company-id`/`--company-slug`)                                              |
-| `--company-id <uuid>`       | `-c`  | Company UUID, to scope `--role-slug`                                                                                  |
-| `--company-slug <slug>`     |       | Company slug instead of `--company-id`                                                                                |
-| `--query <message>`         | `-q`  | Single question, auto-submitted on startup                                                                            |
-| `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                         |
-| `--no-tui`                  |       | Force the plain scrolling renderer, even on a TTY                                                                     |
-| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry expands to (TUI only; default 4, env `TCP_TASK_LIST_ENTRY_MAX_LINES`) |
+| Flag                    | Alias | Description                                                              |
+| ----------------------- | ----- | ------------------------------------------------------------------------ |
+| `--role-id <uuid>`      | `-r`  | Role UUID for the agent                                                  |
+| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (needs `--company-id`/`--company-slug`) |
+| `--company-id <uuid>`   | `-c`  | Company UUID, to scope `--role-slug`                                     |
+| `--company-slug <slug>` |       | Company slug instead of `--company-id`                                   |
+| `--query <message>`     | `-q`  | Single question, auto-submitted on startup                               |
+| `--hide-reasoning`      |       | Suppress the reasoning stream                                            |
 
 A role is required — `--role-id`, or `--role-slug` scoped to a company (role
 slugs are unique only within a company, not globally, so `--role-slug` needs
 one of the company flags alongside it; `--role-id` is self-sufficient and
-can't be combined with either). A bare company with no role is rejected —
-that's [`tui`](#tui)'s job.
+can't be combined with either). A bare company with no role is rejected.
 
 ```bash
-./tcp-cli.sh -t $TOKEN chat --company-slug acme --role-slug chicken-assistant --no-tui -q 'Tell me about yourself'
+./tcp-cli.sh -t $TOKEN chat --company-slug acme --role-slug chicken-assistant -q 'Tell me about yourself'
 ```
 
-#### Full-screen TUI (default on a TTY)
+#### Output
 
-When stdout is a real terminal, `chat` (both interactive and `-q`) opens a
-full-screen view instead of scrolling text — the same view [`tui`](#tui) opens
-directly on the roster, with no talkable tab. This section describes the view
-itself; see `chat` above and `tui` below for what each verb starts it with.
-
-- **Pane 0 is always the company roster** — labelled with the company's name,
-  opening with a `Slug: …` / `Id: …` heading and a "Please select a role to
-  initiate a chat:" prompt, then a blank line, then two lists: **Roles** (the
-  "initiate chat" list — role slugs aren't rendered yet, so this is just role
-  names, sorted alphabetically; see `--role-slug` elsewhere in this doc for
-  scripted access by slug) and **Tasks** (the company's tasks, grouped
-  **Active** — `ready`/`planning`/`in-progress`/`finalising` — and
-  **Completed / failed** — `succeeded`/`failed`/`cancelled` — each most
-  recently updated first, live-updating from the company's SSE stream; each
-  row is `<datetime> [<shortcode>] (<state>) "<request>"` — `<shortcode>` is
-  the task's short per-company identifier (`000`, `001`, …, assigned at
-  creation); a highlighted task expands its full prompt, word-wrapped up to
-  `--task-list-max-lines` lines). **Up/Down** moves one highlight across both
-  lists, cycling top↔bottom; **[** / **]** jump straight to the previous/next
-  list; the view scrolls to keep the highlight visible on a long list.
-  **Enter** starts a chat with a highlighted role, or opens the task panel
-  (below) for a highlighted task; **r** re-fetches the role list; **n** opens
-  the initiate-task form (below), regardless of which list is currently
-  highlighted. It has no input box, so these keys are free for navigation
-  rather than typing.
-- **The task panel** (Enter on a task) is labelled `Task: <shortcode>` in the
-  tab bar, and opens with `Task id:`/`Status:` (colour-coded like the
-  assignment rows below)/`Prompt:` (the prompt word-wrapped, continuation
-  lines indented under the opening quote), then an **Assignments** list split
-  into two groups — **Incomplete** (`ready`/`in-progress`/`in-qa`) and
-  **Complete** (`succeeded`/`failed`/`cancelled`) — one row per
-  plan/implement/qa/finalise assignment,
-  `n. <role> (<status>) [agent: <live status>] "<prompt>"`, the status
-  colour-coded (grey `ready`, cyan while active, green `succeeded`, red
-  `failed`, yellow `cancelled`), and word-wrapping the full prompt when
-  highlighted (up to `--task-list-max-lines` lines), same as the roster's own
-  task list. `n` is the assignment's position in the task's plan (`0` for the
-  planning assignment, an implement step's 1-based position, or — for a qa
-  row — the step it reviews) and stays fixed even once the row moves from
-  Incomplete to Complete. The `[agent: …]` segment shows the assignment's
-  working agent's own live status — `no agent yet` before one is dispatched,
-  `waiting to start` for an `idle` agent queued behind the worker pool on an
-  `in-progress` assignment (it hasn't stalled — it's waiting for a worker
-  slot), or its raw status (`running`/`paused`/`completed`/`failed`/
-  `cancelled`) otherwise — seeded when the panel opens and kept live from the
-  company's SSE stream (agent `state_change` rows), no refetch. The rest of
-  the panel updates live from the task's SSE stream. **Up/Down** moves the
-  highlight, skipping assignments that haven't begun yet (nothing to open)
-  and cycling across both groups; **Enter** opens the assignment panel
-  (below) for a highlighted, begun assignment; **c** cancels the task
-  (shown/active only while it's `planning`/`in-progress`/`finalising`); **s**
-  starts it (shown/active only while it's `ready`) — the panel updates from
-  the SSE stream after either, no manual refresh needed.
-- **The assignment panel** (Enter on a begun assignment in a task panel) is a
-  read-only scrollback of that assignment's working agent — no input box.
-  Labelled `Assignment: <shortcode>` in the tab bar when the assignment has
-  one (an orphan assignment — a plain chat or a consultation with no task —
-  falls back to the role name, same as any other tab). It opens with
-  `Agent id:` / `Role name (and slug):` / `Assignment id:` / `Assignment
-shortcode:` / `Assignment status:` (colour-coded the same way) / `Prompt:`
-  — the role slug and assignment fields render as `—` for a consultation
-  follower (not fetched, to keep following a live consultation cheap). A
-  still-running assignment streams live, the same as any other tab; a
-  finished one renders its full recorded history instead (reconstructed from
-  the audit log — every state change and the model's final response per turn,
-  though not its token-by-token reasoning, which isn't persisted).
-- **The initiate-task form** (`n` from the roster) is a fixed field list, not
-  a general form: **Prompt** (required; Enter to type, Enter again to commit,
-  Backspace to edit), **Planner role** (a list of the company's roles,
-  pre-selecting its default planner role if it has one; Enter to choose one),
-  **Expected outputs** (an add/remove list of filenames — zero is fine; Enter
-  on "+ Add expected output" to type one, **d** to remove a highlighted one),
-  and **Start task** (a `[ ]`/`[x]` checkbox, Enter to toggle; off by
-  default). **Up/Down** moves between fields; submitting with no prompt or no
-  role chosen shows an inline error instead of submitting. On success the form
-  is replaced (same tab, not a new one) by the new task's task panel, started
-  immediately if the checkbox was on.
-- **One tab per other monitored agent** — the root agent (`chat` only; it
-  opens immediately alongside the roster and becomes active), one per role
-  chatted with from the roster, one per assignment opened from a task panel,
-  and one per consultation any agent triggers, added live as
-  `consultation_started` events arrive. Switch tabs with **Tab** /
-  **Shift+Tab**; the active tab is shown in bold/bright colour. **Ctrl+W**
-  closes the active tab (any tab except the roster, which is permanent) — for
-  a talkable tab this also aborts its turn if one is in flight and deletes its
-  agent; closing a spectator tab (a consultation follower or an assignment
-  panel) just stops watching it. Closing the last agent tab leaves you back on
-  the roster.
-- **Independent scrollback per tab** — each agent's events accumulate in its
-  own pane, opening with the assignment-panel heading described above;
-  switching tabs doesn't lose or interleave another agent's output, unlike
-  the plain renderer's single interleaved stream. Scroll with
-  **PgUp/PgDn** (or the mouse wheel); scrolling up stops the view following
-  new output, paging back to the bottom resumes it. On spectator tabs the
-  arrow keys and Home/End scroll too. A blank row always separates the tab
-  bar from a pane's content.
-- **Input box only on talkable tabs** — the root agent's tab and any tab
-  started from the roster show an input line (`> `); consultation and
-  assignment-chat tabs are spectate-only, and the roster/task/initiate-task
-  panels have none (see above). This includes `-q` mode: the root tab's input
-  is present but disabled while the query's turn is in flight, the same as any
-  busy talkable tab (see below). **Enter** sends; **Alt+Enter** inserts a line
-  break (Shift+Enter can't — terminals send the same byte for Shift+Enter and
-  Enter); arrow keys, Home/End, and Backspace/Delete edit as usual. Your sent
-  message renders into the pane as an `input` block when its audit event
-  arrives over the stream (not echoed locally), so a scrolled-back tab shows
-  what was asked as well as the answer. While a turn is in flight, that tab's input still accepts typing
-  but won't submit until the response arrives (its hint row says `waiting for
-response…`) — other tabs are unaffected and can run turns concurrently. A
-  mid-typed draft survives switching tabs, tracked independently per tab. The
-  terminal's own text cursor only ever appears on an enabled input box — it's
-  hidden everywhere else (the roster, spectator tabs, a busy talkable tab),
-  rather than lingering wherever it last was.
-- Events render as `hh:mm:ss | event_type | text`, blank-line separated;
-  reasoning deltas render specially — indented two spaces, no columns, grey,
-  word-wrapped — with a blank line whenever reasoning is interrupted by
-  another event or resumes afterwards. A whitespace-only or empty response
-  renders as `(blank)` rather than an empty line, so it's obvious the agent
-  genuinely returned no content.
-- **The bottom row always shows the active keybindings** for the current
-  tab, in priority order — on a narrow terminal the least important hints
-  (e.g. scrolling) drop first rather than truncating mid-word, so `Ctrl+C
-quit` and the tab's primary action are always visible.
-- **F1** (or **Ctrl+G**) opens a help tab listing every keybinding, from any
-  pane — Ctrl+G is a fallback for when F1 never reaches the terminal at all
-  (e.g. it's bound to brightness on Mac laptops unless Fn is held). Unlike
-  other tabs it self-closes — **Tab**, **Shift+Tab**, or **Esc** away from it
-  removes it outright (landing on a sensible neighbouring tab) rather than
-  leaving it around like a normal tab; **Ctrl+W** closes it too.
-- **Ctrl+C**: while any turn is in flight, stops watching all of them (the
-  agents keep running server-side) and returns to the prompt. At the idle
-  prompt, tears down the TUI, cleans up every agent created this session, and
-  exits — the same two-stage behaviour as the plain renderer's Ctrl+C.
-- Typing `exit` or `quit` in a talkable tab's input box ends the whole
-  session, same as the plain renderer.
-
-**`-q`/`--query` at a TTY** also opens the TUI: the message is submitted
-automatically on startup, but the query is otherwise just the first message of
-a normal interactive session — the response renders into the root pane like
-any other turn, and the TUI **stays open afterward** rather than exiting the
-moment the answer arrives, so it isn't lost if you want to ask a follow-up.
-Leave the same way as any other session (Ctrl+C, or `exit`/`quit`). Piped
-output (or `--no-tui`) keeps the original one-shot behaviour: print the final
-answer to stdout and exit, unchanged — see the plain renderer section below.
-
-```bash
-./tcp-cli.sh -t $TOKEN chat -r <roleId>
-# (full-screen TUI opens; type at the bottom input line, Tab/Shift+Tab to
-# switch tabs if a consultation is in progress, Ctrl+C or 'exit' to leave)
-```
-
-#### Plain renderer (piped output, or `--no-tui`)
-
-When stdout is piped/redirected, or `--no-tui` is passed, output stays as
-colour-coded, blank-line-separated scrolling text rendered through the same
-shared render library `eavesdrop` and the TUI panes use (so all three agree on
-formatting) — this is also the only mode compatible with piping the final
-answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
+Output is colour-coded, blank-line-separated scrolling text. It is rendered
+through the same shared render library `eavesdrop` uses, so the two agree on
+formatting. Piping the final answer to another command works. Every line/block
+is prefixed `hh:mm:ss | <label> |`:
 
 - **`input`** — your typed message, rendered when its `input` audit event
   arrives over the stream (the CLI no longer echoes it locally — one rendering
@@ -639,7 +477,21 @@ answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
   stdout so it stays pipeable. A whitespace-only or empty response renders as
   `(blank)`.
 
-**Single-query mode** (`-q` provided, piped or `--no-tui`):
+##### Consultation lines
+
+When the agent consults another role, `chat` and `eavesdrop` print the same
+lines the web transcript shows:
+
+- **`consultation:asked <Role>`** — the agent asked that role a question; the
+  question is the text.
+- **`consultation:<Role> answered`** — the answer arrived, before the agent
+  resumes.
+- **`consultation:<Role> couldn't answer`** — the consultation failed; the
+  text is the reason.
+- **`input:from <Role>`** — in the consulted agent's own view (for example
+  `eavesdrop --agent-id <consultedId>`), the question it was asked.
+
+**Single-query mode** (`-q` provided):
 
 - **stdout**: the agent's final response (once, so the output stays pipeable)
 - **stderr**: the live streamed blocks (state, reasoning, response progress)
@@ -649,7 +501,7 @@ answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
 ./tcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?" | tee answer.txt
 ```
 
-**Interactive mode** (no `-q`, piped or `--no-tui`):
+**Interactive mode** (no `-q`):
 
 - Enters a readline prompt (`> `)
 - User types messages; the streamed blocks render live, the response on stdout
@@ -660,7 +512,7 @@ answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
 - The agent is always cleaned up on a clean exit.
 
 ```bash
-./tcp-cli.sh -t $TOKEN chat -r <roleId> --no-tui
+./tcp-cli.sh -t $TOKEN chat -r <roleId>
 # > Tell me about Q3 trends.
 #
 # 14:03:20 | input | Tell me about Q3 trends.
@@ -678,31 +530,6 @@ answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
 # Agent state: completed
 # > exit
 # Agent <id> removed.
-```
-
-### `tui`
-
-Opens the full-screen TUI ([described above](#full-screen-tui-default-on-a-tty))
-straight onto a company's roster — no role required, and no agent started.
-Pick a role there (Up/Down, Enter) to start chatting, open a task (Enter) to
-see its assignments, or press **n** to initiate a new one. The dedicated way
-to browse a company without committing to a role up front; [`chat`](#chat)
-always requires one.
-
-| Flag                        | Alias | Description                                                                                                                            |
-| --------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `--company-id <uuid>`       | `-c`  | Company UUID                                                                                                                           |
-| `--company-slug <slug>`     |       | Company slug instead of `--company-id`                                                                                                 |
-| `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                                          |
-| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry (or task-panel assignment) expands to (default 4, env `TCP_TASK_LIST_ENTRY_MAX_LINES`) |
-
-Requires a TTY — there is no piped/plain-renderer fallback, since the whole
-point of this verb is the interactive roster.
-
-```bash
-./tcp-cli.sh -t $TOKEN tui --company-slug acme
-# (opens straight onto the company's roster — no agent yet; Up/Down to pick a
-# role or a task, Enter to open it, 'n' to initiate a new task)
 ```
 
 ### `list-knowledge`
@@ -1393,7 +1220,7 @@ combined (history prints first, then the tail follows).
 
 - **stdout**: history (`--show-history`) and the live tail (`--tail`) render
   through **one shared pipeline** (the `apps/backend/apps/tcp-cli/src/lib/render/` library,
-  the same one `chat` and the `tui` panes use), so replayed history is
+  the same one `chat` uses), so replayed history is
   line-for-line identical to eavesdropping the same activity live. A scope
   heading block is printed whenever the active `(task, assignment, agent)`
   scope changes (a `--task-id` view spans several):

@@ -18,11 +18,11 @@
 
 - MCP tools are usable, but not easily configurable
   - manage roles: add and remove MCP configurations
-    - both TUI and UI
+    - web UI and CLI (the TUI was retired in 002.07)
     - use a common format
     - offer a library of known MCP services
       - API
-      - TUI
+      - CLI
       - web ui should have a nice catalog interface
         - searchable
 

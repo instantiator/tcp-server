@@ -972,6 +972,35 @@ JSON in a "Full JSON" disclosure. The CLI still prints the JSON.
 **Follow** (on by default) keeps the newest entry in view. Scrolling away from
 the bottom turns it off; pressing it again scrolls back down (`useFollow`).
 
+### Consultations in the transcript
+
+When an agent consults another role, its transcript shows each step as an
+entry with a quote bar (a left border from the theme tokens):
+
+- **"Asked {Role}"** with the question. Under it, a "{Role} is working on it…"
+  line shows until the answer arrives. The line is plain text, not an
+  animation. Two consultations at once wait independently.
+- **"{Role} answered"** or **"{Role} couldn't answer"** with the text, which
+  renders as markdown like any response.
+- **"Open conversation with {Role}"** on each entry. It calls
+  `openChat({ readOnly: true })` for the consulted agent, so its conversation
+  opens in the chat dialog's listen-in list. Its first message is the
+  question. The button is left out when there is no chat dialog (no
+  `ChatContext`).
+
+No extra stream is used. The question rides the asking agent's `consultation`
+pause event, and the answer is an `input` row the server records on the
+asking agent when the consultation resolves. The shared renderers turn both
+into `consultation` entries (`libs/tcp-shared/src/transcript/`). The waiting
+state is worked out in `Transcript.tsx` from the entries. See the
+[ADR-025 amendment](ADRs/ADR-025-browser-event-stream-consumption.md#amendment-as-implemented-p04-002-07).
+
+Announcements follow the arrival-only policy. Each step is announced once, by
+role only: "Consulting {Role}", then "{Role} answered" or "{Role} couldn't
+answer". The body is not read out. Responses and consultation steps share one
+announcer guarded by event id, so StrictMode cannot announce twice. See the
+[ADR-027 amendment](ADRs/ADR-027-screen-reader-strategy.md#amendment-as-implemented-p04-002-07).
+
 ## The task dialog
 
 `TaskDialog` shows a task's details, a collapsible panel per assignment, and

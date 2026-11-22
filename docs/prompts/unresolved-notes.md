@@ -123,7 +123,7 @@ Testable: `docs/glossary.md`'s OKF entry still names only `title`.
 
 Before 002.04 the company channel carried only `company` and `task` rows —
 `CompanyEventService`'s comment said agent and assignment rows were filtered out
-deliberately, to protect the roster TUI from volume. Widening the predicate to
+deliberately, to protect the roster TUI from volume (the TUI was retired in 002.07). Widening the predicate to
 five entities removed that protection: an agent's every status transition now
 fans out to every open company stream.
 
@@ -818,7 +818,7 @@ Five deliberate shortcuts, each marked `ponytail:` in the office view's code and
 
 Testable: grep `ponytail:` under `apps/frontend/tcp-frontend/src/visualisation/` for each.
 
-## CLI, TUI and setup
+## CLI and setup
 
 ### Set-embedding-model script never built
 
@@ -835,24 +835,6 @@ Testable: grep `scripts/` and `package.json` for `set-embedding-model` — there
 Twice during phase 01, a plan found that `tcp-cli` has no way to remember "my usual company" between commands — every command needs `--company`/`--role` explicitly, or it errors immediately. Both times it was explicitly ruled out of scope rather than built.
 
 Testable: run any `tcp-cli` command with only `--role` as a slug and no `--company` — it errors rather than falling back to a remembered default.
-
-### The TUI seeds active agents only, so a finished agent's task pane starts blank
-
-**Raised by:** phase 03, 002.02 · **Condition to revisit:** a task pane shows a blank agent status for an assignment with a live (non-terminal) agent
-
-The TUI's task panel seeds each assignment's `[agent: …]` label from
-`GET /api/agent?companyId=`, which lists active agents only — an agent whose
-assignment is already `succeeded`/`failed`/`cancelled` isn't in that list,
-so its pane opens with no agent label. This wasn't treated as a gap: the
-assignment's own status already shows the outcome, and every state after
-that point is covered live from the company's SSE stream. The condition
-above is deliberately narrower than "any finished agent" — it only needs
-revisiting if a pane ever shows blank for an agent that's actually still
-running, which seeding-from-the-active-list would not explain.
-
-Testable: open a task pane for an assignment whose agent is currently
-`running`, `paused` or `in-qa` and check the `[agent: …]` label is never
-blank.
 
 ### Setup wizard follow-ups
 
@@ -879,14 +861,6 @@ It was left manual deliberately: a committed bind mount pointing at a directory
 most people won't have is its own failure mode. If the warning turns out to bite
 often enough, the answer is probably a `docker-compose.local-certs.yml` overlay
 and a `--certs` flag, matching `--dev-ports` and `--dev-web`.
-
-### Dead CLI log-format helpers left behind by the 008.01 transcript refactor
-
-**Raised by:** phase 02, 008.01 · **Condition to revisit:** someone next touches `agent-log-format.ts` or does a dead-code sweep of `tcp-cli`
-
-When the transcript renderers moved to `libs/tcp-shared/src/transcript/` in 008.01, only three helpers moved with them. Four others were left behind in the CLI's own `agent-log-format.ts` because nothing else in that file needed to move, but they'd already lost their only caller. The plan flagged them as "worth a sweep" and then nobody swept them.
-
-Testable: `grep -rn "shortId\|JsonDeltaFormatter\|LogHeadingTracker" apps/backend/apps/tcp-cli/src` matches only the definition file and its spec.
 
 ## Tests and tooling
 

@@ -26,7 +26,7 @@ The other big gaps I can see are:
 
 Please assess the above, and think about what I may have missed. Build a list of all the gaps (these and any you think should be added to the list).
 
-Please also sift through what the web UI offers today, and what the feature gap is between this and the TUI. Eventually, I hope to deprecate the TUI in favour of being able to do everything through the web interface or individual CLI commands.
+Please also sift through what the web UI offers today, and what the feature gap is between this and the TUI (since retired, in 002.07). Eventually, I hoped to deprecate the TUI in favour of being able to do everything through the web interface or individual CLI commands.
 
 Store the full list as: `prompts/phase 04 - utility/usage.gaps.md`
 
