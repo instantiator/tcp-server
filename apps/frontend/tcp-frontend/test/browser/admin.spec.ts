@@ -323,6 +323,8 @@ test.describe('role memories', () => {
       .getByRole('textbox', { name: MEMORY_FIELD, exact: true })
       .fill('Tea is £3 a box');
     await add.getByRole('button', { name: SAVE, exact: true }).click();
+    // A save that never returns (e.g. no embedding model reachable) fails here.
+    await expect(add).toBeHidden();
     const added = roleDialog.getByRole('rowheader', {
       name: 'Tea is £3 a box',
     });
