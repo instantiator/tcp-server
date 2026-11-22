@@ -23,15 +23,15 @@ const MAX_TREE_LINES = 200;
 /** Most "did you mean" candidates named in a not-found reply. */
 const MAX_SUGGESTIONS = 3;
 
-/** Extensions that can't be shown as text. */
+/**
+ * Extensions that can't be shown as text. Office, OpenDocument and PDF files
+ * aren't here: tcp-server extracts their text on read (002.11). Legacy Office
+ * formats are, as nothing reads them.
+ */
 const BINARY_EXTENSIONS = new Set([
-  'pdf',
   'doc',
-  'docx',
   'xls',
-  'xlsx',
   'ppt',
-  'pptx',
   'png',
   'jpg',
   'jpeg',

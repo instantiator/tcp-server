@@ -146,18 +146,23 @@ export class S3ObjectStore {
     }
   }
 
-  /** Reads an object as UTF-8 text, or `null` when it does not exist. */
-  async getText(key: string): Promise<string | null> {
+  /** Reads an object's bytes, or `null` when it does not exist. */
+  async getBuffer(key: string): Promise<Buffer | null> {
     try {
       const resp = await this.client.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       );
-      const buf = await streamToBuffer(resp.Body as Readable);
-      return buf.toString('utf-8');
+      return await streamToBuffer(resp.Body as Readable);
     } catch (err) {
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  }
+
+  /** Reads an object as UTF-8 text, or `null` when it does not exist. */
+  async getText(key: string): Promise<string | null> {
+    const buf = await this.getBuffer(key);
+    return buf === null ? null : buf.toString('utf-8');
   }
 
   /** Object metadata, or `null` when it does not exist. */

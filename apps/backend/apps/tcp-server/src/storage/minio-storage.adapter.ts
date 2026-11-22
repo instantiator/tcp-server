@@ -9,11 +9,13 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodePath from 'path';
 import { Readable } from 'stream';
 import { analyzeContent } from './content-analysis';
+import { DEFAULT_LIMITS, extractText, isExtractable } from './document-text';
 import { DocumentValidationException } from './document-validation.exception';
 import { S3ObjectStore } from './s3-object-store';
 import { StorageSideEffects } from './storage-side-effects.service';
@@ -247,9 +249,27 @@ export class MinioStorageAdapter
     await this.effects.triggerReindex(key);
   }
 
+  /**
+   * A file's text. An Office, OpenDocument or PDF file is extracted to
+   * Markdown first (002.11), headed by a line saying so, since decoding its
+   * bytes as UTF-8 would give noise; everything else reads as stored.
+   */
   async readFile(path: string): Promise<string | null> {
     assertValidStoragePath(path);
-    return this.store.getText(path);
+    if (!isExtractable(path)) return this.store.getText(path);
+    const head = await this.store.head(path);
+    if (head === null) return null;
+    const name = nodePath.basename(path);
+    if ((head.size ?? 0) > DEFAULT_LIMITS.maxInputBytes) {
+      throw new PayloadTooLargeException(`${name} is too large to read.`);
+    }
+    const bytes = await this.store.getBuffer(path);
+    if (bytes === null) return null;
+    const { markdown, truncated } = await extractText(name, bytes);
+    const cut = truncated
+      ? `\n\n(Cut short here: ${name} has more text than can be read at once.)`
+      : '';
+    return `(Text extracted from ${name}; its layout and images are lost.)\n\n${markdown}${cut}`;
   }
 
   async writeFile(

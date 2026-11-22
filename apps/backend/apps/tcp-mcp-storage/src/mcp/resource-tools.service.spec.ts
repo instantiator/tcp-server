@@ -280,11 +280,20 @@ describe('ResourceToolsService', () => {
     });
 
     it('refuses a binary file that exists, without reading it', async () => {
-      store.set(`${LIVE}brochure.PDF`, 'bytes');
-      expect(await callTool('read_resource', { path: 'brochure.PDF' })).toBe(
-        "'brochure.PDF' is a binary file and can't be read as text.",
+      store.set(`${LIVE}brochure.PPT`, 'bytes');
+      expect(await callTool('read_resource', { path: 'brochure.PPT' })).toBe(
+        "'brochure.PPT' is a binary file and can't be read as text.",
       );
       expect(posts('read')).toHaveLength(0);
+    });
+
+    it('reads an Office or PDF resource through the server, which extracts its text', async () => {
+      // The fake server stands in for tcp-server's extraction.
+      store.set(`${LIVE}prices.xlsx`, '| Tea | 3 |');
+      expect(await callTool('read_resource', { path: 'prices.xlsx' })).toBe(
+        '| Tea | 3 |',
+      );
+      expect(posts('read')).toHaveLength(1);
     });
 
     it('reports a missing binary file as not found', async () => {

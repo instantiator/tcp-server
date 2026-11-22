@@ -13,7 +13,10 @@ import type { UUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
+import { StorageService } from '../../../apps/tcp-server/src/storage/storage.service';
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 
@@ -38,6 +41,7 @@ describe('Storage scope + append (e2e)', () => {
   let company: TcpCompany;
   let role: TcpRole;
   let task: TcpTask;
+  let storage: StorageService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -51,6 +55,7 @@ describe('Storage scope + append (e2e)', () => {
     taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
     assignmentRepo = moduleFixture.get(getRepositoryToken(TcpAssignment));
     agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
+    storage = moduleFixture.get(StorageService);
 
     company = await companyRepo.save(
       companyRepo.create({
@@ -143,6 +148,37 @@ describe('Storage scope + append (e2e)', () => {
       .set('X-Internal-Api-Key', INTERNAL_KEY)
       .send({ path: key });
     expect((readRes.body as { content: string }).content).toBe('# Report\n');
+  });
+
+  it('reads an Office material as its extracted text, and refuses to write text over it', async () => {
+    const key = `${company.slug}/tasks/${task.id}/materials/price-list.docx`;
+    const docx = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../../apps/tcp-server/src/storage/__fixtures__/price-list.docx',
+      ),
+    );
+    await storage.putByKey(
+      key,
+      docx,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+
+    const readRes = await request(app.getHttpServer())
+      .post('/internal/storage/read')
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ path: key });
+    expect(readRes.status).toBe(201);
+    const { content } = readRes.body as { content: string };
+    expect(content).toContain('Text extracted from price-list.docx');
+    expect(content).toContain('# Price list');
+    expect(content).toContain('| Tea | 3 |');
+
+    await request(app.getHttpServer())
+      .post('/internal/storage/append')
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ path: key, content: 'more' })
+      .expect(415);
   });
 
   it('renames a working file via /internal/storage/move and 404s reading the old key', async () => {
