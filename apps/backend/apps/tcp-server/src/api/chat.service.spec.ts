@@ -527,7 +527,7 @@ describe('ChatService', () => {
     expect(responseIndex).toBeLessThan(terminalIndex);
   });
 
-  it('passes the real agentId/companyId as MCP tool context, not LLM-suppliable values', async () => {
+  it('passes the real agentId/companyId/roleId as MCP tool context, not LLM-suppliable values', async () => {
     const agent = makeAgent({ threadId: null });
     const role = makeRole();
     agentRepo.findOneBy.mockResolvedValue(agent);
@@ -538,7 +538,7 @@ describe('ChatService', () => {
     expect(mcpClient.loadTools).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),
-      { agentId: agent.id, companyId: agent.companyId },
+      { agentId: agent.id, companyId: agent.companyId, roleId: role.id },
     );
   });
 

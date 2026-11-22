@@ -60,6 +60,7 @@ export * from './llm/render-template';
 export * from './llm/resolve-env-llm-config';
 export * from './llm/prompt-vars';
 export * from './llm/default-system-prompt-template';
+export * from './memory/memory-limits';
 export * from './rag/embedding.service';
 export * from './rag/knowledge-retrieval.service';
 export * from './rag/resolve-env-embedding-config';

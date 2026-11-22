@@ -31,7 +31,7 @@ import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { AddRowDialog } from './AddRowDialog';
 import { DeleteRowsDialog } from './DeleteRowsDialog';
 import { describeChanges } from './describeChanges';
-import { OutOfDateNotice } from './OutOfDateNotice';
+import { OutOfDateNotice } from '../OutOfDateNotice/OutOfDateNotice';
 import type { StaleRow } from './RecordSheet';
 import { retentionSummary } from './retention';
 import { RecordTableActions } from './RecordTableActions';

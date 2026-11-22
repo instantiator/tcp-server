@@ -247,7 +247,10 @@ describe('AgentLoopService', () => {
         },
         {
           provide: KnowledgeRetrievalService,
-          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+          useValue: {
+            retrieve: jest.fn().mockResolvedValue([]),
+            retrieveMemories: jest.fn().mockResolvedValue([]),
+          },
         },
         {
           provide: McpClientService,
@@ -316,6 +319,8 @@ describe('AgentLoopService', () => {
     opts: {
       llmConfig?: LlmConfig;
       companyLlmConfig?: LlmConfig;
+      embeddingConfig?: LlmConfig;
+      mcpServerToggles?: TcpRole['mcpServerToggles'];
       systemPromptTemplate?: string;
       mode?: TcpAssignment['mode'];
       materials?: TcpAssignment['materials'];
@@ -334,6 +339,7 @@ describe('AgentLoopService', () => {
         name: 'ACME',
         description: 'A Company that Makes Everything',
         llmConfig: opts.companyLlmConfig,
+        embeddingConfig: opts.embeddingConfig,
       }),
     );
     const role = await roleRepo.save(
@@ -343,6 +349,7 @@ describe('AgentLoopService', () => {
         name: 'analyst',
         description: 'Analyses.',
         llmConfig: opts.llmConfig,
+        mcpServerToggles: opts.mcpServerToggles,
         systemPromptTemplate:
           opts.systemPromptTemplate ?? 'You are {{name}} as of {{date}}.',
       }),
@@ -541,7 +548,7 @@ describe('AgentLoopService', () => {
     expect(mcpClient.loadTools).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),
-      { agentId: agent.id, companyId: agent.companyId },
+      { agentId: agent.id, companyId: agent.companyId, roleId: agent.roleId },
       expect.objectContaining({ required: true }),
     );
   });
@@ -675,15 +682,45 @@ describe('AgentLoopService', () => {
       expect(bindTools).toHaveBeenCalledWith(expect.any(Array), {});
     });
 
-    it('drops memory from the loaded MCP servers and skips RAG retrieval when the role has no indexed knowledge', async () => {
+    const EMBEDDING_CONFIG: LlmConfig = {
+      provider: 'lm-studio',
+      model: 'nomic-embed-text',
+    };
+
+    it('keeps memory among the loaded MCP servers, and skips RAG retrieval, for a role with no indexed knowledge', async () => {
       ragProvider.hasKnowledge.mockResolvedValueOnce(false);
-      const { agent } = await seedAgentAndRole();
+      const { agent } = await seedAgentAndRole({
+        llmConfig: TEST_LLM_CONFIG,
+        embeddingConfig: EMBEDDING_CONFIG,
+      });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
+      expect(serverNames).toContain('memory');
+      expect(knowledgeProvider.retrieve).not.toHaveBeenCalled();
+    });
+
+    it('drops memory from the loaded MCP servers when the company has no embedding config', async () => {
+      const { agent } = await seedAgentAndRole({ llmConfig: TEST_LLM_CONFIG });
 
       await service.run(agent.id, undefined, new AbortController());
 
       const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
       expect(serverNames).not.toContain('memory');
-      expect(knowledgeProvider.retrieve).not.toHaveBeenCalled();
+    });
+
+    it('drops memory from the loaded MCP servers when the role toggles it off', async () => {
+      const { agent } = await seedAgentAndRole({
+        llmConfig: TEST_LLM_CONFIG,
+        embeddingConfig: EMBEDDING_CONFIG,
+        mcpServerToggles: { memory: false },
+      });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
+      expect(serverNames).not.toContain('memory');
     });
   });
 

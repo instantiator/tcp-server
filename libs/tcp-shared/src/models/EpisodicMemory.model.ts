@@ -5,12 +5,12 @@ import {
   Entity,
   Index,
   PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 
 /**
- * A single agent-authored memory entry stored for later recall.
- * The embedding vector is stored in a `vector(768)` column managed via raw SQL
- * (pgvector extension) — not mapped by TypeORM.
+ * One thing a role remembers, written by an agent (`remember`) or a person
+ * (the role's Memories tab), and recalled by semantic similarity.
  */
 @Entity()
 @Index(['companyId', 'roleId'])
@@ -55,6 +55,14 @@ export class EpisodicMemory {
   @CreateDateColumn()
   createdAt!: Date;
 
-  // NOTE: The `embedding vector(768)` column exists in the database (added by migration
-  // AddEpisodicMemory) but is intentionally absent here — all vector operations use raw SQL.
+  /** When this memory was last changed. */
+  @UpdateDateColumn()
+  updatedAt!: Date;
+
+  /** Goes up by one on every edit, so an open table can tell a row changed. */
+  @Column({ default: 1 })
+  version!: number;
+
+  // The `embedding` column (pgvector, sized by `EMBEDDING_DIMENSION`) is left
+  // unmapped on purpose: every vector read and write is raw SQL.
 }

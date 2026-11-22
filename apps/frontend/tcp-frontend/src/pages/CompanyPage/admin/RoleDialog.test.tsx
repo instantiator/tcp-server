@@ -170,6 +170,9 @@ describe('RoleDialog', () => {
       expect(
         screen.getByRole('tab', { name: t('admin.role.tab.knowledge') }),
       ).toBeEnabled();
+      expect(
+        screen.getByRole('tab', { name: t('admin.role.tab.memories') }),
+      ).toBeEnabled();
       expect(announce).toHaveBeenCalledWith({
         channel: 'role-dialog',
         change: 'admin.role.announce.created',
@@ -215,10 +218,13 @@ describe('RoleDialog', () => {
       expect(await sentBodies()).toEqual([]);
     });
 
-    it('disables the Knowledge tab and says why', async () => {
+    it('disables the Knowledge and Memories tabs and says why', async () => {
       render_(null);
       expect(
         await screen.findByRole('tab', { name: t('admin.role.tab.knowledge') }),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(
+        screen.getByRole('tab', { name: t('admin.role.tab.memories') }),
       ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByText(t('admin.role.knowledgeDisabled')),

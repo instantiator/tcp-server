@@ -7,6 +7,9 @@ describe('memoryPrompts loader', () => {
     'no_embedding_config_store',
     'no_results',
     'memory_stored',
+    'memory_replaced',
+    'memory_duplicate',
+    'memory_replace_not_found',
   ];
 
   it.each(keys)('"%s" is a non-empty string', (key) => {
@@ -16,5 +19,11 @@ describe('memoryPrompts loader', () => {
 
   it('memory_stored contains the {{id}} placeholder', () => {
     expect(memoryPrompts.memory_stored).toContain('{{id}}');
+  });
+
+  it('memory_duplicate quotes the existing memory and names `replaces`', () => {
+    expect(memoryPrompts.memory_duplicate).toContain('{{id}}');
+    expect(memoryPrompts.memory_duplicate).toContain('{{content}}');
+    expect(memoryPrompts.memory_duplicate).toContain('`replaces`');
   });
 });

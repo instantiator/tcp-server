@@ -8,7 +8,11 @@
 
 Each tool call creates a fresh MCP session so no state is shared across requests. The server exposes `GET /health` (checks PostgreSQL connectivity) and `POST /mcp`.
 
-Every tool call writes `tool_call` and `tool_result` audit events to tcp-server via the internal audit endpoint.
+Every tool call writes a `tool_call` audit event to tcp-server via the internal audit endpoint. No `tool_result` event is written.
+
+**Who gets it.** Memory is offered to every agent whose company resolves an embedding model (the company's `embeddingConfig`, or the `EMBEDDING_*` environment fallback). A role does not need a knowledge base. A role can switch memory off with `mcpServerToggles: { memory: false }`.
+
+**Injected arguments.** The MCP client injects `agentId`, `companyId` and `roleId` and hides them from the model. A tool argument named `roleId` therefore always means the caller's own role, so an agent can neither name nor reach another role's memories.
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect, and [ADR-006](ADRs/ADR-006-agent-memory-architecture.md) for the full memory architecture design.
 
@@ -16,12 +20,12 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                    | Signature                                               | Description                                           |
-| --------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
-| [`describe_server`](#describe_server)   | `describe_server()`                                     | Overview of the memory service and its tools          |
-| [`recall`](#recall)                     | `recall(roleId, companyId, query, top_k?)`              | Search episodic memory + knowledge base by similarity |
-| [`remember`](#remember)                 | `remember(roleId, companyId, content, agentId?, tags?)` | Store a new episodic memory entry                     |
-| [`search_knowledge`](#search_knowledge) | `search_knowledge(roleId, companyId, query, top_k?)`    | Search the role knowledge base only                   |
+| Tool                                    | Signature                                                          | Description                                           |
+| --------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| [`describe_server`](#describe_server)   | `describe_server()`                                                | Overview of the memory service and its tools          |
+| [`recall`](#recall)                     | `recall(roleId, companyId, query, top_k?)`                         | Search episodic memory + knowledge base by similarity |
+| [`remember`](#remember)                 | `remember(roleId, companyId, content, agentId?, tags?, replaces?)` | Store a new episodic memory entry                     |
+| [`search_knowledge`](#search_knowledge) | `search_knowledge(roleId, companyId, query, top_k?)`               | Search the role knowledge base only                   |
 
 ---
 
@@ -52,7 +56,7 @@ Runs a hybrid semantic search across both episodic memory (`episodic_memory` tab
 | `query`     | string  | yes      | Natural-language search query                          |
 | `top_k`     | integer | no       | Maximum number of results to return (default: 5)       |
 
-**Returns:** Formatted results listing source, content, and cosine similarity score for each match. Returns a "no results" message if nothing is above the similarity threshold.
+**Returns:** Formatted results listing source, content, and cosine similarity score for each match. Episodic results show `memory: <id>`, which is the id an agent passes to `remember` as `replaces`. Episodic search is filtered by role and by company. Returns a "no results" message if nothing is above the similarity threshold.
 
 **Behaviour when no embedding config exists:** Returns an informative message directing the agent to use the RAG context already injected into its initial prompt instead.
 
@@ -64,23 +68,30 @@ Runs a hybrid semantic search across both episodic memory (`episodic_memory` tab
 
 ## `remember`
 
-Stores a short piece of information in the role's episodic memory. The content is embedded using the company's embedding model and stored in the `episodic_memory` table for future `recall` searches.
+Stores one short fact for future runs of the role: something learned, a user's preference, or a correction. The content is embedded using the company's embedding model and stored in the `episodic_memory` table for future `recall` searches.
 
 **Arguments:**
 
-| Parameter   | Type     | Required | Description                                            |
-| ----------- | -------- | -------- | ------------------------------------------------------ |
-| `roleId`    | UUID     | yes      | The role to store this memory under                    |
-| `companyId` | UUID     | yes      | The company (used to load the embedding configuration) |
-| `content`   | string   | yes      | The content to store                                   |
-| `agentId`   | UUID     | no       | The agent instance storing the memory                  |
-| `tags`      | string[] | no       | Optional classification tags for future filtering      |
+| Parameter   | Type     | Required | Description                                                                         |
+| ----------- | -------- | -------- | ----------------------------------------------------------------------------------- |
+| `roleId`    | UUID     | yes      | The role to store this memory under                                                 |
+| `companyId` | UUID     | yes      | The company (used to load the embedding configuration)                              |
+| `content`   | string   | yes      | The content to store: at most 2,000 characters                                      |
+| `agentId`   | UUID     | no       | The agent instance storing the memory                                               |
+| `tags`      | string[] | no       | Optional classification tags: at most 10, each at most 40 characters                |
+| `replaces`  | UUID     | no       | The id of one of the role's memories that this one corrects. It is updated in place |
 
 **Returns:** Confirmation message containing the new memory's UUID.
 
-**Behaviour when no embedding config exists:** Returns an informative message; the memory is not stored.
+**Duplicate guard.** If the closest memory of the same role has a cosine similarity of 0.92 or more (`DUPLICATE_MEMORY_SIMILARITY` in `libs/tcp-shared/src/memory/memory-limits.ts`), nothing is stored. The reply quotes the existing memory and its id, and says to call `remember` again with `replaces` if the new memory corrects it.
 
-**Storage:** Each `remember` call inserts one row into `episodic_memory` with a computed embedding vector. Tags are stored as a JSONB array.
+**`replaces`.** The named memory is updated in place: new content, tags and embedding, `version` + 1, and a new `updatedAt`. It must belong to the same role and company. If it does not, nothing is stored and the reply says so. This is the one way an agent edits a memory.
+
+**Behaviour when no embedding config exists:** Nothing is stored, and the reply says so.
+
+**Audit and live updates.** A write records a `ToolCall` event that names the agent. It also records a `StateChange { source: 'memory', action, roleId, memoryId }` with no `agentId`, so it does not appear in the agent's transcript. The company stream turns that into a content-free `{ entity: 'memory', action, roleId }` signal, which tells an open Memories tab to offer a reload.
+
+**Storage:** Each new memory inserts one row into `episodic_memory` with a computed embedding vector. Tags are stored as a JSONB array.
 
 ---
 
@@ -105,12 +116,14 @@ Searches the role's knowledge base only (RAG source documents in `knowledge_chun
 
 ## Relationship to RAG injection
 
-|        | RAG injection (prompt part 5)   | Memory MCP tools                                     |
-| ------ | ------------------------------- | ---------------------------------------------------- |
-| When   | Before the first LLM call       | On demand, any time during the loop                  |
-| Query  | The agent's initial task prompt | Any query the agent constructs                       |
-| Scope  | `knowledge_chunk` only          | `knowledge_chunk` + `episodic_memory` (for `recall`) |
-| Writes | No                              | `remember` writes to `episodic_memory`               |
+|        | RAG injection (prompt part 5)   | Memory injection (prompt part 6)                                        | Memory MCP tools                                     |
+| ------ | ------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| When   | Before the first LLM call       | Before the first LLM call, and before each chat turn                    | On demand, any time during the loop                  |
+| Query  | The agent's initial task prompt | The initial task prompt, or the chat message                            | Any query the agent constructs                       |
+| Scope  | `knowledge_chunk` only          | The role's `episodic_memory`: the best 3 above the role's RAG threshold | `knowledge_chunk` + `episodic_memory` (for `recall`) |
+| Writes | No                              | No                                                                      | `remember` writes to `episodic_memory`               |
+
+People manage the same memories in the role dialog's Memories tab and with the CLI; see [web-client.md](web-client.md) and [tcp-cli.md](tcp-cli.md).
 
 ---
 

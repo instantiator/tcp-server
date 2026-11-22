@@ -515,15 +515,15 @@ describe('Records API (e2e)', () => {
   );
 
   describe('live signal (001.05)', () => {
-    // Priming sends the company, then a record re-check; the third event is
-    // the change itself, cut down to the table and the action.
+    // Priming sends the company, then the record and memory re-checks; the
+    // fourth event is the change itself, cut down to the table and the action.
     it('tells the company stream which table changed, and nothing more', async () => {
       await records.createTable(companyId, { ...ORDERS, name: 'live' }, null);
       const events$ = consumeSse<WireEvent>(
         app,
         `/api/company/${companyId}/events`,
         { Authorization: `Bearer ${aliceJwt}` },
-        3,
+        4,
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
       await alice()
@@ -537,6 +537,7 @@ describe('Records API (e2e)', () => {
       expect(payloads).toEqual([
         expect.objectContaining({ entity: 'company' }),
         { entity: 'record', reason: 'replay' },
+        { entity: 'memory', reason: 'replay' },
         { entity: 'record', action: 'add_row', table: 'live' },
       ]);
     });
@@ -620,7 +621,7 @@ describe('Records API (e2e)', () => {
         app,
         `/api/company/${companyId}/events`,
         { Authorization: `Bearer ${aliceJwt}` },
-        3,
+        4,
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
       await alice()
@@ -631,7 +632,7 @@ describe('Records API (e2e)', () => {
       const payloads = (await events$).map((e) =>
         e.type === 'audit' ? e.event.payload : {},
       );
-      expect(payloads[2]).toEqual({
+      expect(payloads[3]).toEqual({
         entity: 'record',
         action: 'alter_table',
         table: 'cols_live',

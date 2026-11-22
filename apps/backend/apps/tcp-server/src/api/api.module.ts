@@ -13,6 +13,7 @@ import {
   TcpTask,
   PendingConsultation,
   ProcessRestarter,
+  EpisodicMemory,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { ToolFootprintController } from './tool-footprint.controller';
@@ -48,6 +49,7 @@ import { ConversationService } from './conversation.service';
 import { InternalController } from './internal.controller';
 import { InternalTaskController } from './internal-task.controller';
 import { KnowledgeController } from './knowledge.controller';
+import { MemoryController } from './memory.controller';
 import { McpServersController } from './mcp-servers.controller';
 import {
   LlmModelsController,
@@ -74,6 +76,7 @@ import { ChatService } from './chat.service';
 import { ChatTurnEnvironmentService } from './chat-turn-environment.service';
 import { ChatTurnPromptService } from './chat-turn-prompt.service';
 import { KnowledgeService } from './knowledge.service';
+import { MemoryService } from './memory.service';
 import { OutputGateService } from './output-gate.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { PlanValidationService } from './plan-validation.service';
@@ -125,6 +128,7 @@ import { TaskService } from './task.service';
       PendingConsultation,
       KnowledgeChunk,
       KnowledgeIndexState,
+      EpisodicMemory,
       TemplateSource,
     ]),
   ],
@@ -139,6 +143,7 @@ import { TaskService } from './task.service';
     InternalController,
     InternalTaskController,
     KnowledgeController,
+    MemoryController,
     McpServersController,
     LlmModelsController,
     NewCompanyLlmModelsController,
@@ -177,6 +182,7 @@ import { TaskService } from './task.service';
     CompanyStatsService,
     CompanyPrimingService,
     KnowledgeService,
+    MemoryService,
     PauseAndResumeService,
     // The drain executes shutdowns; the shutdown service holds the state every
     // intake path guards on.

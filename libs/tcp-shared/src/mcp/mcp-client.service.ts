@@ -28,6 +28,13 @@ export interface McpTool {
 export interface McpToolContext {
   agentId?: string;
   companyId?: string;
+  /**
+   * The running agent's own role, so memory tools can't read or write another
+   * role's memories. A tool argument named `roleId` always means the caller's
+   * role: a tool that targets some other role must name its argument
+   * differently, or it is silently overridden.
+   */
+  roleId?: string;
 }
 
 /**
@@ -86,7 +93,7 @@ export class McpClientService {
    * run with whichever servers did respond — unless `options.required` asks
    * for a failure instead.
    *
-   * @param context identity values (`agentId`, `companyId`) for the current
+   * @param context identity values (`agentId`, `companyId`, `roleId`) for the current
    *   agent run. Any matching tool parameter is removed from what the LLM
    *   sees and the real value substituted on every call — see {@link McpToolContext}.
    */
@@ -181,7 +188,7 @@ export class McpClientService {
     const mcpUrl = `${baseUrl.replace(/\/$/, '')}/mcp`;
 
     // Only override parameters this tool actually declares — context values
-    // for tools that don't take an agentId/companyId are simply unused.
+    // for tools that don't take an agentId/companyId/roleId are simply unused.
     const properties =
       (mcpTool.inputSchema['properties'] as
         Record<string, unknown> | undefined) ?? {};
@@ -241,7 +248,7 @@ export class McpClientService {
  * fall back to `z.unknown()`.
  *
  * @param omitKeys properties to exclude entirely — used to hide
- *   identity fields (`agentId`, `companyId`) that are injected server-side
+ *   identity fields (`agentId`, `companyId`, `roleId`) that are injected server-side
  *   rather than supplied by the LLM.
  */
 function buildZodSchema(

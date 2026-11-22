@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { AUTH_STATE_PATH, hasSignInCredentials } from './auth-state';
 import { gotoSignedIn } from './signed-in';
@@ -226,6 +227,156 @@ test.describe('company administration', () => {
     await gotoSignedIn(page, `/company/${fixture.companyId}#admin/knowledge`);
     await expect(
       page.getByRole('heading', { name: SHARED_HEADING }),
+    ).toBeVisible();
+  });
+});
+
+/*
+ * A role's memories (002.06). The fixture company embeds with the stack's stub
+ * model (run-all-tests starts it with STUB_LLM=true); without it, adding a
+ * memory fails rather than skipping.
+ */
+const MEMORIES_TAB = 'Memories';
+const NO_MEMORIES = 'This role has no memories yet';
+const ADD_MEMORY = 'Add a memory';
+const EDIT_MEMORY = 'Edit memory';
+const MEMORY_FIELD = 'Memory';
+const DELETE_MEMORY_HEADING = 'Delete this memory?';
+const OUT_OF_DATE = 'Out of date';
+const RELOAD = 'Reload';
+
+/** A company that embeds with the stub model, and one role in it. */
+interface MemoryFixture extends Fixture {
+  readonly roleId: string;
+  readonly roleName: string;
+}
+
+const makeMemoryFixture = async (
+  request: APIRequestContext,
+): Promise<MemoryFixture> => {
+  const token = await getMachineToken(request);
+  const slug = `memory-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const company = await request.post('/api/company', {
+    headers,
+    data: {
+      name: slug,
+      slug,
+      description: 'Created by admin.spec.ts',
+      embeddingConfig: {
+        provider: 'openai-compatible',
+        model: 'stub-embed',
+        baseUrl: 'http://stub-llm:3002/v1',
+      },
+    },
+  });
+  expect(company.status()).toBe(201);
+  const { id: companyId } = (await company.json()) as { id: string };
+  const roleName = `Keeper ${Math.random().toString(36).slice(2, 8)}`;
+  const role = await request.post('/api/role', {
+    headers,
+    data: {
+      companyId,
+      slug: 'keeper',
+      name: roleName,
+      description: 'Remembers things',
+      knowledgeDomains: [],
+      mcpServerList: [],
+    },
+  });
+  expect(role.status()).toBe(201);
+  const { id: roleId } = (await role.json()) as { id: string };
+  return { token, companyId, roleId, roleName };
+};
+
+test.describe('role memories', () => {
+  let fixture: MemoryFixture;
+
+  test.beforeEach(async ({ request }) => {
+    fixture = await makeMemoryFixture(request);
+  });
+
+  test.afterEach(async ({ request }) => {
+    await dropFixture(request, fixture);
+  });
+
+  test('a memory is added, reworded, seen changing elsewhere, and deleted', async ({
+    page,
+    request,
+  }) => {
+    await gotoSignedIn(page, `/company/${fixture.companyId}#admin/roles`);
+    await page
+      .getByRole('button', { name: fixture.roleName, exact: true })
+      .click();
+    const roleDialog = page.getByRole('dialog', { name: fixture.roleName });
+    await roleDialog.getByRole('tab', { name: MEMORIES_TAB }).click();
+    await expect(
+      roleDialog.getByRole('heading', { name: NO_MEMORIES }),
+    ).toBeVisible();
+
+    // Add: the new memory is listed and focused.
+    await roleDialog
+      .getByRole('button', { name: ADD_MEMORY, exact: true })
+      .click();
+    const add = page.getByRole('dialog', { name: ADD_MEMORY });
+    await add
+      .getByRole('textbox', { name: MEMORY_FIELD, exact: true })
+      .fill('Tea is £3 a box');
+    await add.getByRole('button', { name: SAVE, exact: true }).click();
+    // A save that never returns (e.g. no embedding model reachable) fails here.
+    await expect(add).toBeHidden();
+    const added = roleDialog.getByRole('rowheader', {
+      name: 'Tea is £3 a box',
+    });
+    await expect(added).toBeFocused();
+
+    // Edit: the wording changes in place.
+    await roleDialog
+      .getByRole('button', { name: `${EDIT_MEMORY}: Tea is £3 a box` })
+      .click();
+    const edit = page.getByRole('dialog', { name: EDIT_MEMORY });
+    await edit
+      .getByRole('textbox', { name: MEMORY_FIELD, exact: true })
+      .fill('Tea is £4 a box');
+    await edit.getByRole('button', { name: SAVE, exact: true }).click();
+    await expect(
+      roleDialog.getByRole('rowheader', { name: 'Tea is £4 a box' }),
+    ).toBeVisible();
+
+    // Elsewhere: a memory added through the API waits behind a notice.
+    const elsewhere = await request.post(`/api/role/${fixture.roleId}/memory`, {
+      headers: { Authorization: `Bearer ${fixture.token}` },
+      data: { content: 'Deliveries come on Tuesdays' },
+    });
+    expect(elsewhere.status()).toBe(201);
+    const notice = roleDialog.getByRole('group', { name: OUT_OF_DATE });
+    await expect(notice).toBeVisible();
+    await expect(
+      roleDialog.getByRole('rowheader', {
+        name: 'Deliveries come on Tuesdays',
+      }),
+    ).toHaveCount(0);
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    await notice.getByRole('button', { name: RELOAD, exact: true }).click();
+    await expect(
+      roleDialog.getByRole('rowheader', {
+        name: 'Deliveries come on Tuesdays',
+      }),
+    ).toBeVisible();
+
+    // Delete both: the empty state comes back.
+    for (const content of ['Tea is £4 a box', 'Deliveries come on Tuesdays']) {
+      await roleDialog
+        .getByRole('button', { name: `Delete memory: ${content}` })
+        .click();
+      await page
+        .getByRole('alertdialog', { name: DELETE_MEMORY_HEADING })
+        .getByRole('button', { name: DELETE_CONFIRM, exact: true })
+        .click();
+    }
+    await expect(
+      roleDialog.getByRole('heading', { name: NO_MEMORIES }),
     ).toBeVisible();
   });
 });

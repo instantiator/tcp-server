@@ -187,6 +187,43 @@ describe('tcp-mcp-memory MCP endpoint (e2e)', () => {
       expect(text).toContain('source: episodic');
     });
 
+    // stub-llm embeddings match only identical text, so storing the same
+    // sentence twice is the duplicate case here.
+    it('remember refuses a duplicate, then corrects it in place with `replaces`', async () => {
+      const content = 'Invoices go out on the first working day of the month.';
+      const stored = await callTool(app, 'remember', {
+        roleId,
+        companyId,
+        content,
+      });
+      const id = /id: ([0-9a-f-]{36})/.exec(stored)![1];
+
+      const again = await callTool(app, 'remember', {
+        roleId,
+        companyId,
+        content,
+      });
+      expect(again).toContain(`memory ${id}`);
+      expect(again).toContain('Not stored');
+
+      const corrected = 'Invoices go out on the last working day of the month.';
+      const replaced = await callTool(app, 'remember', {
+        roleId,
+        companyId,
+        content: corrected,
+        replaces: id,
+      });
+      expect(replaced).toBe(`Memory ${id} updated.`);
+
+      const [row] = await app
+        .get(DataSource)
+        .query<{ content: string; version: number }[]>(
+          `SELECT content, version FROM episodic_memory WHERE id = $1`,
+          [id],
+        );
+      expect(row).toEqual({ content: corrected, version: 2 });
+    });
+
     it('search_knowledge never returns episodic memory, only knowledge_chunk rows', async () => {
       const content = 'The kitchen fridge is cleaned out every Friday.';
       await callTool(app, 'remember', { roleId, companyId, content });

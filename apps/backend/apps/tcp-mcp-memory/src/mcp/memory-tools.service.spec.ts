@@ -231,6 +231,30 @@ describe('MemoryToolsService', () => {
       );
     });
 
+    it('searches episodic memories within the company only', async () => {
+      const dataSource = makeDataSource([]);
+      await makeService({ dataSource }).hybridSearch(
+        COMPANY_ID,
+        ROLE_ID,
+        'q',
+        5,
+      );
+      const sql = String(dataSource.query.mock.calls[0][0]);
+      const episodic = sql.slice(sql.indexOf('FROM episodic_memory'));
+      expect(episodic).toContain('"companyId" = $3::uuid');
+    });
+
+    it('labels an episodic result with its memory id, for `replaces`', async () => {
+      const id = randomUUID();
+      const svc = makeService({
+        dataSource: makeDataSource([
+          { id, source: 'episodic', path: '', content: 'm', similarity: 0.8 },
+        ]),
+      });
+      const text = await svc.hybridSearch(COMPANY_ID, ROLE_ID, 'q', 5);
+      expect(text).toContain(`memory: ${id}`);
+    });
+
     it('returns formatted results when rows are found', async () => {
       const rows = [
         {
@@ -316,58 +340,241 @@ describe('MemoryToolsService', () => {
   });
 
   describe('storeMemory', () => {
-    it('returns no_embedding_config_store when company has no config', async () => {
-      const svc = makeService({ companyRepo: makeCompanyRepo(null) });
-      const text = await svc.storeMemory(
+    /** Answers the nearest-memory lookup, the INSERT and the UPDATE separately. */
+    function routedDataSource({
+      nearest = [] as unknown[],
+      inserted = [{ id: randomUUID() }] as unknown[],
+      updated = [[{ id: randomUUID() }], 1] as unknown[],
+    } = {}): jest.Mocked<DataSource> {
+      return {
+        query: jest.fn((sql: string) =>
+          Promise.resolve(
+            sql.includes('INSERT')
+              ? inserted
+              : sql.includes('UPDATE')
+                ? updated
+                : nearest,
+          ),
+        ),
+      } as unknown as jest.Mocked<DataSource>;
+    }
+
+    const insertParams = (ds: jest.Mocked<DataSource>): unknown[] =>
+      ds.query.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT'),
+      )![1] as unknown[];
+
+    it('stores nothing and says so when the company has no embedding config', async () => {
+      const dataSource = routedDataSource();
+      const svc = makeService({
+        companyRepo: makeCompanyRepo(null),
+        dataSource,
+      });
+      const outcome = await svc.storeMemory(
         COMPANY_ID,
         ROLE_ID,
         'content',
         null,
         null,
       );
-      expect(text).toBe(memoryPrompts.no_embedding_config_store);
+      expect(outcome).toEqual({
+        text: memoryPrompts.no_embedding_config_store,
+      });
+      expect(memoryPrompts.no_embedding_config_store).toContain('NOT stored');
+      expect(dataSource.query).not.toHaveBeenCalled();
     });
 
-    it('inserts a row and returns the memory_stored message with the ID', async () => {
+    it('inserts a row and reports it as created', async () => {
       const newId = randomUUID();
-      const dataSource = makeDataSource([{ id: newId }]);
-      const svc = makeService({ dataSource });
-      const text = await svc.storeMemory(
+      const dataSource = routedDataSource({ inserted: [{ id: newId }] });
+      const outcome = await makeService({ dataSource }).storeMemory(
         COMPANY_ID,
         ROLE_ID,
         'important insight',
         null,
         null,
       );
-      expect(text).toContain(newId);
-      expect(dataSource.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO episodic_memory'),
-        expect.any(Array),
-      );
+      expect(outcome.text).toContain(newId);
+      expect(outcome.write).toEqual({ action: 'created', memoryId: newId });
     });
 
-    it('stores tags as JSONB when provided', async () => {
-      const newId = randomUUID();
-      const dataSource = makeDataSource([{ id: newId }]);
-      const svc = makeService({ dataSource });
-      await svc.storeMemory(COMPANY_ID, ROLE_ID, 'tagged content', null, [
-        'tag1',
-        'tag2',
-      ]);
-      const params = dataSource.query.mock.calls[0][1] as unknown[];
-      const tagsParam = params.find(
-        (p) => typeof p === 'string' && p.includes('tag1'),
-      );
-      expect(tagsParam).toBeDefined();
-    });
-
-    it('passes agentId to the INSERT when provided', async () => {
+    it('stores tags as JSONB and passes agentId when provided', async () => {
       const agentId = randomUUID();
-      const dataSource = makeDataSource([{ id: randomUUID() }]);
-      const svc = makeService({ dataSource });
-      await svc.storeMemory(COMPANY_ID, ROLE_ID, 'content', agentId, null);
-      const params = dataSource.query.mock.calls[0][1] as unknown[];
+      const dataSource = routedDataSource();
+      await makeService({ dataSource }).storeMemory(
+        COMPANY_ID,
+        ROLE_ID,
+        'tagged content',
+        agentId,
+        ['tag1', 'tag2'],
+      );
+      const params = insertParams(dataSource);
       expect(params).toContain(agentId);
+      expect(params).toContain(JSON.stringify(['tag1', 'tag2']));
+    });
+
+    it('looks for duplicates only within the same role and company', async () => {
+      const dataSource = routedDataSource();
+      await makeService({ dataSource }).storeMemory(
+        COMPANY_ID,
+        ROLE_ID,
+        'c',
+        null,
+        null,
+      );
+      const [sql, params] = dataSource.query.mock.calls[0];
+      expect(sql).toContain('"roleId" = $2');
+      expect(sql).toContain('"companyId" = $3');
+      expect(params).toEqual([expect.any(String), ROLE_ID, COMPANY_ID]);
+    });
+
+    it('refuses a near-duplicate, quoting the existing memory', async () => {
+      const existing = randomUUID();
+      const dataSource = routedDataSource({
+        nearest: [{ id: existing, content: 'Tea is £3', similarity: 0.95 }],
+      });
+      const outcome = await makeService({ dataSource }).storeMemory(
+        COMPANY_ID,
+        ROLE_ID,
+        'Tea costs £3',
+        null,
+        null,
+      );
+      expect(outcome.write).toBeUndefined();
+      expect(outcome.text).toContain(existing);
+      expect(outcome.text).toContain('Tea is £3');
+      expect(outcome.text).toContain('`replaces`');
+      expect(
+        dataSource.query.mock.calls.some(([sql]) =>
+          String(sql).includes('INSERT'),
+        ),
+      ).toBe(false);
+    });
+
+    it('stores a memory just below the duplicate threshold', async () => {
+      const dataSource = routedDataSource({
+        nearest: [{ id: randomUUID(), content: 'x', similarity: 0.91 }],
+      });
+      const outcome = await makeService({ dataSource }).storeMemory(
+        COMPANY_ID,
+        ROLE_ID,
+        'y',
+        null,
+        null,
+      );
+      expect(outcome.write?.action).toBe('created');
+    });
+
+    it('corrects a memory in place with `replaces`, bumping its version', async () => {
+      const target = randomUUID();
+      const dataSource = routedDataSource({ updated: [[{ id: target }], 1] });
+      const outcome = await makeService({ dataSource }).storeMemory(
+        COMPANY_ID,
+        ROLE_ID,
+        'Tea is £4 now',
+        null,
+        null,
+        target,
+      );
+      expect(outcome.write).toEqual({ action: 'updated', memoryId: target });
+      const [sql, params] = dataSource.query.mock.calls[0];
+      expect(sql).toContain('version = version + 1');
+      expect(sql).toContain('"roleId" = $2');
+      expect(sql).toContain('"companyId" = $3');
+      expect(params).toEqual(
+        expect.arrayContaining([target, ROLE_ID, COMPANY_ID]),
+      );
+    });
+
+    it("refuses `replaces` naming a memory that isn't this role's", async () => {
+      const dataSource = routedDataSource({ updated: [[], 0] });
+      const other = randomUUID();
+      const outcome = await makeService({ dataSource }).storeMemory(
+        COMPANY_ID,
+        ROLE_ID,
+        'x',
+        null,
+        null,
+        other,
+      );
+      expect(outcome.write).toBeUndefined();
+      expect(outcome.text).toBe(
+        memoryPrompts.memory_replace_not_found.replace('{{id}}', other),
+      );
+    });
+  });
+
+  describe('remember tool (via MCP server)', () => {
+    it('caps content length and tag count in its schema', () => {
+      const server = makeService().createServer();
+      const { inputSchema } = (
+        server as unknown as {
+          _registeredTools: Record<
+            string,
+            { inputSchema: { safeParse: (v: unknown) => { success: boolean } } }
+          >;
+        }
+      )._registeredTools.remember;
+      const base = { roleId: ROLE_ID, companyId: COMPANY_ID };
+      expect(
+        inputSchema.safeParse({ ...base, content: 'x'.repeat(2000) }).success,
+      ).toBe(true);
+      expect(
+        inputSchema.safeParse({ ...base, content: 'x'.repeat(2001) }).success,
+      ).toBe(false);
+      expect(inputSchema.safeParse({ ...base, content: '  ' }).success).toBe(
+        false,
+      );
+      expect(
+        inputSchema.safeParse({
+          ...base,
+          content: 'x',
+          tags: Array.from({ length: 11 }, (_, i) => `t${i}`),
+        }).success,
+      ).toBe(false);
+    });
+
+    it('audits a content-free memory state change after a write', async () => {
+      const audit = makeAudit();
+      const newId = randomUUID();
+      const dataSource = {
+        query: jest.fn((sql: string) =>
+          Promise.resolve(sql.includes('INSERT') ? [{ id: newId }] : []),
+        ),
+      } as unknown as jest.Mocked<DataSource>;
+      await callTool(makeService({ audit, dataSource }), 'remember', {
+        roleId: ROLE_ID,
+        companyId: COMPANY_ID,
+        content: 'secret fact',
+      });
+      expect(audit.record).toHaveBeenCalledWith(
+        COMPANY_ID,
+        'analyst',
+        null,
+        AuditEventType.StateChange,
+        {
+          source: 'memory',
+          roleId: ROLE_ID,
+          action: 'created',
+          memoryId: newId,
+        },
+      );
+    });
+
+    it('audits no state change when nothing was stored', async () => {
+      const audit = makeAudit();
+      await callTool(
+        makeService({ audit, companyRepo: makeCompanyRepo(null) }),
+        'remember',
+        { roleId: ROLE_ID, companyId: COMPANY_ID, content: 'x' },
+      );
+      expect(audit.record).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        AuditEventType.StateChange,
+        expect.anything(),
+      );
     });
   });
 

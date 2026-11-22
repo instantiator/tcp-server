@@ -29,6 +29,7 @@ import type {
   AppendRecordsCsvResult,
   CompanyTemplatePreview,
   ImportCompanyOptions,
+  MemoryList,
   RetypeColumn,
   RecordTableRetention,
 } from './dtos';
@@ -241,6 +242,56 @@ export const useRoleKnowledge = (
       unwrap(
         api.GET('/api/role/{roleId}/knowledge', {
           params: { path: { roleId } },
+        }),
+      ),
+  });
+
+/** One read of a role's memories; also what the background re-check calls. */
+export const fetchRoleMemories = (roleId: string): Promise<MemoryList> =>
+  unwrap(
+    api.GET('/api/role/{roleId}/memory', { params: { path: { roleId } } }),
+  );
+
+export const useRoleMemories = (roleId: string) =>
+  useQuery({
+    queryKey: queryKeys.roleMemories(roleId),
+    queryFn: () => fetchRoleMemories(roleId),
+  });
+
+/** Adds a memory to a role. */
+export const useCreateMemoryMutation = (roleId: string) =>
+  useMutation({
+    mutationFn: (body: Schemas['CreateMemoryDto']) =>
+      unwrap(
+        api.POST('/api/role/{roleId}/memory', {
+          params: { path: { roleId } },
+          body,
+        }),
+      ),
+  });
+
+/** Changes a memory's content or tags; the answer carries the bumped version. */
+export const useUpdateMemoryMutation = (roleId: string) =>
+  useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: Schemas['UpdateMemoryDto'] & { id: string }) =>
+      unwrap(
+        api.PATCH('/api/role/{roleId}/memory/{id}', {
+          params: { path: { roleId, id } },
+          body,
+        }),
+      ),
+  });
+
+/** Deletes a memory; answers `204`. */
+export const useDeleteMemoryMutation = (roleId: string) =>
+  useMutation({
+    mutationFn: (id: string) =>
+      expectAccepted(
+        api.DELETE('/api/role/{roleId}/memory/{id}', {
+          params: { path: { roleId, id } },
         }),
       ),
   });

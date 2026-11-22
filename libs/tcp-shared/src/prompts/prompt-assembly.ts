@@ -121,6 +121,18 @@ export function buildRagMessage(
   return `${strings.rag_intro}\n\n${sections}`;
 }
 
+/** Introduces the recalled memories in the opening prompt. */
+export const MEMORY_INTRO =
+  'Things your role remembered from earlier work that may be relevant. Prefer these over guessing; if one turns out to be wrong, store the correction with `remember` and `replaces`.';
+
+/** Formats recalled memories, with the ids `replaces` needs, as a prompt message. */
+export function buildMemoryMessage(
+  memories: { id: string; content: string }[],
+): string {
+  const lines = memories.map((m) => `- ${m.content} (memory ${m.id})`);
+  return `${MEMORY_INTRO}\n\n${lines.join('\n')}`;
+}
+
 /** Inputs for {@link buildAssignmentMessage} — prompt part 4. */
 export interface AssignmentMessageParams {
   /** The assignment's mode — selects the {@link modePrompt} preamble. */

@@ -371,7 +371,8 @@ _2026-07-13._
   tcp-mcp-tasks|interactions — full sweep deferred to 010.2.9).
 - **No knowledge service for empty-KB roles.** `AgentRagService.hasKnowledge`
   (a cheap `EXISTS` check, no embedding) drops the `memory` server and skips RAG
-  retrieval for a role with no indexed chunks.
+  retrieval for a role with no indexed chunks. _Superseded for `memory` in
+  [002.06](#amendments-as-implemented-p04-002-06): it is no longer dropped._
 
 <a id="amendments-as-implemented-010283"></a>
 
@@ -482,3 +483,11 @@ _2026-10-06._
   optional per-endpoint overrides, gated per agent run in tcp-agent's
   `ModelSlotService` rather than in BullMQ's own worker concurrency. See
   [ADR-032](ADR-032-model-concurrency-and-rate-limits.md).
+
+<a id="amendments-as-implemented-p04-002-06"></a>
+
+## Amendment as implemented (002.06, phase 04)
+
+_2026-10-20._
+
+- **The `memory` server is no longer dropped for empty-knowledge-base roles.** The 010.2.8.2 rule above removed it because a role with no indexed chunks had nothing for `recall` to find. That stopped being true once agents write memories of their own: an empty-knowledge role is exactly the one with only memories to draw on. `AgentRagService.hasKnowledge` now gates RAG retrieval only. `memory` is dropped instead when the company resolves no embedding model, because then `remember` and `recall` cannot work. See [ADR-006's amendment](ADR-006-agent-memory-architecture.md#amendment-as-implemented-p04-002-06).

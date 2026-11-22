@@ -3,6 +3,7 @@ import { MessagesAnnotation } from '@langchain/langgraph';
 import {
   buildAssignmentMessage,
   buildAvailableRolesMessage,
+  buildMemoryMessage,
   buildRagMessage,
   buildServicesMessage,
   DEFAULT_RAG_THRESHOLD,
@@ -64,6 +65,11 @@ export class InitialStateService {
     );
 
     const loadedServerNames = [...new Set(mcpTools.map((t) => t.serverName))];
+    const memoryMessage = await this.buildMemoryMessage(
+      agent,
+      initialPrompt,
+      loadedServerNames,
+    );
     const servicesText = buildServicesMessage(
       loadedServerNames,
       mcpServerUrls,
@@ -93,7 +99,8 @@ export class InitialStateService {
         ...(rolesMessage ? [rolesMessage] : []),
         // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
         ...(ragMessage ? [ragMessage] : []),
-        // Prompt part 6: episodic memory — recalled prior run summaries relevant to this task (not yet implemented)
+        // Prompt part 6: episodic memory — the role's memories most relevant to this task (omitted when none)
+        ...(memoryMessage ? [memoryMessage] : []),
         // Prompt part 7: peer context — summaries of currently running sibling agents (not yet implemented)
         // Prompt part 8: final instruction — directs the agent to begin after all context is set
         new HumanMessage(agentPrompts.final_instruction),
@@ -119,17 +126,47 @@ export class InitialStateService {
       initialPrompt,
       resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
       undefined,
-      resolveRunConfig(
-        'ragThreshold',
-        role,
-        company,
-        this.config.get<number>('RAG_THRESHOLD'),
-        DEFAULT_RAG_THRESHOLD,
-      ),
+      this.ragThreshold(agent),
     );
     return chunks.length
       ? new HumanMessage(buildRagMessage(chunks, agentPrompts))
       : null;
+  }
+
+  /**
+   * Prompt part 6: the role's memories most relevant to the opening prompt.
+   * Unlike RAG this doesn't depend on indexed knowledge — a role with none can
+   * still have memories. Null unless the memory server is loaded.
+   */
+  private async buildMemoryMessage(
+    agent: TcpAgent,
+    initialPrompt: string,
+    loadedServerNames: string[],
+  ): Promise<HumanMessage | null> {
+    if (!loadedServerNames.includes('memory')) return null;
+    const { role, company } = agent;
+    const memories = await this.knowledge.retrieveMemories(
+      role.id,
+      company.id,
+      initialPrompt,
+      resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
+      3,
+      this.ragThreshold(agent),
+    );
+    return memories.length
+      ? new HumanMessage(buildMemoryMessage(memories))
+      : null;
+  }
+
+  /** The similarity floor for retrieval, through the `ragThreshold` cascade. */
+  private ragThreshold(agent: TcpAgent): number {
+    return resolveRunConfig(
+      'ragThreshold',
+      agent.role,
+      agent.company,
+      this.config.get<number>('RAG_THRESHOLD'),
+      DEFAULT_RAG_THRESHOLD,
+    );
   }
 
   /**

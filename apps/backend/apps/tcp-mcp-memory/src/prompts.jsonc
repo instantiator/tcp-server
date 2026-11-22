@@ -5,12 +5,22 @@
   // Returned when no embedding config is configured for the company.
   "no_embedding_config": "No embedding config found for this company — cannot perform semantic search.",
 
-  // Returned by remember() when no embedding config is available.
-  "no_embedding_config_store": "No embedding config found — memory stored without embedding (not searchable).",
+  // Returned by remember() when no embedding config is available. Nothing is stored.
+  "no_embedding_config_store": "No embedding model is set up for this company, so the memory was NOT stored. Carry on without it.",
 
   // Returned when a search returns no results above the similarity threshold.
   "no_results": "No results found above the similarity threshold.",
 
   // Returned by remember() on success. Use {{id}} as the placeholder for the memory UUID.
-  "memory_stored": "Memory stored (id: {{id}})."
+  "memory_stored": "Memory stored (id: {{id}}).",
+
+  // Returned by remember() with `replaces` on success. {{id}} is the memory UUID.
+  "memory_replaced": "Memory {{id}} updated.",
+
+  // Returned by remember() when the role already has a near-identical memory; nothing is stored.
+  // {{id}} and {{content}} are the existing memory.
+  "memory_duplicate": "Not stored: you already remember this as memory {{id}}: \"{{content}}\". If your new memory corrects that one, call `remember` again with `replaces` set to {{id}}. Otherwise carry on.",
+
+  // Returned by remember() when `replaces` names no memory of this role.
+  "memory_replace_not_found": "Not stored: memory {{id}} isn't one of your role's memories. Check the id, or leave `replaces` out to store a new memory."
 }

@@ -166,9 +166,10 @@ export class CompanyPrimingService {
           payload: notificationPayload(notice, 'replay'),
         },
       })),
-      // Records hold no live state to replay, so this only tells the client
-      // to look again: any open table may have changed while it was away.
-      {
+      // Records and memories hold no live state to replay, so these only tell
+      // the client to look again: any open table or memory list may have
+      // changed while it was away.
+      ...(['record', 'memory'] as const).map((entity): WireEvent => ({
         type: 'audit',
         event: {
           timestamp,
@@ -178,9 +179,9 @@ export class CompanyPrimingService {
           assignmentId: null,
           taskId: null,
           eventType: AuditEventType.StateChange,
-          payload: { entity: 'record', reason: 'replay' },
+          payload: { entity, reason: 'replay' },
         },
-      },
+      })),
     ];
   }
 }

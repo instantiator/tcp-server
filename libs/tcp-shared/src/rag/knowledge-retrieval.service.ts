@@ -21,14 +21,23 @@ export interface RagChunk {
   similarity: number;
 }
 
+/** A memory recalled for the opening prompt. */
+export interface RecalledMemory {
+  id: UUID;
+  content: string;
+  /** Cosine similarity score — 1.0 is identical, 0.0 is orthogonal. */
+  similarity: number;
+}
+
 /**
- * Retrieves relevant knowledge-base chunks for a role using cosine similarity.
+ * Retrieves relevant knowledge-base chunks and episodic memories for a role using cosine similarity.
  *
  * The query is embedded via {@link EmbeddingService} and compared against the
  * role's stored vectors using the pgvector `<=>` (cosine distance) operator.
  * Only chunks whose similarity exceeds `threshold` are returned, so the caller
  * receives an empty array when nothing relevant exists — RAG is not injected
- * into the prompt unless it adds value.
+ * into the prompt unless it adds value. Memories are searched the same way,
+ * within the role's own memories.
  *
  * Shared by tcp-server, tcp-agent and tcp-mcp-memory so all three retrieve on
  * identical scoping and threshold rules.
@@ -84,6 +93,47 @@ export class KnowledgeRetrievalService {
 
     this.logger.debug(
       `RAG: ${rows.length} chunk(s) above threshold ${threshold} for ${roleId ? `role ${roleId} + shared` : `company ${companyId} shared`}`,
+    );
+    return rows;
+  }
+
+  /**
+   * Returns the top-K of the role's own episodic memories most similar to
+   * `query`. Memories are never shared between roles or companies.
+   *
+   * @param roleId - The role whose memories are searched.
+   * @param companyId - The role's company; memories of other companies never match.
+   * @param query - Natural-language query string (e.g. the task prompt).
+   * @param embeddingConfig - Company embedding config. Returns empty when null.
+   * @param topK - Maximum number of memories to return (default 3).
+   * @param threshold - Minimum cosine similarity to include, as for {@link retrieve}.
+   */
+  async retrieveMemories(
+    roleId: UUID,
+    companyId: UUID,
+    query: string,
+    embeddingConfig: LlmConfig | null | undefined,
+    topK = 3,
+    threshold = DEFAULT_RAG_THRESHOLD,
+  ): Promise<RecalledMemory[]> {
+    if (!embeddingConfig) return [];
+
+    const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
+
+    const rows = await this.dataSource.query<RecalledMemory[]>(
+      `SELECT id, content, 1 - (embedding <=> $1::vector) AS similarity
+       FROM episodic_memory
+       WHERE "roleId" = $2
+         AND "companyId" = $3
+         AND embedding IS NOT NULL
+         AND 1 - (embedding <=> $1::vector) >= $4
+       ORDER BY similarity DESC
+       LIMIT $5`,
+      [pgvector.toSql(queryVector), roleId, companyId, threshold, topK],
+    );
+
+    this.logger.debug(
+      `Memory: ${rows.length} memor(ies) above threshold ${threshold} for role ${roleId}`,
     );
     return rows;
   }

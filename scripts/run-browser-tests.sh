@@ -20,8 +20,10 @@ container's certificate is self-signed unless you mount your own, so Playwright
 is configured to accept it — see docs/web-client.md for the mkcert route.
 
 Point it at another stack with --base-url, for example the testing project on
-EXPOSE_PORT_WEB=5174:
+EXPOSE_PORT_WEB=5174. Start that one with the stub model, which the memory
+specs embed with (they fail without it):
 
+  STUB_LLM=true ./scripts/start-deployment.sh --project tcp-testing --env-file .env.testing
   $(basename "$0") --base-url https://localhost:5174
 
 Browser binaries are large and are NOT installed by 'npm ci' — contributors who

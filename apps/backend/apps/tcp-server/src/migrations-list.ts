@@ -11,6 +11,7 @@ import { McpServerToggles1784880000000 } from './migrations/1784880000000-McpSer
 import { VersionRetentionDays1784890000000 } from './migrations/1784890000000-VersionRetentionDays';
 import { FailureCode1784900000000 } from './migrations/1784900000000-FailureCode';
 import { TemplateSources1784910000000 } from './migrations/1784910000000-TemplateSources';
+import { EpisodicMemoryVersion1784920000000 } from './migrations/1784920000000-EpisodicMemoryVersion';
 
 /**
  * tcp-server's full, ordered migration list — the single source of truth for
@@ -47,4 +48,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   VersionRetentionDays1784890000000,
   FailureCode1784900000000,
   TemplateSources1784910000000,
+  EpisodicMemoryVersion1784920000000,
 ];

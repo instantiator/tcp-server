@@ -930,15 +930,67 @@ const strings = {
   'knowledge.announce.ready': 'Knowledge index ready',
   'knowledge.announce.failed': 'Knowledge indexing failed',
   'knowledge.announce.rebuilding': 'Rebuilding the knowledge index',
-  // The role dialog (002.00): Details and Knowledge tabs. Knowledge waits
-  // for the role to exist. The language model is shown, not chosen: the
-  // provider picker is 002.01.
+  // The role dialog's Memories tab (002.06): what agents (and people) have
+  // told the role to remember. Changes made elsewhere show a Reload notice.
+  'memory.heading': 'Memories',
+  'memory.intro':
+    'Agents in this role store short facts here to use on later work, and recall the most relevant ones when they start.',
+  'memory.empty': 'This role has no memories yet',
+  'memory.emptyHint':
+    'Agents add memories as they learn things worth keeping. You can add one too.',
+  'memory.loading': 'Loading memories',
+  'memory.error': 'The memories could not be loaded.',
+  'memory.noEmbedding':
+    "This company has no embedding model, so memories can't be added or reworded. You can still delete them.",
+  'memory.truncated': 'Showing the newest 500 memories.',
+  'memory.add': 'Add a memory',
+  'memory.column.content': 'Memory',
+  'memory.column.tags': 'Tags',
+  'memory.column.source': 'From',
+  'memory.column.updated': 'Changed',
+  'memory.column.actions': 'Actions',
+  'memory.source.agent': 'Agent',
+  'memory.source.person': 'Person',
+  'memory.edit': 'Edit memory: {preview}',
+  'memory.delete': 'Delete memory: {preview}',
+  'memory.deleteHeading': 'Delete this memory?',
+  'memory.deleteMessage':
+    'Agents in this role will no longer recall it. This cannot be undone.',
+  'memory.deleteConfirm': 'Delete',
+  'memory.deleteFailed': 'The memory could not be deleted: {message}',
+  'memory.dialog.addHeading': 'Add a memory',
+  'memory.dialog.editHeading': 'Edit memory',
+  'memory.dialog.content': 'Memory',
+  'memory.dialog.contentHint':
+    'One short fact that makes sense on its own. {count} of {max} characters.',
+  'memory.dialog.contentRequired': 'Enter the memory.',
+  'memory.dialog.tags': 'Tags',
+  'memory.dialog.tagsHint': 'Optional. Separate tags with commas.',
+  'memory.dialog.save': 'Save',
+  'memory.dialog.cancel': 'Cancel',
+  'memory.dialog.failed': 'The memory could not be saved: {message}',
+  'memory.outOfDate.changed.one': '{count} memory changed',
+  'memory.outOfDate.changed.other': '{count} memories changed',
+  'memory.outOfDate.deleted.one': '{count} memory deleted',
+  'memory.outOfDate.deleted.other': '{count} memories deleted',
+  'memory.outOfDate.added.one': '{count} memory added',
+  'memory.outOfDate.added.other': '{count} memories added',
+  'memory.announce.added': 'Memory added',
+  'memory.announce.saved': 'Memory saved',
+  'memory.announce.deleted': 'Memory deleted',
+  'memory.announce.reloaded': 'Memories reloaded',
+  'memory.announce.outOfDate':
+    "This role's memories have changed elsewhere. Reload to see the changes.",
+  // The role dialog (002.00): Details, Knowledge and (002.06) Memories tabs.
+  // Knowledge and Memories wait for the role to exist. The language model is
+  // shown, not chosen: the provider picker is 002.01.
   'admin.role.newHeading': 'Add role',
   'admin.role.tabs': 'Role sections',
   'admin.role.tab.details': 'Details',
   'admin.role.tab.knowledge': 'Knowledge',
+  'admin.role.tab.memories': 'Memories',
   'admin.role.knowledgeDisabled':
-    'Save the role first, then add its knowledge.',
+    'Save the role first, then add its knowledge and memories.',
   'admin.role.loading': 'Loading the role',
   'admin.role.loadError': 'The role could not be loaded.',
   'admin.role.name': 'Name',

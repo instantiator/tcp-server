@@ -309,8 +309,10 @@ jobs:
           echo "AGENT_BASE_URL=http://localhost:${agent_port:-3003}" >> "$GITHUB_ENV"
           web_port="$(grep -E '^EXPOSE_PORT_WEB=' .env.testing | tail -1 | cut -d= -f2)"
           echo "WEB_BASE_URL=https://localhost:${web_port:-5173}" >> "$GITHUB_ENV"
+      # STUB_LLM: the browser tier's fixtures embed memories with the stub
+      # model, as in run-all-tests.sh. Without it the embed call hangs.
       - name: Start deployment stack
-        run: ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
+        run: STUB_LLM=true ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
       # apps/frontend/tcp-frontend/src/api/schema.d.ts is generated from
       # tcp-server's OpenAPI description, which is produced at runtime from
       # controller metadata (ADR-014). A controller change makes the committed

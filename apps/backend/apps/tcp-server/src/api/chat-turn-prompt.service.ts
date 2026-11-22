@@ -14,6 +14,7 @@ import {
   TcpRole,
   buildAssignmentMessage,
   buildChatModel,
+  buildMemoryMessage,
   buildRagMessage,
   buildServicesMessage,
   renderSystemPrompt,
@@ -66,12 +67,24 @@ export class ChatTurnPromptService {
     const { agent, role, company, isFirstMessage } = ctx;
     const { preparedMessage } = inputs;
 
-    // Every later turn is just the user's message: the checkpoint already
-    // holds the system prompt, role, company, services and RAG from turn 1.
-    if (!isFirstMessage) return [new HumanMessage(preparedMessage)];
+    const serverNames = [...new Set(inputs.mcpTools.map((t) => t.serverName))];
+    const memoryMessage = await this.buildMemoryMessage(
+      ctx,
+      inputs,
+      serverNames,
+    );
+
+    // Every later turn is the user's message, preceded by the memories it
+    // recalls: the checkpoint already holds the system prompt, role, company,
+    // services and RAG from turn 1.
+    if (!isFirstMessage) {
+      return [
+        ...(memoryMessage ? [memoryMessage] : []),
+        new HumanMessage(preparedMessage),
+      ];
+    }
 
     const ragMessage = await this.buildRagMessage(ctx, inputs);
-    const serverNames = [...new Set(inputs.mcpTools.map((t) => t.serverName))];
     const servicesText = buildServicesMessage(
       serverNames,
       inputs.mcpServerUrls,
@@ -99,6 +112,8 @@ export class ChatTurnPromptService {
       ),
       // Prompt part 5: RAG data retrieved for this query (omitted when nothing relevant)
       ...(ragMessage ? [ragMessage] : []),
+      // Prompt part 5b: episodic memory recalled for this message (omitted when none)
+      ...(memoryMessage ? [memoryMessage] : []),
       // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
       // Prompt part 7: conversation history is implicitly provided by the LangGraph
       // checkpoint store keyed on agent.threadId — no explicit injection needed.
@@ -143,6 +158,37 @@ export class ChatTurnPromptService {
       overflowPath,
     );
     return new HumanMessage(ragText);
+  }
+
+  /**
+   * Prompt part 5b: the role's memories most relevant to this message, fetched
+   * on every turn so a later message can recall what an earlier one didn't.
+   * Null unless the memory server is loaded, or when nothing is relevant.
+   */
+  private async buildMemoryMessage(
+    ctx: TurnContext,
+    inputs: PromptInputs,
+    serverNames: string[],
+  ): Promise<HumanMessage | null> {
+    if (!serverNames.includes('memory')) return null;
+    const { role, company } = ctx;
+    const memories = await this.ragRetrieval.retrieveMemories(
+      role.id,
+      role.companyId,
+      inputs.preparedMessage,
+      resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
+      3,
+      resolveRunConfig(
+        'ragThreshold',
+        role,
+        company,
+        this.config.get<number>('RAG_THRESHOLD'),
+        DEFAULT_RAG_THRESHOLD,
+      ),
+    );
+    return memories.length
+      ? new HumanMessage(buildMemoryMessage(memories))
+      : null;
   }
 
   /** Prompt part 4: the chat mode prompt followed by the user's message. */

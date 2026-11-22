@@ -619,20 +619,15 @@ they take up space.
 Then call the records server's delete route for the replaced company, as
 tcp-server does after a company delete.
 
-## MCP server toggles have no web UI, and the estimate ignores the knowledge rule
+## The tool footprint counts `memory` for a company with no embedding model
 
-001.01.03 added `mcpServerToggles` on companies and roles, and tool schemas
-now show in `estimate-context-window`. Two gaps remain:
+Agents get the `memory` server only when their company resolves an embedding
+model. The tool footprint (`estimate-context-window`, the role dialog's hint)
+counts it regardless, so the estimate for a company with no embedding model is
+about 700 tokens high.
 
-- The toggles can only be set through the API or `tcp-cli set-company` /
-  `set-role` JSON. The web UI's company and role forms don't show them.
-- The tool footprint counts `memory` even for a role with no knowledge, which
-  tcp-agent leaves out, so a knowledge-less role's estimate is about 700
-  tokens high.
-
-**Act when:** 002.00 or 002.02 builds the role or company edit forms (add the
-toggles there), or someone sizes a knowledge-less role near its window limit
-(ask the knowledge index whether the role has chunks, as tcp-agent does).
+**Act when:** someone sizes a role near its window limit in a company with no
+embedding model. Leave `memory` out of the footprint as tcp-agent does.
 
 ## Company resources can't be deleted by agents
 
@@ -796,7 +791,9 @@ run, whichever comes first. Record the findings in the 001.03 plan's outcome.
 
 ## Data protection reaches record tables only
 
-001.04's search, export and delete cover record tables. The audit log (including LLM requests and responses), task transcripts, knowledge, company resources, files, agents' memory and backups can still hold a person's details, and the do-not-store list doesn't stop agents writing them there. The Data protection page says so.
+001.04's search, export and delete cover record tables. The audit log (including LLM requests and responses), task transcripts, knowledge, company resources, files and backups can still hold a person's details, and the do-not-store list doesn't stop agents writing them there. The Data protection page says so.
+
+Agents' memories can be viewed and deleted one by one (the role dialog's Memories tab, `list-memories` and `delete-memory`, since 002.06). They can't be searched by person, so finding every memory that names someone means reading each role's list.
 
 **Act when:** a real erasure or subject access request needs one of these stores, or agents are seen putting customer details outside record tables. Start with the audit log, which holds LLM traffic.
 
@@ -957,3 +954,45 @@ A drop goes to the selected folder, the folder of the selected file, or the root
 The CLI's route (`StorageProxyController`) lets any member write any path in their company, knowledge folders included. The storage browser's own routes are limited to `resources/` (002.05), but this one is not.
 
 **Act when:** 003.01 (action approval) lands, or the CLI moves to the company-scoped storage routes. Then limit this route or retire it.
+
+## No mid-run memory surfacing
+
+Memories are recalled for the opening prompt and for each chat message only. A memory that becomes relevant later in a run reaches the agent only if it calls `recall` itself.
+
+**Act when:** a transcript shows an agent missing a stored memory that only became relevant after the opening prompt.
+
+## The memory list is capped at 500, with no search
+
+The Memories tab and `list-memories` show a role's newest 500 memories, newest first, with no search or paging.
+
+**Act when:** a role passes 200 memories, or someone can't find one.
+
+## Any member can add, change and delete a role's memories
+
+As with knowledge (002.00), the memory routes check company membership and nothing finer. A memory is prompt content for every later run of the role.
+
+**Act when:** 003.01 (action approval) lands. Decide who may change memories.
+
+## The duplicate threshold of 0.92 is a guess
+
+`remember` refuses a memory when its closest neighbour in the role has a cosine similarity of 0.92 or more (`DUPLICATE_MEMORY_SIMILARITY` in `libs/tcp-shared/src/memory/memory-limits.ts`). The value was not tuned against a real embedding model, and similarity scales differ between models.
+
+**Act when:** duplicates show in a role's table, or an agent's distinct memory is refused.
+
+## Memories aren't in the company archive or templates
+
+The company archive and templates (002.03) carry roles and knowledge. Memories stay behind when a company is moved.
+
+**Act when:** 002.08 (company archive) is planned, or a company is moved between installs and its memories matter.
+
+## No memory consolidation
+
+Memories only grow. Nothing merges, summarises or expires them. ADR-006 deferred consolidation. The duplicate guard and `replaces` slow the growth but don't stop contradictions.
+
+**Act when:** injected memories regularly contradict each other.
+
+## Chat turns keep their recalled memories in the history
+
+Each chat message adds its recalled memories to the conversation, and they stay there. In a long chat the same memory can appear many times.
+
+**Act when:** a long chat nears its context window and repeated memory blocks are a visible share of it.

@@ -10,7 +10,7 @@ See [tcp-mcp-interactions.md](tcp-mcp-interactions.md) for the MCP tool referenc
 
 ### 1. Agent requests consultation
 
-The agent calls `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)`. `roleId` is the unambiguous lookup key — get it from `list_available_contacts` first. Role names aren't unique within a company, so a name-only lookup can target the wrong role; `roleName` is accepted only as an optional label for friendlier logs and error messages.
+The agent calls `request_agent_consultation(agentId, companyId, consultRoleId, question, context?, roleName?)`. `consultRoleId` is the unambiguous lookup key (not `roleId`: the MCP client fills any `roleId` argument with the caller's own role) — get it from `list_available_contacts` first. Role names aren't unique within a company, so a name-only lookup can target the wrong role; `roleName` is accepted only as an optional label for friendlier logs and error messages.
 
 ```text
 Calling Agent ──► interactions__request_agent_consultation
@@ -72,7 +72,7 @@ sequenceDiagram
     participant Q as BullMQ
     participant CON as Consulting Agent
 
-    CA->>I: request_agent_consultation(agentId, roleId, question)
+    CA->>I: request_agent_consultation(agentId, consultRoleId, question)
     I->>S: POST /internal/pause { type: agent_consultation, roleId, ... }
     S-->>S: Look up role by id (scoped to companyId)<br/>Create PendingConsultation<br/>Set calling agent = paused, pausedAt = now()
     S->>Q: Start consultation agent job

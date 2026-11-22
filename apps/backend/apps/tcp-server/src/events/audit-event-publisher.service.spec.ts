@@ -166,4 +166,36 @@ describe('AuditEventPublisher', () => {
       expect(sent.type === 'audit' && sent.event.payload).toEqual(update);
     });
   });
+
+  describe('memory changes (002.06)', () => {
+    const roleId = randomUUID();
+    const created = {
+      source: 'memory',
+      action: 'created',
+      roleId,
+      memoryId: randomUUID(),
+    };
+
+    it('sends the company stream the role and action, not the memory', () => {
+      publisher.publish(row({ payload: created }));
+      expect(companyEvents.emit).toHaveBeenCalledTimes(1);
+      const [id, sent] = companyEvents.emit.mock.calls[0];
+      expect(id).toBe(companyId);
+      expect(sent.type === 'audit' && sent.event.payload).toEqual({
+        entity: 'memory',
+        action: 'created',
+        roleId,
+      });
+    });
+
+    it('does not send a memory tool call', () => {
+      publisher.publish(
+        row({
+          eventType: AuditEventType.ToolCall,
+          payload: { source: 'memory', tool: 'recall' },
+        }),
+      );
+      expect(companyEvents.emit).not.toHaveBeenCalled();
+    });
+  });
 });

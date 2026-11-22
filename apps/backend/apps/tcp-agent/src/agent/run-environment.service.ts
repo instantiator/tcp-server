@@ -8,7 +8,9 @@ import {
   filterToolsForMode,
   LlmConfig,
   McpClientService,
+  resolveEnvEmbeddingConfig,
   resolveEnvLlmConfig,
+  resolveEmbeddingConfig,
   resolveLlmConfig,
   resolveMcpServerList,
   resolveMcpServerUrls,
@@ -73,7 +75,7 @@ export interface RunEnvironment {
   mcpTools: Awaited<ReturnType<McpClientService['loadTools']>>;
   /** The same tools as LangChain expects them, ready to bind to the model. */
   langchainTools: DynamicStructuredTool[];
-  /** Whether the role has indexed knowledge — gates both RAG and the memory server. */
+  /** Whether the role has indexed knowledge — gates RAG only. */
   hasKnowledge: boolean;
   model: ReturnType<typeof buildChatModel>;
   /** The graph bound to the full toolset, built once and reused across turns. */
@@ -117,9 +119,13 @@ export class AgentRunEnvironmentService {
     );
     const mcpTools = filterToolsForMode(
       await this.mcp.loadTools(
-        this.serverNames(agent, mode, mcpServerUrls, hasKnowledge),
+        this.serverNames(agent, mode, mcpServerUrls),
         mcpServerUrls,
-        { agentId: agent.id, companyId: agent.companyId },
+        {
+          agentId: agent.id,
+          companyId: agent.companyId,
+          roleId: agent.role.id,
+        },
         // A run without a server it needs can't finish its step, so it fails
         // naming the service rather than carrying on without those tools —
         // whether the server is down at the start or goes down mid-run.
@@ -173,7 +179,6 @@ export class AgentRunEnvironmentService {
     agent: TcpAgent,
     mode: TcpAssignment['mode'],
     mcpServerUrls: Record<string, string>,
-    hasKnowledge: boolean,
   ): string[] {
     // A `plan` agent drops `interactions` entirely (no consultation, no user
     // queries), so it is never even contacted.
@@ -185,8 +190,13 @@ export class AgentRunEnvironmentService {
       ),
       mode,
     );
-    // Don't offer the knowledge (memory) service to a role whose knowledge base
-    // is empty — there is nothing for it to search, so it only wastes turns.
-    return hasKnowledge ? names : names.filter((n) => n !== 'memory');
+    // Without an embedding model `remember` and `recall` can't work, so don't
+    // offer the memory service at all.
+    return resolveEmbeddingConfig(
+      agent.company,
+      resolveEnvEmbeddingConfig(this.config),
+    )
+      ? names
+      : names.filter((n) => n !== 'memory');
   }
 }

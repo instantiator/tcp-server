@@ -219,9 +219,17 @@ protocol regression `hosting.spec.ts` exists to catch.
 ```bash
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
 ./scripts/run-browser-tests.sh
-./scripts/run-browser-tests.sh --base-url https://localhost:5174  # the testing stack
+# The testing stack must run the stub LLM, which the memory specs embed with
+STUB_LLM=true ./scripts/start-deployment.sh --project tcp-testing --env-file .env.testing
+./scripts/run-browser-tests.sh --base-url https://localhost:5174
 ./scripts/run-browser-tests.sh -- --headed --grep "heading"
 ```
+
+**The stack must run the stub LLM** (`STUB_LLM=true`). The Memories journey
+saves memories, which are embedded, and the fixture company embeds with the
+stub model at `http://stub-llm:3002/v1`. Without it those specs fail.
+`.env.testing` allows the `stub-llm` host in `LLM_ALLOWED_HOSTS`, and
+`run-all-tests.sh` starts its deployment this way. See [stub-llm.md](stub-llm.md).
 
 `hosting.spec.ts` covers what nginx has to get right
 ([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)): HTTP/2 is

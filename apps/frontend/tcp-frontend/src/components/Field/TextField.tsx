@@ -32,6 +32,8 @@ export interface TextFieldProps {
   readonly type?: 'text' | 'password';
   /** So a failed submit can move focus to the first field that is wrong. */
   readonly inputRef?: RefObject<HTMLElement | null>;
+  /** The most characters the field takes; typing stops there. */
+  readonly maxLength?: number;
 }
 
 /**
@@ -66,6 +68,7 @@ export const TextField = ({
   multiline = false,
   type = 'text',
   inputRef,
+  maxLength,
 }: TextFieldProps) => {
   // React Aria replaces its own default class when `className` is passed, and
   // `base.css` styles these components through those defaults — so every one
@@ -84,6 +87,7 @@ export const TextField = ({
       isInvalid={errorMessage !== undefined}
       validationBehavior="aria"
       type={type}
+      maxLength={maxLength}
     >
       <Label className="react-aria-Label tcp-field__label">{label}</Label>
       {multiline ? (

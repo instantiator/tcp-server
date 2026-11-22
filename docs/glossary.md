@@ -98,7 +98,7 @@ A task's short, per-company identifier (`000`, `001`, …), assigned at creation
 The base system message rendered for prompt part 0. Resolved with role → company → baked-in default precedence (`SystemPromptTemplateResolver`; a blank template counts as unset). Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, and `{{roleId}}` placeholders — see [`buildPromptDateVars`](../libs/tcp-shared/src/llm/prompt-vars.ts).
 
 **Prompt parts**
-The prompt assembled for each LLM call is composed of numbered sections (parts 0–8): system intro, role description, company environment, MCP server list, the assignment presentation, RAG knowledge, pre-fetched MCP responses (part 6 — deferred, not built), and output instructions. Every builder lives in `@tcp/shared`'s `prompt-assembly.ts`, shared by tcp-server's chat path and tcp-agent's worker. See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md).
+The prompt assembled for each LLM call is composed of numbered sections (parts 0–8): system intro, role description, company environment, MCP server list, the assignment presentation, RAG knowledge, recalled memories (part 6, since 002.06), and output instructions. Every builder lives in `@tcp/shared`'s `prompt-assembly.ts`, shared by tcp-server's chat path and tcp-agent's worker. See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md).
 
 **Context window**
 The token budget for a single LLM invocation. Configured via `LlmConfig.contextWindow`; defaults to 8192.
