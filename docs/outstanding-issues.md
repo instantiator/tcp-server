@@ -1018,3 +1018,27 @@ Memories only grow. Nothing merges, summarises or expires them. ADR-006 deferred
 Each chat message adds its recalled memories to the conversation, and they stay there. In a long chat the same memory can appear many times.
 
 **Act when:** a long chat nears its context window and repeated memory blocks are a visible share of it.
+
+## No per-folder console links in the resources tray
+
+The resources tray (002.08) has one storage-console link, for `resources/`. A folder row has no link of its own. A second interactive control in each tree row is hard to use from the keyboard, and the browser dialog is one Enter away.
+
+**Act when:** someone asks to open a subfolder in the console without going through the browser.
+
+## The resources tray doesn't update live
+
+The tray (002.08) reads storage, which has been static since 002.05. A folder or README written by an agent shows only after **Refresh resources**.
+
+**Act when:** [the storage browser's live-update deferral](#the-storage-browser-doesnt-update-by-itself) is acted on. Fix both together.
+
+## A React Aria workaround keeps tree folders expandable
+
+`FolderTree` (`src/components/StorageBrowser/FolderTree.tsx`) gives each collapsed folder a `CollapsedPlaceholder` row, never drawn or fetched. React Aria Components 1.20 doesn't pass `hasChildItems` through to `useTreeItem`, so a row without children is not expandable and gets no `aria-expanded` or arrow-key expansion.
+
+**Act when:** react-aria-components passes `hasChildItems` through (check on each upgrade). Remove the placeholder and re-run `FolderTree.test.tsx`.
+
+## The browser spec doesn't test arrow keys between rows
+
+`test/browser/resources.spec.ts` (002.08) focuses the folder row directly. `FolderTree.test.tsx` covers arrow-key expansion, but no browser test moves between rows with the arrows.
+
+**Act when:** the tree's keyboard behaviour changes, or a browser-tier keyboard sweep is done (phase 06).

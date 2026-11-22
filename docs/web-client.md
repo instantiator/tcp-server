@@ -1095,12 +1095,43 @@ the CSV format). There are two ways in, and both show the same view.
   [shared-storage.md](shared-storage.md#browsing-in-the-web-client).
 - **The filing cabinet** stands in the archive room, beside the bookshelf. One
   selectable zone covers each piece (`SELECTABLE_FURNITURE`): the bookshelf
-  selects `archive`, the cabinet selects `records`. Clicking it, or choosing it
+  selects `archive`, the cabinet selects `records`, the plan chest selects
+  `resources`. The kind-to-id map is `ARCHIVE_FURNITURE_IDS` in
+  `world/layout.ts`, which the scene and the tooltip both read. Clicking it, or choosing it
   in the "Show details for…" picker, opens a tray (`ui/RecordsDetails.tsx`).
   The tray body is a native `<table>` named by the tray heading: the table name
   (a button that opens the table in a wide dialog, `RecordTableDialog`), the
   record count, **Download** and a **More actions** menu. **Download all** is in
   the tray's actions.
+
+### Company resources tray (002.08)
+
+The **plan chest** is the third piece in the archive room, beside the
+bookshelf and the filing cabinet. Clicking it, or choosing **Resources** in the
+"Show details for…" picker, opens the **Company resources** tray
+(`ui/ResourcesDetails.tsx`). It shows the company's live resources only. Task
+drafts stay under their task folders.
+
+- **A folders-only tree** of `resources/`, with each folder's purpose (the first
+  line of its `README.md`). It is `FolderTree`
+  (`src/components/StorageBrowser/FolderTree.tsx`), the same tree the storage
+  browser uses.
+- **A folder is an action row.** A click or Enter opens the storage browser
+  dialog rooted at that folder. The dialog's heading is the folder's name and
+  its purpose sits underneath. The arrow keys move and expand folders. An
+  open icon at the row's end, a hover highlight and a pointer cursor show that
+  the row opens something. Closing the dialog returns focus to the row.
+- **Browse all resources** opens the dialog at `resources/`, so files kept at the
+  top level stay reachable. **Refresh resources** refetches, because storage is
+  not live.
+- **One console link** for `resources/`, when the console is configured. There is
+  none per folder.
+- **No folders yet** shows an empty state, and Browse all is still offered.
+- **Full screen.** The dialog portals into the office view, so it works there.
+
+Two accessibility fixes in `FolderTree` also apply to the storage browser.
+Folders now expose `aria-expanded` and open with the arrow keys. A folder's
+purpose is now read as part of its row name ("pricing, Price lists").
 
 ### Data protection (001.04)
 
@@ -1341,7 +1372,7 @@ header.
 - **Rooms**, in fixed-size slots along one corridor: the **rec room** (one spot
   per role, always present), the **mail room** (chat and enquiry avatars,
   always present), the **archive room** (fixed slot 2, always present — a
-  bookshelf of completed tasks, and a filing cabinet of record tables), the **corridor** with the **office door**,
+  bookshelf of completed tasks, a filing cabinet of record tables, and a plan chest of company resources), the **corridor** with the **office door**,
   one **task room** per task whose room is still open, and one **1:1 room**
   per open consultation. Dynamic rooms (task and 1:1) start at slot 3
   (`FIRST_DYNAMIC_SLOT`), after the three fixed ones.
@@ -1420,7 +1451,7 @@ header.
   text and `scene/LabelLayer.ts` draws it. They are a visual aid; the picker
   and tray give a screen reader the same facts.
 - **The tray, tooltips, picker, pan keys and full screen.** Hovering a role,
-  task, agent, the bookshelf or the filing cabinet shows a tooltip; clicking opens a side tray
+  task, agent, the bookshelf, the filing cabinet or the plan chest shows a tooltip; clicking opens a side tray
   with its live details. Furniture and doorways have hover-only tooltips
   saying what they are for (`ui/officeDescriptions.ts`). The tray slides in
   over the canvas's right edge (005.01), so the canvas doesn't resize. Every
@@ -1537,7 +1568,11 @@ positions are exact rather than mid-animation.
 task's archive link. The browser-tier deployment has no LLM, so no agent ever
 runs there and no task can be driven to `succeeded` without racing a real
 worker job — only roles, task rooms and every interaction are proven against
-real Phaser; the bookshelf tray's browser spec covers its empty state
+real Phaser. The plan chest's journey is `test/browser/resources.spec.ts`: it
+picks Resources, reaches a folder from the keyboard, opens the dialog, checks
+focus returns, runs axe, and repeats in full screen. It sets focus on the row
+directly, so arrow-key movement between rows is covered only by
+`FolderTree.test.tsx`. The bookshelf tray's browser spec covers its empty state
 instead (002.02 stage 11), which still proves the tray reads its live
 `storageConsoleUrl`/`storageBucket` config. See phase 03's
 [unresolved notes](prompts/unresolved-notes.md).

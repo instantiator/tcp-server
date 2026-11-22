@@ -1,6 +1,6 @@
 # ADR-026: Accessibility Standards, Component Library and Auditing
 
-**Status:** Accepted (amended — see [008.01](#amendment-as-implemented-00801) at the end)
+**Status:** Accepted (amended — see [008.01](#amendment-as-implemented-00801) and [002.08](#amendment-as-implemented-p04-002-08) at the end)
 
 ## Context
 
@@ -206,3 +206,10 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **Secrets are never shown.** The API key is a password field that only holds what is typed. Its description says whether a saved key is kept or will be dropped, because the server drops a key when the address or provider changes. That warning sits on the field, before saving, rather than in a message afterwards.
 - **Two pickers on one page are named groups** (`role="group"`, labelled by their `h3`), so their fields of the same name ("Model", "Provider") can be told apart.
 - **Questions on save are one `ConfirmDialog` at a time**: first the localhost question, then "leave roles without a model?", then "re-index knowledge?". Each one stops the save on No.
+
+## Amendment as implemented (002.08, phase 04) <a id="amendment-as-implemented-p04-002-08"></a>
+
+[002.08](../prompts/phase%2004%20-%20utility/002.08.01.plan%20-%20company%20resources%20in%20the%20archive.md) added a resources tray to the office view. The decisions above stand.
+
+- **One more `TrayPanel`.** The plan chest in the archive room opens the Company resources tray. It uses the same layout as the task, agent, role, archive and records trays: a heading, round icon actions ("Browse all resources", "Refresh resources"), a description with the console link, and a scrolling body.
+- **Its tree is shared.** `FolderTree` is the one tree for this tray and the storage browser, so the two cannot drift apart. See [ADR-027's amendment](ADR-027-screen-reader-strategy.md#amendment-as-implemented-p04-002-08) for how it behaves.

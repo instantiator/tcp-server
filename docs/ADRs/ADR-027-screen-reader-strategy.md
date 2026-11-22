@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202), [000.01](#amendment-as-implemented-00001) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202), [000.01](#amendment-as-implemented-00001) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) and [002.08](#amendment-as-implemented-p04-002-08) at the end)
 
 ## Context
 
@@ -377,3 +377,12 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **Each step is announced once, by role only.** "Consulting {Role}" when the question appears, then "{Role} answered" or "{Role} couldn't answer". The question and answer text are not read out, as with responses (`ANNOUNCE_RESPONSE_BODY` stays `false`).
 - **The waiting line is plain text,** not an animation. A still line says the same thing, and nothing is announced while it shows.
 - **The link names the role.** "Open conversation with {Role}" is a link button, and it is left out when there is no chat dialog to open.
+
+## Amendment as implemented (002.08, phase 04) <a id="amendment-as-implemented-p04-002-08"></a>
+
+[002.08](../prompts/phase%2004%20-%20utility/002.08.01.plan%20-%20company%20resources%20in%20the%20archive.md) put a tree in a non-modal tray. Until now no ADR said how a tree should behave. The policy table is unchanged.
+
+- **A tree in a tray uses action rows.** A click or Enter on a folder opens the storage browser dialog there. The arrow keys move through the tree and expand folders. Rows are not selectable (`selectionMode="none"`), so Space does nothing surprising. A row that opens something must look like it does: an `aria-hidden` open icon at its end (the row's role already says it acts), a hover and focus highlight, and a pointer cursor.
+- **The purpose is part of the row's name.** React Aria names a row from its `textValue`, so the purpose is joined into it ("pricing, Price lists"). It was never read at all before. `aria-describedby` would not have helped.
+- **Focus returns to the row** after the dialog closes. The tray is non-modal and opening it moves no focus, so this is the same rule as [the four focus points](#focus-is-managed-at-four-points): focus goes back to what opened the dialog.
+- **React Aria's expandability workaround.** React Aria 1.20's `Tree` does not pass `hasChildItems` to the hook that decides whether a row is expandable. A row counts as expandable only once it has child items. A collapsed folder therefore holds a `CollapsedPlaceholder` row that is never drawn or fetched. Folders now expose `aria-expanded` and open with the arrow keys. This also fixes 002.05's storage browser, where only the chevron button worked.
