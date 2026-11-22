@@ -9,7 +9,10 @@ import { expectNoA11yViolations } from '../../../test-support/axe';
 import { fetchMock, installFetchMock } from '../../../test-support/fetch-mock';
 import { KnowledgePanel } from './KnowledgePanel';
 
-vi.mock('../../../announce/announcer', () => ({ announce: vi.fn() }));
+vi.mock('../../../announce/announcer', async (original) => ({
+  ...(await original<typeof import('../../../announce/announcer')>()),
+  announce: vi.fn(),
+}));
 
 const BASE = '/api/company/c1/knowledge';
 
@@ -39,8 +42,6 @@ const status = (overrides: Record<string, unknown> = {}) => ({
 interface World {
   docs: ReturnType<typeof doc>[];
   status: ReturnType<typeof status>;
-  /** The answer to an upload: a status, or `'hang'` to wait for an abort. */
-  upload: number | 'hang';
 }
 
 const json = (body: unknown, statusCode = 200) =>
@@ -70,24 +71,27 @@ const serve = (world: World) => {
     calls.push(`${method} ${url.pathname}${url.search}`);
     const path = url.pathname;
 
-    if (method === 'POST' && path === BASE) {
-      if (world.upload === 'hang') {
-        return new Promise<Response>((_, reject) => {
-          init?.signal?.addEventListener('abort', () =>
-            reject(new DOMException('aborted', 'AbortError')),
-          );
-        });
-      }
+    if (path === '/api/company/c1/storage/folder') {
       return Promise.resolve(
-        json(
-          world.upload === 201
-            ? doc('new.md')
-            : { message: `refused with ${String(world.upload)}` },
-          world.upload,
-        ),
+        json({
+          path: 'knowledge/shared/',
+          writable: false,
+          folders: [],
+          files: world.docs.map((d) => ({
+            path: `knowledge/shared/${d.name}`,
+            name: d.name,
+            size: d.size,
+            lastModified: d.lastModified,
+          })),
+        }),
       );
     }
-    if (method === 'DELETE') return Promise.resolve(json(undefined, 204));
+    if (path === '/api/company/c1/roles') return Promise.resolve(json([]));
+    if (method === 'POST' && path === BASE) {
+      // An upload queues a rebuild, which the status then shows.
+      world.status = status({ indexing: true });
+      return Promise.resolve(json(doc('new.md'), 201));
+    }
     if (path === `${BASE}/reindex`) {
       return Promise.resolve(json({ reindexing: true }, 202));
     }
@@ -109,7 +113,6 @@ const serve = (world: World) => {
         ),
       );
     }
-    if (path === BASE) return Promise.resolve(json(world.docs));
     return Promise.reject(new Error(`unexpected ${method} ${path}`));
   });
 };
@@ -123,16 +126,14 @@ const renderPanel = () =>
     >
       <main>
         <KnowledgePanel
+          companyId="c1"
           scope={{ kind: 'company', companyId: 'c1' }}
+          folder="knowledge/shared/"
           headingLevel={2}
         />
       </main>
     </QueryClientProvider>,
   );
-
-const uploadInput = () => screen.getByLabelText(t('knowledge.upload'));
-const file = (name: string) =>
-  new File(['# Title\n\nBody.'], name, { type: 'text/markdown' });
 
 describe('KnowledgePanel', () => {
   let world: World;
@@ -141,11 +142,7 @@ describe('KnowledgePanel', () => {
     installFetchMock();
     calls.length = 0;
     vi.mocked(announce).mockClear();
-    world = {
-      docs: [doc('handbook.md'), doc('policy.md')],
-      status: status(),
-      upload: 201,
-    };
+    world = { docs: [doc('handbook.md'), doc('policy.md')], status: status() };
     serve(world);
   });
 
@@ -153,134 +150,42 @@ describe('KnowledgePanel', () => {
     vi.useRealTimers();
   });
 
-  it('lists the documents and the index status, with the accepted types shown before picking', async () => {
+  it('shows the scope’s documents in a storage browser rooted at its folder, with the index status', async () => {
     renderPanel();
     expect(
-      await screen.findByRole('rowheader', { name: 'handbook.md' }),
+      await screen.findByRole('row', { name: /handbook\.md/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('treegrid', { name: t('knowledge.headingShared') }),
     ).toBeInTheDocument();
     expect(
       await screen.findByText(new RegExp(tCount('knowledge.status.chunks', 7))),
     ).toBeInTheDocument();
-    expect(uploadInput()).toHaveAccessibleDescription(
-      t('knowledge.uploadHint'),
-    );
-    expect(uploadInput()).toHaveAttribute(
-      'accept',
-      expect.stringContaining('.pdf'),
+    expect(calls).toContain(
+      'GET /api/company/c1/storage/folder?path=knowledge%2Fshared%2F',
     );
     await expectNoA11yViolations(document.body);
   });
 
-  it('shows a document’s licence, linked only when its source is https', async () => {
-    world.docs = [
-      { ...doc('linked.md'), license: 'CC-BY-4.0', source: 'https://x.test/a' },
-      { ...doc('plain.md'), license: 'OGL', source: 'http://x.test/b' },
-      { ...doc('bare.md'), license: 'MIT' },
-      doc('none.md'),
-    ];
-    renderPanel();
-    await screen.findByRole('rowheader', { name: 'linked.md' });
-
-    expect(screen.getByRole('link', { name: 'CC-BY-4.0' })).toHaveAttribute(
-      'href',
-      'https://x.test/a',
-    );
-    expect(screen.getByText('OGL')).toBeVisible();
-    expect(screen.getByText('MIT')).toBeVisible();
-    expect(screen.getAllByRole('link')).toHaveLength(1);
-
-    const none = screen.getByRole('row', { name: /none\.md/ });
-    expect(within(none).getAllByRole('cell')[2]).toBeEmptyDOMElement();
-  });
-
-  it('uploads a document, announces it, and refreshes the list', async () => {
+  it('uploads through the knowledge route after confirming, and the status follows the rebuild', async () => {
     const user = userEvent.setup();
-    renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
+    const { container } = renderPanel();
+    await screen.findByRole('row', { name: /handbook\.md/ });
 
-    world.docs = [...world.docs, doc('new.md')];
-    await user.upload(uploadInput(), file('new.md'));
-
-    await waitFor(() =>
-      expect(announce).toHaveBeenCalledWith({
-        channel: 'knowledge',
-        change: 'knowledge.announce.uploaded',
-        params: { name: 'new.md' },
-      }),
+    const input = container.querySelector(
+      'input[type="file"]:not([webkitdirectory])',
     );
+    if (!(input instanceof HTMLInputElement)) throw new Error('no file input');
+    await user.upload(input, [new File(['# New'], 'new.md')]);
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: t('storage.door.confirm') }),
+    );
+
+    await waitFor(() => expect(calls).toContain(`POST ${BASE}`));
     expect(
-      await screen.findByRole('rowheader', { name: 'new.md' }),
+      await screen.findByText(new RegExp(t('knowledge.status.indexing'))),
     ).toBeInTheDocument();
-  });
-
-  it('says why an upload was refused: the server message, or the size limit for 413', async () => {
-    const user = userEvent.setup();
-    renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
-
-    world.upload = 400;
-    await user.upload(uploadInput(), file('bad.md'));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      t('knowledge.uploadFailed', { message: 'refused with 400' }),
-    );
-
-    world.upload = 413;
-    await user.upload(uploadInput(), file('big.md'));
-    await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        t('knowledge.tooLarge'),
-      ),
-    );
-  });
-
-  it('cancels an upload in flight, and the control comes back', async () => {
-    const user = userEvent.setup();
-    renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
-
-    world.upload = 'hang';
-    await user.upload(uploadInput(), file('slow.md'));
-    expect(uploadInput()).toBeDisabled();
-
-    await user.click(
-      screen.getByRole('button', { name: t('knowledge.cancelUpload') }),
-    );
-    await waitFor(() =>
-      expect(announce).toHaveBeenCalledWith({
-        channel: 'knowledge',
-        change: 'knowledge.announce.cancelled',
-      }),
-    );
-    expect(uploadInput()).toBeEnabled();
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('deletes after confirming, and puts focus on the next document', async () => {
-    const user = userEvent.setup();
-    renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
-
-    await user.click(
-      screen.getByRole('button', {
-        name: t('knowledge.delete', { name: 'handbook.md' }),
-      }),
-    );
-    const confirm = screen.getByRole('alertdialog', {
-      name: t('knowledge.deleteHeading', { name: 'handbook.md' }),
-    });
-    world.docs = [doc('policy.md')];
-    await user.click(
-      within(confirm).getByRole('button', {
-        name: t('knowledge.deleteConfirm'),
-      }),
-    );
-
-    expect(calls).toContain(`DELETE ${BASE}/handbook.md`);
-    await waitFor(() =>
-      expect(
-        screen.getByRole('rowheader', { name: 'policy.md' }),
-      ).toHaveFocus(),
-    );
   });
 
   it('polls while indexing, and announces when the index is ready', async () => {
@@ -337,7 +242,7 @@ describe('KnowledgePanel', () => {
   it('rebuilds on request, and refreshes the status on request', async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
+    await screen.findByRole('row', { name: /handbook\.md/ });
 
     await user.click(
       screen.getByRole('button', { name: t('knowledge.rebuild') }),
@@ -358,7 +263,7 @@ describe('KnowledgePanel', () => {
   it('searches the knowledge and shows each passage with its source and match', async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
+    await screen.findByRole('row', { name: /handbook\.md/ });
 
     await user.type(
       screen.getByRole('textbox', { name: t('knowledge.query.label') }),
@@ -382,7 +287,7 @@ describe('KnowledgePanel', () => {
   it('says so when no passage matches', async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole('rowheader', { name: 'handbook.md' });
+    await screen.findByRole('row', { name: /handbook\.md/ });
 
     await user.type(
       screen.getByRole('textbox', { name: t('knowledge.query.label') }),

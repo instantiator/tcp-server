@@ -61,7 +61,9 @@ export const AdminPanel = ({
         <RolesAdmin companyId={companyId} />
       ) : section === 'knowledge' ? (
         <KnowledgePanel
+          companyId={companyId}
           scope={{ kind: 'company', companyId }}
+          folder="knowledge/shared/"
           headingLevel={2}
         />
       ) : section === 'users' ? (

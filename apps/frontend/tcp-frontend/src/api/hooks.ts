@@ -97,7 +97,6 @@ import {
   useDeleteKnowledgeMutation,
   useDeleteRoleMutation,
   useReindexKnowledgeMutation,
-  useRoleKnowledge,
   useRoleKnowledgeSearch,
   useRoleKnowledgeStatus,
   useUpdateRoleMutation,
@@ -317,21 +316,6 @@ export const useCompanyKnowledgeList = (
 /** How often knowledge status is asked while an index rebuild runs. */
 const KNOWLEDGE_POLL_MS = 3_000;
 
-/**
- * The scope's documents. Both reads are called to keep the hook order fixed;
- * the one for the other scope is disabled and never requests.
- */
-export const useKnowledgeList = (scope: KnowledgeScope) => {
-  const role = useRoleKnowledge(scope.kind === 'role' ? scope.roleId : '', {
-    enabled: scope.kind === 'role',
-  });
-  const company = useCompanyKnowledge(
-    scope.kind === 'company' ? scope.companyId : '',
-    { enabled: scope.kind === 'company' },
-  );
-  return scope.kind === 'role' ? role : company;
-};
-
 /** Semantic search over the scope's knowledge; idle while the query is blank. */
 export const useKnowledgeSearch = (scope: KnowledgeScope, query: string) => {
   const searching = query.trim() !== '';
@@ -383,16 +367,6 @@ const useKnowledgeInvalidation = () => {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ['knowledge'] });
   };
-};
-
-/** Uploads a knowledge file; the lists and status refetch on success. */
-export const useUploadKnowledge = (scope: KnowledgeScope) => {
-  const upload = useUploadKnowledgeMutation();
-  return useMutation({
-    mutationFn: (input: { file: File; signal?: AbortSignal }) =>
-      upload.mutateAsync({ scope, ...input }),
-    onSuccess: useKnowledgeInvalidation(),
-  });
 };
 
 /**
