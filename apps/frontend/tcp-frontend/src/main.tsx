@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from 'react-oidc-context';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
+import { retryQuery } from './api/client';
 import { AuthSession } from './auth/AuthSession';
 import { getUserManager } from './auth/user-manager';
 import { readDevSession } from './dev/dev-session';
@@ -13,9 +14,11 @@ import './styles/themes/default.css';
 import './styles/themes/high-contrast.css';
 
 // TanStack Query is the only cache in this application; there is no separate
-// client-state store (ADR-021). Nothing queries yet — this makes the provider
-// available so later prompts don't have to retrofit it around a mounted tree.
-const queryClient = new QueryClient();
+// client-state store (ADR-021). Failed queries retry only when asking again
+// can help (002.09).
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: retryQuery } },
+});
 
 const container = document.getElementById('root');
 if (container === null) {

@@ -3,7 +3,7 @@ import createClient from 'openapi-fetch';
 import { getAccessToken } from '../auth/access-token';
 import { handleUnauthorized } from '../auth/unauthorized';
 
-import { apiError, networkError } from './errors';
+import { ApiError, apiError, networkError } from './errors';
 import { readWarnings } from './warnings';
 import type { paths } from './schema';
 
@@ -88,6 +88,31 @@ export const unwrap = async <T>(
   // moves the failure to whichever component reads a field off it.
   if (!response.ok || data === undefined) throw apiError(response, error);
   return data;
+};
+
+/**
+ * Statuses where asking again can get a different answer: the request never
+ * landed (`0`), a proxy or restarting service (502–504), or too many requests.
+ */
+// ponytail: 429 backs off like the rest and ignores `Retry-After`; tcp-server
+// sends neither today. Carry the header on `ApiError` when it starts to.
+const TRANSIENT = new Set([0, 429, 502, 503, 504]);
+
+/** How many times a transient failure is asked again before it is shown. */
+const TRANSIENT_RETRIES = 3;
+
+/**
+ * Whether a failed query is worth asking again (002.09): the app-wide
+ * `retry` default, spaced by TanStack's own back-off (1 s, 2 s, 4 s).
+ * A 500 gets one more try, since it is sometimes a passing fault. Every other
+ * 4xx gets the same answer however often it is asked, and a 401 has already
+ * started the sign-in redirect. Anything that isn't an {@link ApiError} is a
+ * bug in this client, which retrying would only hide.
+ */
+export const retryQuery = (failureCount: number, error: unknown): boolean => {
+  if (!(error instanceof ApiError)) return false;
+  if (TRANSIENT.has(error.status)) return failureCount < TRANSIENT_RETRIES;
+  return error.status === 500 && failureCount < 1;
 };
 
 /**
