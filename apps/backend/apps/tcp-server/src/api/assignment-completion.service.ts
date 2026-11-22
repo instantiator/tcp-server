@@ -98,7 +98,13 @@ export class AssignmentCompletionService {
       throw new UnprocessableEntityException(buildGateMessage(gate));
     }
 
-    if (assignment.taskId === null || assignment.taskId === undefined) {
+    // A consultation answers the agent that asked, with no QA round, even when
+    // it inherited that agent's task.
+    if (
+      assignment.mode === 'consultee' ||
+      assignment.taskId === null ||
+      assignment.taskId === undefined
+    ) {
       await this.completeOrphan(
         assignment,
         agentId,

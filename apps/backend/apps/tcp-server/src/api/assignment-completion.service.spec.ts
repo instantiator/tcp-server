@@ -261,7 +261,10 @@ describe('AssignmentCompletionService.complete — QA hand-off', () => {
     return randomUUID().slice(0, 8);
   }
 
-  it('publishes the agent paused state_change, with a summary, only after the agent row is written', async () => {
+  /** A company, role and task with one in-progress assignment of `mode` held by a running agent. */
+  async function seed(
+    mode: TcpAssignment['mode'],
+  ): Promise<{ assignment: TcpAssignment; agent: TcpAgent }> {
     const company = await companyRepo.save(
       companyRepo.create({
         slug: `qa-${randomSlug()}`,
@@ -290,7 +293,7 @@ describe('AssignmentCompletionService.complete — QA hand-off', () => {
         companyId: company.id,
         roleId: role.id,
         taskId: task.id,
-        mode: 'implement',
+        mode,
         status: 'in-progress',
         orderIndex: 0,
         prompt: 'work',
@@ -311,6 +314,12 @@ describe('AssignmentCompletionService.complete — QA hand-off', () => {
     );
     assignment.agentId = agent.id;
     await assignmentRepo.save(assignment);
+
+    return { assignment, agent };
+  }
+
+  it('publishes the agent paused state_change, with a summary, only after the agent row is written', async () => {
+    const { assignment, agent } = await seed('implement');
 
     const updateSpy = jest.spyOn(agentRepo, 'update');
 
@@ -348,5 +357,29 @@ describe('AssignmentCompletionService.complete — QA hand-off', () => {
     );
 
     updateSpy.mockRestore();
+  });
+
+  it('answers a consultation straight away, without QA, even when it inherited a task', async () => {
+    const { assignment, agent } = await seed('consultee');
+    const completeAgent = jest.fn().mockResolvedValue(undefined);
+    const consultService = new AssignmentCompletionService(
+      agentRepo,
+      assignmentRepo,
+      taskRepo,
+      roleRepo,
+      dispatcher as unknown as TaskDispatcher,
+      { completeAgent } as unknown as PauseAndResumeService,
+      {
+        checkAssignmentOutputs: jest.fn().mockResolvedValue([]),
+      } as unknown as OutputGateService,
+      audit as unknown as AuditService,
+    );
+
+    await consultService.complete(assignment, agent.id, 'the answer', []);
+
+    expect(completeAgent).toHaveBeenCalledWith(agent.id, 'the answer');
+    expect(dispatcher.assignmentReadyForQa).not.toHaveBeenCalled();
+    const stored = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+    expect(stored.status).toBe('succeeded');
   });
 });
