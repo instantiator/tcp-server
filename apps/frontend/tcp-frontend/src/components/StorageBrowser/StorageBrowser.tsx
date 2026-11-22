@@ -1,5 +1,5 @@
 import { Download, FolderUp, RefreshCw, Trash2, Upload } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import {
   Button,
   DropZone,
@@ -11,9 +11,12 @@ import {
 import {
   downloadStorageFile,
   downloadStorageZip,
+  useCompanyRolesList,
+  useDeleteKnowledge,
   useDeleteStorage,
   useRefreshStorage,
   useStorageFolder,
+  type UploadDoor,
 } from '../../api/hooks';
 import { ApiError } from '../../api/errors';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
@@ -27,12 +30,19 @@ import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { FilePreview } from './FilePreview';
 import { FolderTree } from './FolderTree';
 import { formatSize, savedAt } from './format';
-import { isWritablePath, parentOf } from './paths';
+import {
+  doorFor,
+  hasDoorsUnder,
+  isWritablePath,
+  parentOf,
+  storedName,
+} from './paths';
 import {
   STORAGE_CHANNEL,
   itemsFromDrop,
   itemsFromFiles,
   useUploads,
+  type UploadItem,
 } from './useUploads';
 import { VersionHistory } from './VersionHistory';
 import './StorageBrowser.css';
@@ -77,6 +87,44 @@ const sayFailed = (
     politeness: 'assertive',
   });
 
+/** An upload into a knowledge or materials door, waiting on its confirmation. */
+interface PendingUpload {
+  readonly items: readonly UploadItem[];
+  readonly door: Exclude<UploadDoor, { kind: 'storage' }>;
+  readonly folder: string;
+  readonly folderPath: string;
+}
+
+/** What the confirmation says before an upload goes through a door. */
+const doorQuestion = ({ items, door }: PendingUpload) => {
+  const files = tCount('storage.fileCount', items.length);
+  if (door.kind === 'materials') {
+    return {
+      heading: t('storage.door.materials.heading', { files }),
+      message: t('storage.door.materials.message'),
+    };
+  }
+  const renames = items
+    .filter(({ file }) => storedName(file.name, door) !== file.name)
+    .map(({ file }) => `${file.name} → ${storedName(file.name, door)}`);
+  const message = t('storage.door.knowledge.message');
+  return {
+    heading: t('storage.door.knowledge.heading', { files }),
+    message:
+      renames.length === 0
+        ? message
+        : `${message} ${t('storage.door.renames', { renames: renames.join(', ') })}`,
+  };
+};
+
+/** Why a folder takes no uploads, by where it is. */
+const readOnlyReason = (folder: string, folderName: string): string =>
+  folder.startsWith('knowledge/')
+    ? t('storage.door.target.knowledge', { folder: folderName })
+    : folder.startsWith('tasks/')
+      ? t('storage.door.target.materials', { folder: folderName })
+      : t('storage.target.readOnly', { folder: folderName });
+
 /**
  * The storage browser (002.05): a company's shared storage as a tree rooted
  * at `root`, with a preview of the one file selected. It works in a page's
@@ -84,9 +132,13 @@ const sayFailed = (
  * the tree (a container query, so the host needs no prop).
  *
  * Uploads go into the selected folder, or the folder of the selected file,
- * or the root. Only `resources/` takes uploads and deletes; the server
- * refuses the rest, and a browser rooted elsewhere shows no upload or delete
- * controls at all. Old versions can be seen and restored for resources.
+ * or the root, through that folder's door (002.10, `doorFor`): `resources/`
+ * takes files as they are; a knowledge scope and a task's `materials/` take
+ * them through their own routes, after one confirmation that says what those
+ * routes do. Knowledge files delete through the knowledge route, so their
+ * index goes too. Everything else is read-only, and a browser rooted where
+ * no door is shows no upload or delete controls at all. Old versions can be
+ * seen and restored for resources.
  *
  * Focus (ADR-027): selecting moves no focus; dialogs return focus to their
  * trigger; a delete returns focus to the tree, since the rows it removed may
@@ -101,6 +153,7 @@ export const StorageBrowser = ({
 }: StorageBrowserProps) => {
   const [selected, setSelected] = useState<ReadonlySet<Key>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pending, setPending] = useState<PendingUpload | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
   const previewId = useId();
 
@@ -108,6 +161,12 @@ export const StorageBrowser = ({
   const refresh = useRefreshStorage();
   const uploads = useUploads(companyId);
   const remove = useDeleteStorage(companyId);
+  const removeKnowledge = useDeleteKnowledge();
+  const roles = useCompanyRolesList(companyId).data;
+  const roleIdBySlug = useMemo(
+    () => new Map((roles ?? []).map((role) => [role.slug, role.id])),
+    [roles],
+  );
 
   const paths = [...selected].map(String);
   const single = paths.length === 1 ? paths[0] : undefined;
@@ -129,13 +188,35 @@ export const StorageBrowser = ({
         ? single
         : parentOf(single);
   const targetName = target === '' ? t('storage.rootName') : target;
-  const canUpload = isWritablePath(target);
-  // A browser rooted outside resources/ (a task's folder) can never change
-  // anything, so it shows no write controls rather than disabled ones.
-  const writableSomewhere = root === '' || isWritablePath(root);
+  const door = doorFor(target, companyId, roleIdBySlug);
+  const canUpload = door !== null;
+  // A browser rooted where no door is can never change anything, so it
+  // shows no write controls rather than disabled ones.
+  const writableSomewhere = hasDoorsUnder(root);
+  /** A knowledge file's scope, when `path` is one; it deletes through that route. */
+  const knowledgeOf = (path: string) => {
+    const parent = doorFor(parentOf(path), companyId, roleIdBySlug);
+    return !path.endsWith('/') && parent?.kind === 'knowledge'
+      ? parent.scope
+      : undefined;
+  };
   const canDelete =
     paths.length > 0 &&
-    paths.every((p) => isWritablePath(p) && p !== 'resources/');
+    paths.every(
+      (p) =>
+        (isWritablePath(p) && p !== 'resources/') ||
+        knowledgeOf(p) !== undefined,
+    );
+
+  /** Starts an upload into the target: straight away into storage, or after asking. */
+  const upload = (items: readonly UploadItem[]) => {
+    if (door === null || items.length === 0) return;
+    if (door.kind === 'storage') {
+      void uploads.start(items, targetName, target, door);
+    } else {
+      setPending({ items, door, folder: targetName, folderPath: target });
+    }
+  };
 
   const zipName = `${root.replace(/\/$/, '').split('/').pop() || 'files'}.zip`;
   const download = () =>
@@ -154,7 +235,15 @@ export const StorageBrowser = ({
     setConfirmDelete(false);
     const items = tCount('storage.itemCount', paths.length);
     try {
-      for (const path of paths) await remove.mutateAsync(path);
+      for (const path of paths) {
+        const scope = knowledgeOf(path);
+        if (scope === undefined) await remove.mutateAsync(path);
+        else
+          await removeKnowledge.mutateAsync({
+            scope,
+            filename: path.slice(parentOf(path).length),
+          });
+      }
       say('storage.deleted', { items });
     } catch (error) {
       sayFailed('storage.deleteFailed', { reason: reasonOf(error) });
@@ -199,15 +288,7 @@ export const StorageBrowser = ({
             <FileTrigger
               allowsMultiple
               onSelect={(files) =>
-                files !== null &&
-                void uploads.start(
-                  itemsFromFiles(files, target),
-                  targetName,
-                  target,
-                  {
-                    kind: 'storage',
-                  },
-                )
+                files !== null && upload(itemsFromFiles(files, target))
               }
             >
               <Button
@@ -221,20 +302,12 @@ export const StorageBrowser = ({
             <FileTrigger
               acceptDirectory
               onSelect={(files) =>
-                files !== null &&
-                void uploads.start(
-                  itemsFromFiles(files, target),
-                  targetName,
-                  target,
-                  {
-                    kind: 'storage',
-                  },
-                )
+                files !== null && upload(itemsFromFiles(files, target))
               }
             >
               <Button
                 className="react-aria-Button tcp-button--outline"
-                isDisabled={!canUpload}
+                isDisabled={door?.kind !== 'storage'}
                 isPending={uploads.busy}
               >
                 <Icon icon={FolderUp} /> {t('storage.uploadFolder')}
@@ -256,7 +329,7 @@ export const StorageBrowser = ({
           <Button
             className="react-aria-Button tcp-button--outline"
             isDisabled={!canDelete}
-            isPending={remove.isPending}
+            isPending={remove.isPending || removeKnowledge.isPending}
             onPress={() => setConfirmDelete(true)}
           >
             <Icon icon={Trash2} /> {t('storage.delete')}
@@ -280,7 +353,7 @@ export const StorageBrowser = ({
           ? t('storage.readOnlyHere')
           : canUpload
             ? t('storage.target', { folder: targetName })
-            : t('storage.target.readOnly', { folder: targetName })}
+            : readOnlyReason(target, targetName)}
       </p>
       {uploads.failures.length > 0 && (
         <ul className="storage-browser__failures">
@@ -300,9 +373,7 @@ export const StorageBrowser = ({
               className="react-aria-DropZone storage-browser__drop"
               getDropOperation={() => 'copy'}
               onDrop={(event) =>
-                void itemsFromDrop(event.items, target).then((items) =>
-                  uploads.start(items, targetName, target, { kind: 'storage' }),
-                )
+                void itemsFromDrop(event.items, target).then(upload)
               }
             >
               <Text slot="label">
@@ -358,17 +429,47 @@ export const StorageBrowser = ({
             uploads.clashes?.items.length ?? 0,
           ),
         })}
-        message={t('storage.replace.message', {
-          names: (uploads.clashes?.items ?? [])
-            .map((item) => item.path.split('/').pop())
-            .join(', '),
-          folder: uploads.clashes?.folder ?? '',
-        })}
+        message={t(
+          uploads.clashes?.door.kind === 'storage'
+            ? 'storage.replace.message'
+            : 'storage.door.replace.message',
+          {
+            // By the name each will be stored under: a converted file
+            // clashes as its `.md`.
+            names: (uploads.clashes?.items ?? [])
+              .map(({ file }) =>
+                uploads.clashes === null
+                  ? file.name
+                  : storedName(file.name, uploads.clashes.door),
+              )
+              .join(', '),
+            folder: uploads.clashes?.folder ?? '',
+          },
+        )}
         confirmLabel={t('storage.replace.confirm')}
         cancelLabel={t('storage.replace.skip')}
         portalContainer={portalContainer}
         onConfirm={() => void uploads.replace()}
         onCancel={uploads.skip}
+      />
+      <ConfirmDialog
+        isOpen={pending !== null}
+        heading={pending === null ? '' : doorQuestion(pending).heading}
+        message={pending === null ? '' : doorQuestion(pending).message}
+        confirmLabel={t('storage.door.confirm')}
+        cancelLabel={t('storage.door.cancel')}
+        portalContainer={portalContainer}
+        onConfirm={() => {
+          if (pending === null) return;
+          setPending(null);
+          void uploads.start(
+            pending.items,
+            pending.folder,
+            pending.folderPath,
+            pending.door,
+          );
+        }}
+        onCancel={() => setPending(null)}
       />
       <ConfirmDialog
         isOpen={confirmDelete}

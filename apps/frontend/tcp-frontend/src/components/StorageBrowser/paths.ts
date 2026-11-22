@@ -61,3 +61,14 @@ export const storedName = (name: string, door: UploadDoor): string => {
     ext !== '' && name.endsWith(ext) ? name.slice(0, -ext.length) : name;
   return `${base}.md`;
 };
+
+/**
+ * Folders with a door at or under them: the top folder, anything in
+ * `resources/`, `knowledge/` or one scope of it, and `tasks/`, one task or
+ * its `materials/`.
+ */
+const HAS_DOORS =
+  /^(resources\/.*|knowledge\/([^/]+\/)?|tasks\/([^/]+\/(materials\/)?)?)?$/;
+
+/** Whether a browser rooted at `root` can upload anywhere, so shows write controls. */
+export const hasDoorsUnder = (root: string): boolean => HAS_DOORS.test(root);

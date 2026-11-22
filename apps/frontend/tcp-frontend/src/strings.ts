@@ -1061,7 +1061,7 @@ const strings = {
   /** Where uploads land; `{folder}` is a path, or the root's name. */
   'storage.target': 'Uploads go to {folder}',
   'storage.target.readOnly':
-    '{folder} is read-only. Choose a folder in resources/ to upload into.',
+    '{folder} is read-only. Choose a folder in resources/, a knowledge folder or a task’s materials/ to upload into.',
   'storage.rootName': 'the top folder',
   'storage.readOnlyHere': 'These files are read-only.',
   'storage.dropZone': 'Drop files here to upload them to {folder}',
@@ -1084,6 +1084,24 @@ const strings = {
   'storage.replace.skip': 'Skip',
   /** A file inside a dropped folder, refused by a knowledge or materials door, which are flat. */
   'storage.door.noFolders': 'folders can’t be uploaded here, only files',
+  'storage.door.target.knowledge':
+    '{folder} takes no uploads. Choose shared/ or a role’s folder to upload knowledge into.',
+  'storage.door.target.materials':
+    '{folder} takes no uploads. Choose the task’s materials/ folder to add materials.',
+  /** Asked once per upload into knowledge, before anything is sent. */
+  'storage.door.knowledge.heading': 'Upload {files} to knowledge?',
+  'storage.door.knowledge.message':
+    'They will be converted to OKF Markdown, and the originals won’t be kept. The index rebuilds by itself.',
+  /** `{renames}` lists `old → new` names, comma separated. */
+  'storage.door.renames': 'Stored as: {renames}.',
+  /** Asked once per upload into a task's materials. */
+  'storage.door.materials.heading': 'Add {files} to the task’s materials?',
+  'storage.door.materials.message':
+    'The task’s agents read its materials. Materials can only be added before the task starts.',
+  'storage.door.confirm': 'Upload',
+  'storage.door.cancel': 'Cancel',
+  'storage.door.replace.message':
+    '{names} already in {folder}. Replacing overwrites them.',
   'storage.delete.heading': 'Delete {items}?',
   'storage.delete.message':
     'Deleting can’t be undone here. An administrator can recover deleted files from the storage console.',

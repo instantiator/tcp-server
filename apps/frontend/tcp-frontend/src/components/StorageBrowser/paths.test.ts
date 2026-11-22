@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { doorFor, storedName } from './paths';
+import { doorFor, hasDoorsUnder, storedName } from './paths';
 
 const ROLES = new Map([['writer', 'role-1']]);
 const door = (folder: string) => doorFor(folder, 'company-1', ROLES);
@@ -67,4 +67,26 @@ describe('storedName', () => {
       'brief.pdf',
     );
   });
+});
+
+describe('hasDoorsUnder', () => {
+  it.each([
+    '',
+    'resources/',
+    'resources/a/b/',
+    'knowledge/',
+    'knowledge/writer/',
+    'tasks/',
+    'tasks/t-1/',
+    'tasks/t-1/materials/',
+  ])('shows write controls in a browser rooted at %j', (root) => {
+    expect(hasDoorsUnder(root)).toBe(true);
+  });
+
+  it.each(['tasks/t-1/completed/', 'knowledge/writer/drafts/', 'memories/'])(
+    'shows none in a browser rooted at %j',
+    (root) => {
+      expect(hasDoorsUnder(root)).toBe(false);
+    },
+  );
 });

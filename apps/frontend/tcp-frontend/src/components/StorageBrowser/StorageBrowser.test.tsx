@@ -47,9 +47,12 @@ const FOLDERS: Record<string, StorageFolderDTO> = {
   '': folder('', ['knowledge', 'resources', 'tasks']),
   'resources/': folder('resources/', ['pricing'], ['notes.md'], 'Price lists'),
   'resources/pricing/': folder('resources/pricing/', [], ['tea.md', 'b.md']),
-  'knowledge/': folder('knowledge/', [], ['policy.md']),
+  'knowledge/': folder('knowledge/', ['shared', 'writer']),
+  'knowledge/shared/': folder('knowledge/shared/', []),
+  'knowledge/writer/': folder('knowledge/writer/', [], ['policy.md']),
   'tasks/': folder('tasks/', ['t1']),
-  'tasks/t1/': folder('tasks/t1/', ['completed']),
+  'tasks/t1/': folder('tasks/t1/', ['completed', 'materials']),
+  'tasks/t1/materials/': folder('tasks/t1/materials/', []),
   'tasks/t1/completed/': folder('tasks/t1/completed/', [], ['out.md']),
 };
 
@@ -105,6 +108,23 @@ const serve = () => {
           { versionId: 'v1', size: 9, lastModified: EARLIER, isLatest: false },
         ]),
       );
+    }
+    if (url.pathname === '/api/company/c1/roles') {
+      return Promise.resolve(json([{ id: 'role-1', slug: 'writer' }]));
+    }
+    if (
+      method === 'POST' &&
+      (url.pathname === '/api/role/role-1/knowledge' ||
+        url.pathname === '/api/company/c1/knowledge' ||
+        url.pathname === '/api/task/t1/materials')
+    ) {
+      return Promise.resolve(json({ name: 'stored' }, 201));
+    }
+    if (
+      method === 'DELETE' &&
+      url.pathname.startsWith('/api/role/role-1/knowledge/')
+    ) {
+      return Promise.resolve(json(undefined, 204));
     }
     if (url.pathname === `${BASE}/restore`) {
       return Promise.resolve(json({ path: 'resources/notes.md' }, 201));
@@ -187,7 +207,7 @@ describe('StorageBrowser', () => {
     renderBrowser('tasks/t1/');
     await row(/completed/);
     expect(screen.queryByRole('row', { name: /resources/ })).toBeNull();
-    for (const call of calls) {
+    for (const call of calls.filter((c) => c.includes('/storage/'))) {
       expect(call).toMatch(/path=tasks%2Ft1%2F/);
     }
   });
@@ -237,9 +257,9 @@ describe('StorageBrowser', () => {
     expect(toolbarButton(t('storage.delete'))).toBeDisabled();
   });
 
-  it('shows no write controls in a browser rooted outside resources/', async () => {
-    renderBrowser('tasks/t1/');
-    await row(/completed/);
+  it('shows no write controls in a browser rooted where nothing takes uploads', async () => {
+    renderBrowser('tasks/t1/completed/');
+    await row(/out\.md/);
     expect(
       within(screen.getByRole('toolbar')).queryByRole('button', {
         name: t('storage.uploadFiles'),
@@ -358,6 +378,141 @@ describe('StorageBrowser', () => {
     await user.click(await row(/notes\.md/));
     await screen.findByRole('region', { name: 'notes.md' });
     await expectNoA11yViolations(container);
+  });
+});
+
+describe('StorageBrowser doors (002.10)', () => {
+  beforeEach(() => {
+    installFetchMock();
+    vi.mocked(announce).mockClear();
+    calls = [];
+    uploadStatus = {};
+    serve();
+  });
+
+  /** Selects a folder row by expanding the ones above it. */
+  const choose = async (
+    user: ReturnType<typeof userEvent.setup>,
+    parents: RegExp[],
+    target: RegExp,
+  ) => {
+    for (const parent of parents) await expand(user, parent);
+    await user.click(await row(target));
+  };
+
+  const posts = () => calls.filter((c) => c.startsWith('POST'));
+
+  it('asks once before uploading into knowledge, naming the renames, and Cancel sends nothing', async () => {
+    const user = userEvent.setup();
+    const { container } = renderBrowser();
+    await choose(user, [/^knowledge/], /^writer/);
+    await waitFor(() =>
+      expect(toolbarButton(t('storage.uploadFiles'))).toBeEnabled(),
+    );
+
+    // Where focus returns is checked in the browser tier: jsdom's upload
+    // focuses the hidden input, which no person ever does.
+    await user.upload(filesInput(container), [
+      new File(['a'], 'report.docx'),
+      new File(['b'], 'notes.md'),
+    ]);
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Upload 2 files to knowledge?',
+    });
+    expect(dialog).toHaveTextContent('report.docx → report.md');
+    expect(dialog).not.toHaveTextContent('notes.md →');
+    await expectNoA11yViolations(document.body);
+
+    await user.click(
+      within(dialog).getByRole('button', { name: t('storage.door.cancel') }),
+    );
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(posts()).toEqual([]);
+  });
+
+  it('on Confirm, uploads through the role’s knowledge route and says so once', async () => {
+    const user = userEvent.setup();
+    const { container } = renderBrowser();
+    await choose(user, [/^knowledge/], /^writer/);
+    await waitFor(() =>
+      expect(toolbarButton(t('storage.uploadFiles'))).toBeEnabled(),
+    );
+    await user.upload(filesInput(container), [new File(['a'], 'a.txt')]);
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: t('storage.door.confirm') }),
+    );
+
+    await waitFor(() =>
+      expect(posts()).toEqual(['POST /api/role/role-1/knowledge']),
+    );
+    await waitFor(() =>
+      expect(announce).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'storage',
+          change: 'storage.uploaded',
+        }),
+      ),
+    );
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes no uploads on knowledge/ itself, and says to choose a scope', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.click(await row(/^knowledge/));
+    expect(toolbarButton(t('storage.uploadFiles'))).toBeDisabled();
+    expect(
+      screen.getByText(
+        t('storage.door.target.knowledge', { folder: 'knowledge/' }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('uploads files but not folders into a knowledge scope', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await choose(user, [/^knowledge/], /^shared/);
+    await waitFor(() =>
+      expect(toolbarButton(t('storage.uploadFiles'))).toBeEnabled(),
+    );
+    expect(toolbarButton(t('storage.uploadFolder'))).toBeDisabled();
+  });
+
+  it("adds a task's materials through the materials route, after asking", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBrowser('tasks/t1/');
+    expect(
+      await screen.findByText(
+        t('storage.door.target.materials', { folder: 'tasks/t1/' }),
+      ),
+    ).toBeInTheDocument();
+    await user.click(await row(/^materials/));
+    await user.upload(filesInput(container), [new File(['b'], 'brief.pdf')]);
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Add 1 file to the task’s materials?',
+    });
+    await user.click(
+      within(dialog).getByRole('button', { name: t('storage.door.confirm') }),
+    );
+    await waitFor(() =>
+      expect(posts()).toEqual(['POST /api/task/t1/materials']),
+    );
+  });
+
+  it('deletes a knowledge file through the knowledge route', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await choose(user, [/^knowledge/, /^writer/], /policy\.md/);
+    await user.click(toolbarButton(t('storage.delete')));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: t('storage.delete') }),
+    );
+    await waitFor(() =>
+      expect(calls).toContain('DELETE /api/role/role-1/knowledge/policy.md'),
+    );
+    expect(calls.some((c) => c.startsWith(`DELETE ${BASE}`))).toBe(false);
   });
 });
 
