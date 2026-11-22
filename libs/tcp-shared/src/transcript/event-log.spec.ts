@@ -1,4 +1,6 @@
 import { AuditWireEvent, StreamDelta } from '@tcp/shared';
+import { renderEntry } from './entries';
+import type { LogEntry } from './entries';
 import { EventLogBuffer } from './event-log';
 import { HeadingInfo } from './heading';
 import { plainStyle } from './style';
@@ -32,21 +34,39 @@ function delta(channel: 'reasoning' | 'response', d: string): StreamDelta {
 
 const noHeadingInfo = (): HeadingInfo => ({});
 
+/**
+ * Records the entries a buffer appends and returns a function that renders
+ * them as plain lines, with a blank line between entries.
+ */
+function trackLines(buf: EventLogBuffer): () => string[] {
+  const entries: LogEntry[] = [];
+  buf.onAppend((e) => {
+    if (e.kind === 'entry') entries.push(e.entry);
+  });
+  return () =>
+    entries.flatMap((entry, i) => [
+      ...(i > 0 ? [''] : []),
+      ...renderEntry(entry, 80, plainStyle),
+    ]);
+}
+
 describe('EventLogBuffer', () => {
   it('merges consecutive same-channel deltas into one entry', () => {
     const buf = new EventLogBuffer(noHeadingInfo);
+    const linesOf = trackLines(buf);
     buf.appendDelta(delta('response', 'Hel'));
     buf.appendDelta(delta('response', 'lo'));
-    const lines = buf.render(80, plainStyle);
+    const lines = linesOf();
     expect(lines).toEqual([`${HH} | llm_response:response |`, '', '  Hello']);
   });
 
   it('applies the dedupe rule: after deltas, llm_response renders line-only', () => {
     const buf = new EventLogBuffer(noHeadingInfo);
+    const linesOf = trackLines(buf);
     buf.appendAudit(audit('llm_request', {}));
     buf.appendDelta(delta('response', 'answer'));
     buf.appendAudit(audit('llm_response', { responseText: 'answer' }));
-    const lines = buf.render(80, plainStyle);
+    const lines = linesOf();
     // The response block from the delta, then a line-only llm_response — its
     // text is not re-printed as a block.
     expect(lines).toContain(`${HH} | llm_response:response |`);
@@ -61,9 +81,10 @@ describe('EventLogBuffer', () => {
 
   it('replays history (no deltas) as full response blocks', () => {
     const buf = new EventLogBuffer(noHeadingInfo);
+    const linesOf = trackLines(buf);
     buf.appendAudit(audit('llm_request', {}));
     buf.appendAudit(audit('llm_response', { responseText: 'answer' }));
-    const lines = buf.render(80, plainStyle);
+    const lines = linesOf();
     expect(lines).toContain('  answer');
   });
 
@@ -89,6 +110,7 @@ describe('EventLogBuffer', () => {
 
   it('a whitespace-only leading delta does not arm the dedupe collapse — the real llm_response still renders in full', () => {
     const buf = new EventLogBuffer(noHeadingInfo);
+    const linesOf = trackLines(buf);
     buf.appendAudit(audit('llm_request', {}));
     // A single framing/whitespace-only chunk, then nothing else streams —
     // e.g. a provider that emits one leading token before falling back to a
@@ -100,16 +122,17 @@ describe('EventLogBuffer', () => {
         responseText: 'the real answer',
       }),
     );
-    const lines = buf.render(80, plainStyle);
+    const lines = linesOf();
     expect(lines).toContain('  thinking it through');
     expect(lines).toContain('  the real answer');
   });
 
   it('drops reasoning when hideReasoning is set', () => {
     const buf = new EventLogBuffer(noHeadingInfo, true);
+    const linesOf = trackLines(buf);
     buf.appendDelta(delta('reasoning', 'secret'));
     buf.appendDelta(delta('response', 'shown'));
-    const lines = buf.render(80, plainStyle);
+    const lines = linesOf();
     expect(lines.join('\n')).not.toContain('secret');
     expect(lines.join('\n')).toContain('shown');
   });

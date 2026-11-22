@@ -192,7 +192,7 @@ function isUnauthorized(err: unknown): boolean {
  * Owns one session's access token, refreshing it in the background —
  * shortly ahead of its `exp` claim, or every {@link FALLBACK_REFRESH_MS} when
  * that can't be read — whenever a refresh token is available. Long-running
- * commands (`chat`, `tui`, `eavesdrop --tail`) previously held a single
+ * commands (`chat`, `eavesdrop --tail`) previously held a single
  * token fixed for the session's lifetime, so any request or stream made
  * after it expired failed with an "unauthorised" 401.
  */

@@ -45,11 +45,7 @@ export {
 } from './events/wire-events';
 export { parseWireEvents, readWireStream } from './events/wire-stream';
 export type { StreamEnd } from './events/wire-stream';
-export {
-  str,
-  planIndexFromShortcode,
-  parseTaskChangeSummary,
-} from './events/wire-parse';
+export { str } from './events/wire-parse';
 
 // -- Records downloads: one file name for the server, CLI and web ------------
 // These import nothing, so they are safe as values.

@@ -1,9 +1,8 @@
 // The style model and the plain backend. Every surface renders LogEntries
 // through a StyleBackend, so the entry/format logic stays colour-agnostic and
-// the same lines can be produced as terminal-kit markup (TUI), raw ANSI (a
-// TTY stdout), or plain text (piped stdout, byte-exact tests, and the
-// browser). The colour backends themselves (ANSI, terminal-kit markup) stay
-// in the CLI, which is the only client that draws to a terminal.
+// the same lines can be produced as raw ANSI (a TTY stdout) or plain text
+// (piped stdout, byte-exact tests, and the browser). The ANSI backend stays in
+// the CLI, which is the only client that draws to a terminal.
 
 /** The visual role of a rendered line, mapped to a colour by the backend. */
 export type EntryStyle =

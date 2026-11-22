@@ -7,7 +7,7 @@
  * `EMBEDDING_PROVIDER` and an `LlmConfig`'s `provider` hold.
  *
  * Plain data, importing only the import-free config defaults, so the setup
- * wizard, CLI, TUI and web client can all read it. Full model lists are not
+ * wizard, CLI and web client can all read it. Full model lists are not
  * kept here: they change too often, and models.dev (`modelsDevId`) or the
  * local server's own API has them. Each provider lists a few suggestions
  * instead, for the web picker to offer.

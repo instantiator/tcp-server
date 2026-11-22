@@ -17,7 +17,6 @@
 | @nestjs/swagger                          | MIT          | git+https://github.com/nestjs/swagger.git                      | Kamil Mysliwiec                                                        | 11.4.7    | ^11.4.7   |
 | @nestjs/terminus                         | MIT          | git+https://github.com/nestjs/terminus.git                     | Livio Brunner                                                          | 11.1.1    | ^11.1.1   |
 | @nestjs/typeorm                          | MIT          | git+https://github.com/nestjs/typeorm.git                      | Kamil Mysliwiec                                                        | 11.0.3    | ^11.0.3   |
-| @types/terminal-kit                      | MIT          | https://github.com/DefinitelyTyped/DefinitelyTyped.git         | n/a                                                                    | 2.5.7     | ^2.5.7    |
 | ajv                                      | MIT          | git+https://github.com/ajv-validator/ajv.git                   | Evgeny Poberezkin                                                      | 8.20.0    | ^8.20.0   |
 | ajv-formats                              | MIT          | git+https://github.com/ajv-validator/ajv-formats.git           | Evgeny Poberezkin                                                      | 3.0.1     | ^3.0.1    |
 | axios                                    | MIT          | git+https://github.com/axios/axios.git                         | Matt Zabriskie                                                         | 1.20.0    | ^1.20.0   |
@@ -49,7 +48,6 @@
 | reflect-metadata                         | Apache-2.0   | git+https://github.com/rbuckton/reflect-metadata.git           | Ron Buckton ron.buckton@microsoft.com http://github.com/rbuckton       | 0.2.2     | ^0.2.2    |
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2     | ^7.8.1    |
 | swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1     | ^5.0.1    |
-| terminal-kit                             | MIT          | git+https://github.com/cronvel/terminal-kit.git                | Cédric Ronvel                                                          | 3.1.4     | ^3.1.4    |
 | turndown                                 | MIT          | git+https://github.com/mixmark-io/turndown.git                 | Dom Christie                                                           | 7.2.4     | ^7.2.4    |
 | turndown-plugin-gfm                      | MIT          | git+https://github.com/domchristie/turndown-plugin-gfm.git     | Dom Christie                                                           | 1.0.2     | ^1.0.2    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.1.0     | ^1.1.0    |

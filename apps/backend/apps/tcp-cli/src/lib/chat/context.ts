@@ -31,8 +31,6 @@ export interface ChatContext {
   /** The resolved role UUID, present whenever a role (`--role-id` or `--role-slug`) was given. */
   roleId?: string;
   companyId: string;
-  companySlug: string;
-  companyName: string;
   roleName: string;
   /** The resolved role's slug — present exactly when `roleId` is. */
   roleSlug?: string;
@@ -49,7 +47,6 @@ export interface ChatContext {
 export async function resolveChatContext(
   opts: GlobalOptions,
   cmdOpts: EntityRefOpts,
-  useTui: boolean,
 ): Promise<ChatContext> {
   const { token, refreshToken } = await resolveSession({
     ...opts,
@@ -90,47 +87,36 @@ export async function resolveChatContext(
     `/api/company/${companyId}`,
   );
   companyId = company.id;
-  const companyName = company.name;
   if (roleId && !llmConfig) llmConfig = company.llmConfig;
 
-  printBanner(opts, roleName, companyName, llmConfig, useTui);
+  printBanner(opts, roleName, llmConfig);
 
   return {
     token,
     refreshToken,
     roleId,
     companyId,
-    companySlug: company.slug,
-    companyName,
     roleName,
     roleSlug,
   };
 }
 
-/** Prints the server/LLM-or-company/role banner shown before the session starts. */
+/** Prints the server/LLM/role banner shown before the session starts. */
 function printBanner(
   opts: GlobalOptions,
   roleName: string,
-  companyName: string,
   llmConfig: LlmConfig | null | undefined,
-  useTui: boolean,
 ): void {
   process.stderr.write(`TCP API: ${opts.tcpServer}\n`);
-  if (roleName) {
-    if (llmConfig) {
-      process.stderr.write(
-        `LLM API: ${llmConfig.baseUrl ?? '(provider default)'}\n`,
-      );
-      process.stderr.write(`Provider: ${llmConfig.provider}\n`);
-      process.stderr.write(`Model: ${llmConfig.model}\n`);
-    } else {
-      process.stderr.write(`LLM: (using server environment default)\n`);
-    }
-    process.stderr.write(`Role: ${roleName}\n`);
+  if (llmConfig) {
+    process.stderr.write(
+      `LLM API: ${llmConfig.baseUrl ?? '(provider default)'}\n`,
+    );
+    process.stderr.write(`Provider: ${llmConfig.provider}\n`);
+    process.stderr.write(`Model: ${llmConfig.model}\n`);
   } else {
-    process.stderr.write(`Company: ${companyName}\n`);
+    process.stderr.write(`LLM: (using server environment default)\n`);
   }
-  if (!useTui) {
-    process.stderr.write(`'exit', 'quit', or Ctrl+C to exit.\n`);
-  }
+  process.stderr.write(`Role: ${roleName}\n`);
+  process.stderr.write(`'exit', 'quit', or Ctrl+C to exit.\n`);
 }

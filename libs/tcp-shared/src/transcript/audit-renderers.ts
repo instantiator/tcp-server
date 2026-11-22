@@ -1,6 +1,5 @@
 // Converts one audit event into zero or more LogEntries. A registry of small
-// renderers (first `canRender` wins) replaces the three near-duplicate switch
-// blocks the tui/eavesdrop/chat surfaces each carried.
+// renderers (first `canRender` wins) shared by the CLI and the web transcript.
 
 import type { AuditWireEvent } from '../events/wire-events';
 import { ASSIGNMENT_COMPLETE_LABEL, parseClockTime } from './format';
