@@ -357,7 +357,7 @@ its API bill first isn't a side income.
 
 ### Images
 
-**Today:** storage tools handle text and PDFs. Agents can't look at an image.
+**Today:** storage tools decode files as UTF-8 text, so PDFs and Office files come back as noise (fixed for PDFs and Office in [002.11](<002.11.01.plan - office documents for agents.md>)). Agents can't look at an image.
 
 **Recommend:** pass images to vision-capable models (several small local ones
 exist), and fall back to a stored text description for models that can't see.
@@ -501,7 +501,7 @@ can't attach files to a task or answer an enquiry.
 
 > ✅ **Rows 11–12 done in [000.05](<000.05.01.plan - system menu for health and shutdown.md>):** an admin-only System menu with health, shutdown, restart and cancel, plus `get-health`, `restart` and `cancel-shutdown` in the CLI. That also gives `DELETE /api/system/shutdown` a surface.
 
-> ✅ **Row 8 done in [002.05](<002.05.01.plan - web ui storage browser.md>):** an in-app storage browser in Data → Documents, the task dialog and the office trays: tree, preview, download (a file or a zip), upload (files, folders, drag and drop), delete, and version history with restore. Only `resources/` can be changed. `validate-shared-document` stays in the CLI. Uploading knowledge and task materials from the browser, through their own routes, came in [002.10](<002.10.01.plan - knowledge uploads from the storage browser.md>); Office files wait for [002.11](<002.11.00.prompt - office documents for agents (draft).md>).
+> ✅ **Row 8 done in [002.05](<002.05.01.plan - web ui storage browser.md>):** an in-app storage browser in Data → Documents, the task dialog and the office trays: tree, preview, download (a file or a zip), upload (files, folders, drag and drop), delete, and version history with restore. Only `resources/` can be changed. `validate-shared-document` stays in the CLI. Uploading knowledge and task materials from the browser, through their own routes, came in [002.10](<002.10.01.plan - knowledge uploads from the storage browser.md>); Office files came in [002.11](<002.11.01.plan - office documents for agents.md>).
 
 > ✅ **Company resources reach the office view in [002.08](<002.08.01.plan - company resources in the archive.md>):** a plan chest in the archive room opens a Company resources tray with a tree of the `resources/` folders and their purposes. Each folder opens the storage browser, and one link opens `resources/` in the storage console.
 
