@@ -867,11 +867,11 @@ Admin → Roles and the knowledge panel let every member of a company delete rol
 
 **Act when:** the storage proxy is reachable by anyone untrusted, or memory pressure is seen on tcp-server. Give its `FileInterceptor` the same `limits` (`MAX_UPLOAD_BYTES` in `api/upload-limit.ts`).
 
-## The web client retries 4xx answers
+## The web client ignores `Retry-After`
 
-The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with back-off, for every error. A 404 for something just deleted is retried for about 7 seconds. In 002.00 that made "Delete table" seem slow; `useDropRecordTable` now forgets the dropped table's queries, which fixed that case only.
+Since 002.09, `retryQuery` (`apps/frontend/tcp-frontend/src/api/client.ts`) retries a 429 with TanStack's ordinary back-off (1 s, 2 s, 4 s). It doesn't read `Retry-After`, because `ApiError` doesn't keep response headers and tcp-server never answers 429 today.
 
-**Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
+**Act when:** tcp-server, or a proxy in front of it, starts answering 429. Carry the parsed `Retry-After` on `ApiError` and pass a `retryDelay` that honours it, capped.
 
 ## Creating a company doesn't list required secrets or offer a first task
 
