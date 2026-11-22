@@ -714,7 +714,7 @@ plus rules only for companies with their own `versionRetentionDays`.
 Today a task's resource changes are applied when it succeeds, with QA as the
 only review. Some changes (prices, policies) should wait for a person. This
 moved to 003.01 (action approval), which has a section for it:
-[003.01 prompt](prompts/phase%2004%20-%20utility/003.01.00.prompt%20-%20action%20approval%20%28draft%29.md).
+[003.01 prompt](prompts/phase%2004%20-%20utility/003.01.00.prompt%20-%20action%20approval.md).
 
 **Act when:** the core of 003.01 lands. Then let a folder's `README.md` mark it
 sensitive, and pause apply until a user approves.
@@ -871,7 +871,7 @@ Admin → Roles and the knowledge panel let every member of a company delete rol
 
 The app's `QueryClient` (`main.tsx`) uses TanStack's default: 3 retries with back-off, for every error. A 404 for something just deleted is retried for about 7 seconds. In 002.00 that made "Delete table" seem slow; `useDropRecordTable` now forgets the dropped table's queries, which fixed that case only.
 
-**Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy%20%28draft%29.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
+**Act when:** [002.09](prompts/phase%2004%20-%20utility/002.09.00.prompt%20-%20web%20client%20request%20retry%20policy.md) (web client request retry policy) is planned; it replaces this with one shared policy. Sooner if another "slow after a delete" or "waits after a 403" symptom appears.
 
 ## Creating a company doesn't list required secrets or offer a first task
 
@@ -885,7 +885,7 @@ Since 002.03, New company opens the template gallery, and a template brings role
 
 The application's default chat and embedding models are the `LLM_*` and `EMBEDDING_*` env vars. The web picker (002.01) shows them read-only (`GET /api/system/llm-defaults`) as the fallback, but nothing in the browser or API can change them, and a change needs a restart.
 
-**Act when:** a deployment needs to change its default model without editing env files and restarting, or when [005.05](prompts/phase%2004%20-%20utility/005.05.00.prompt%20-%20single-user%20home%20install%20%28draft%29.md) (single-user home install) is planned, since a home user won't edit env files. Add an app settings store that overrides the env values, and an admin-only screen for it.
+**Act when:** a deployment needs to change its default model without editing env files and restarting, or when [005.05](prompts/phase%2004%20-%20utility/005.05.00.prompt%20-%20single-user%20home%20install.md) (single-user home install) is planned, since a home user won't edit env files. Add an app settings store that overrides the env values, and an admin-only screen for it.
 
 ## Suggested models go stale
 
@@ -897,7 +897,7 @@ The provider catalogue's `chat.models` suggestions (`libs/tcp-shared/src/llm/pro
 
 The picker lists a local server's models, but there is no "Test" button. `POST /api/model/check` is admin-only and needs the raw API key in the request, which the browser never has for a saved config.
 
-**Act when:** [006.04](prompts/phase%2004%20-%20utility/006.04.00.prompt%20-%20web%20ui%20model%20check%20%28draft%29.md) (web UI model check) is planned. Add a company-scoped check by reference (`{ roleId }` / `{ companyId }`) and a Test button on the picker.
+**Act when:** [006.04](prompts/phase%2004%20-%20utility/006.04.00.prompt%20-%20web%20ui%20model%20check.md) (web UI model check) is planned. Add a company-scoped check by reference (`{ roleId }` / `{ companyId }`) and a Test button on the picker.
 
 ## Any member can change a company's models
 
@@ -951,7 +951,7 @@ A zip download from the storage browser is built in memory with `zipSync`, and r
 
 Word, Excel, PowerPoint and OpenDocument files show "No preview" and a download button. Agents can't read them either.
 
-**Act when:** [002.11](prompts/phase%2004%20-%20utility/002.11.00.prompt%20-%20office%20documents%20for%20agents%20%28draft%29.md) (office documents for agents) is planned. It adds a preview kind beside the existing ones.
+**Act when:** [002.11](prompts/phase%2004%20-%20utility/002.11.00.prompt%20-%20office%20documents%20for%20agents.md) (office documents for agents) is planned. It adds a preview kind beside the existing ones.
 
 ## Storage deletes can't be undone in the app
 
