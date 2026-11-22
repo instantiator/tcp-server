@@ -8,12 +8,12 @@ export const TcpPhaserEventBus = new Events.EventEmitter();
 
 /**
  * What a hover or a click landed on. `archive` (the bookshelf) and `records`
- * (the filing cabinet) carry no `id`: there is only ever one of each, unlike
- * a role, an agent or a task.
+ * (the filing cabinet) and `resources` (the plan chest) carry no `id`: there
+ * is only ever one of each, unlike a role, an agent or a task.
  */
 export type SelectionTarget =
   | { readonly kind: 'role' | 'agent' | 'task'; readonly id: string }
-  | { readonly kind: 'archive' | 'records' };
+  | { readonly kind: 'archive' | 'records' | 'resources' };
 
 /**
  * What a hover landed on. Roles, agents and tasks can also be selected;

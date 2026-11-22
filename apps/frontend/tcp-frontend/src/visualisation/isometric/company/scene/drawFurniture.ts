@@ -24,6 +24,8 @@ export const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
   bookshelf: { size: 28, height: 34 },
   // Narrower and a little shorter than the bookshelf beside it.
   filingCabinet: { size: 22, height: 28 },
+  // Low and wide: a plan chest, shorter than the cabinet and bookshelf.
+  resourcesChest: { size: 24, height: 16 },
 };
 
 /**

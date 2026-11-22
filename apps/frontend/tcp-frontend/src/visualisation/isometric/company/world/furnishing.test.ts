@@ -126,6 +126,17 @@ describe('furnishRoom', () => {
     });
   });
 
+  it("gives the archive a plan chest for resources on the bookshelf's other side", () => {
+    const archive = roomAt('archive', 2);
+    const [bookshelf, , chest] = furnishRoom(archive);
+    expect(chest).toEqual({
+      id: 'archive:resourcesChest',
+      kind: 'resourcesChest',
+      roomId: 'archive',
+      tile: { x: (bookshelf?.tile.x ?? 0) - 1, y: bookshelf?.tile.y },
+    });
+  });
+
   it('furnishes the corridor with nothing', () => {
     const corridor: Room = {
       id: 'corridor',

@@ -150,10 +150,10 @@ describe('DetailsPicker', () => {
         name: t('visualisation.picker.agent', { role: 'Legal' }),
       }),
     ).toBeInTheDocument();
-    // 2 roles + 2 open-room tasks + 2 non-finished agents + the archive and
-    // its filing cabinet: agent-3 has finished and must not appear at all,
+    // 2 roles + 2 open-room tasks + 2 non-finished agents + the archive, its
+    // filing cabinet and its plan chest: agent-3 has finished and must not appear at all,
     // under either wording.
-    expect(screen.getAllByRole('option')).toHaveLength(8);
+    expect(screen.getAllByRole('option')).toHaveLength(9);
   });
 
   it('always lists the Archive item, since there is only ever one archive', async () => {
@@ -307,7 +307,7 @@ describe('DetailsPicker', () => {
 
     expect(pickerButton()).not.toBeDisabled();
     await openPicker(user);
-    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(screen.getAllByRole('option')).toHaveLength(3);
     expect(
       screen.getByRole('option', { name: t('visualisation.picker.archive') }),
     ).toBeInTheDocument();

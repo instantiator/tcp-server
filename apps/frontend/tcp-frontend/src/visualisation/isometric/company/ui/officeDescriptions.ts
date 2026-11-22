@@ -58,6 +58,11 @@ export function describeFurniture(
         title: t('visualisation.furniture.filingCabinet'),
         description: t('visualisation.furniture.filingCabinet.description'),
       };
+    case 'resourcesChest':
+      return {
+        title: t('visualisation.furniture.resourcesChest'),
+        description: t('visualisation.furniture.resourcesChest.description'),
+      };
     case 'sofa':
     case 'pigeonholes':
     case 'table':

@@ -12,6 +12,7 @@ import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import {
   ARCHIVE_BOOKSHELF_ID,
   ARCHIVE_CABINET_ID,
+  ARCHIVE_RESOURCES_ID,
   mapBounds,
 } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
@@ -60,11 +61,23 @@ function statusKey(status: OfficeStatus): string {
  */
 const DOOR_ZONE_DEPTH_OFFSET = 0.5;
 
+const ARCHIVE_FURNITURE_KINDS = ['archive', 'records', 'resources'] as const;
+type ArchiveFurnitureKind = (typeof ARCHIVE_FURNITURE_KINDS)[number];
+
+/** The furniture id each archive selection stands for, the one source of truth. */
+export const ARCHIVE_FURNITURE_IDS: Record<ArchiveFurnitureKind, string> = {
+  archive: ARCHIVE_BOOKSHELF_ID,
+  records: ARCHIVE_CABINET_ID,
+  resources: ARCHIVE_RESOURCES_ID,
+};
+
 /** Furniture a click selects, and what it selects. */
-const SELECTABLE_FURNITURE = new Map<string, 'archive' | 'records'>([
-  [ARCHIVE_BOOKSHELF_ID, 'archive'],
-  [ARCHIVE_CABINET_ID, 'records'],
-]);
+const SELECTABLE_FURNITURE = new Map(
+  ARCHIVE_FURNITURE_KINDS.map((kind): [string, ArchiveFurnitureKind] => [
+    ARCHIVE_FURNITURE_IDS[kind],
+    kind,
+  ]),
+);
 
 /**
  * The isometric office scene. React works out the whole office and sends it
@@ -90,11 +103,12 @@ export class TcpCompanyScene extends Scene {
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
   /**
-   * The archive's selectable furniture, for follow: the bookshelf (`archive`)
-   * and the filing cabinet (`records`). There is only ever one of each.
+   * The archive's selectable furniture, for follow: the bookshelf (`archive`),
+   * the filing cabinet (`records`) and the plan chest (`resources`). There is
+   * only ever one of each.
    */
   private archiveFurniture = new Map<
-    'archive' | 'records',
+    ArchiveFurnitureKind,
     GameObjects.IsoBox
   >();
   private readonly crowd = new Crowd();

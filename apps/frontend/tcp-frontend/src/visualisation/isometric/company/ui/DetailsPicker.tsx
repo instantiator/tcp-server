@@ -43,9 +43,16 @@ const RECORDS_ITEM: PickerItem = {
   target: { kind: 'records' },
 };
 
+/** The archive's plan chest: the company's resources. Only ever one. */
+const RESOURCES_ITEM: PickerItem = {
+  key: 'resources',
+  label: t('visualisation.picker.resources'),
+  target: { kind: 'resources' },
+};
+
 /**
  * Every role, every task whose room is open (finished or not), every agent still doing something, then
- * the archive and its filing cabinet — always present, since the archive room always exists.
+ * the archive, its filing cabinet and its plan chest — always present, since the archive room always exists.
  */
 const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
   const roleName = (roleId: string): string =>
@@ -91,6 +98,7 @@ const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
     ...agentItems,
     ARCHIVE_ITEM,
     RECORDS_ITEM,
+    RESOURCES_ITEM,
   ];
 };
 

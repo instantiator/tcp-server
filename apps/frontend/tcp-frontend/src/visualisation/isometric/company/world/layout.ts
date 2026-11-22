@@ -50,6 +50,8 @@ export const CORRIDOR_ID = 'corridor';
 export const ARCHIVE_BOOKSHELF_ID = `${ARCHIVE_ROOM_ID}:bookshelf`;
 /** The archive's filing cabinet, which holds the company's record tables (001.03). */
 export const ARCHIVE_CABINET_ID = `${ARCHIVE_ROOM_ID}:filingCabinet`;
+/** The archive's plan chest, which holds the company's resources. */
+export const ARCHIVE_RESOURCES_ID = `${ARCHIVE_ROOM_ID}:resourcesChest`;
 
 /** The id of the room for a task. */
 export const taskRoomId = (taskId: string): string => `task:${taskId}`;

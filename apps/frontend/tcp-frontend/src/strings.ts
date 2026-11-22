@@ -560,6 +560,7 @@ const strings = {
   'visualisation.picker.agentWithTask': 'Agent: {role} (task {shortcode})',
   'visualisation.picker.archive': 'Archive',
   'visualisation.picker.records': 'Filing cabinet (record tables)',
+  'visualisation.picker.resources': 'Resources',
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
@@ -605,6 +606,9 @@ const strings = {
   'visualisation.furniture.filingCabinet': 'Filing cabinet',
   'visualisation.furniture.filingCabinet.description':
     "Holds the company's record tables, such as orders, customers and stock. Select it to check and correct them.",
+  'visualisation.furniture.resourcesChest': 'Plan chest',
+  'visualisation.furniture.resourcesChest.description':
+    'Company resources: documents the company keeps.',
   'visualisation.furniture.bookshelf.description':
     'Holds the outputs of completed tasks. Select it to see them.',
   'visualisation.room.task': 'Task room: {shortcode}',
@@ -1158,6 +1162,7 @@ const strings = {
   'tables.error': 'The tables could not be loaded.',
   'tables.empty':
     'No record tables yet. Agents make them when they keep records such as orders or stock.',
+  'visualisation.resources.heading': 'Company resources',
   'records.tray.heading': 'Record tables',
   'records.tray.column.table': 'Table',
   'records.tray.column.records': 'Records',

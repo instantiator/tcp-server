@@ -188,6 +188,30 @@ describe('VisualisationTooltip', () => {
     );
   });
 
+  it.each([
+    ['records', 'filingCabinet'],
+    ['resources', 'resourcesChest'],
+  ] as const)(
+    "shows the %s furniture's description on hover",
+    (kind, furniture) => {
+      render(
+        <VisualisationTooltip
+          world={WORLD}
+          hover={hoverOn({ kind })}
+          snapshot={SNAPSHOT}
+        />,
+      );
+
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip).toHaveTextContent(
+        t(`visualisation.furniture.${furniture}`),
+      );
+      expect(tooltip).toHaveTextContent(
+        t(`visualisation.furniture.${furniture}.description`),
+      );
+    },
+  );
+
   it('counts the succeeded tasks in the bookshelf title', () => {
     const [first] = SNAPSHOT.tasks;
     if (first === undefined) throw new Error('fixture has no task');
