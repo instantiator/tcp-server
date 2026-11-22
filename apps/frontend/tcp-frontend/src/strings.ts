@@ -1082,6 +1082,8 @@ const strings = {
     '{names} already in {folder}. Replacing keeps the old version in its history.',
   'storage.replace.confirm': 'Replace',
   'storage.replace.skip': 'Skip',
+  /** A file inside a dropped folder, refused by a knowledge or materials door, which are flat. */
+  'storage.door.noFolders': 'folders can’t be uploaded here, only files',
   'storage.delete.heading': 'Delete {items}?',
   'storage.delete.message':
     'Deleting can’t be undone here. An administrator can recover deleted files from the storage console.',

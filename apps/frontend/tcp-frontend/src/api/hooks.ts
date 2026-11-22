@@ -104,6 +104,7 @@ import {
   useUpdateCompanyMutation,
   useUploadKnowledgeMutation,
   useUploadStorageFileMutation,
+  storageFolderQuery,
   useDeleteStorageMutation,
   useRestoreStorageVersionMutation,
   storageFilePath,
@@ -386,21 +387,101 @@ const useKnowledgeInvalidation = () => {
 
 /** Uploads a knowledge file; the lists and status refetch on success. */
 export const useUploadKnowledge = (scope: KnowledgeScope) => {
-  const upload = useUploadKnowledgeMutation(scope);
+  const upload = useUploadKnowledgeMutation();
   return useMutation({
     mutationFn: (input: { file: File; signal?: AbortSignal }) =>
-      upload.mutateAsync(input),
+      upload.mutateAsync({ scope, ...input }),
     onSuccess: useKnowledgeInvalidation(),
   });
 };
 
-/** Deletes a knowledge file; the lists and status refetch on success. */
-export const useDeleteKnowledge = (scope: KnowledgeScope) => {
-  const remove = useDeleteKnowledgeMutation(scope);
+/**
+ * Deletes a knowledge file by its scope and name, so its RAG chunks go too.
+ * Knowledge lists, status and the storage browser all refetch on success.
+ */
+export const useDeleteKnowledge = () => {
+  const remove = useDeleteKnowledgeMutation();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (filename: string) => remove.mutateAsync(filename),
-    onSuccess: useKnowledgeInvalidation(),
+    mutationFn: (input: { scope: KnowledgeScope; filename: string }) =>
+      remove.mutateAsync(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['knowledge'] });
+      void queryClient.invalidateQueries({ queryKey: ['storage'] });
+    },
   });
+};
+
+/**
+ * Where a storage-browser upload goes in through (002.10): straight into
+ * storage under `resources/`, or through the route that does what a folder
+ * needs besides storing — knowledge converts and reindexes, materials join
+ * the task's list. `paths.ts` decides which; the server stays the authority.
+ */
+export type UploadDoor =
+  | { readonly kind: 'storage' }
+  | { readonly kind: 'knowledge'; readonly scope: KnowledgeScope }
+  | { readonly kind: 'materials'; readonly taskId: string };
+
+/**
+ * Uploads one file through its door. `overwrite` replaces an existing file:
+ * for knowledge it names the stored file (`storedAs`), which is how that
+ * route is told to overwrite. Storage, knowledge and the task all refetch.
+ */
+export const useDoorUpload = (companyId: string) => {
+  const queryClient = useQueryClient();
+  const storage = useUploadStorageFileMutation(companyId);
+  const knowledge = useUploadKnowledgeMutation();
+  const material = useUploadMaterialMutation();
+  return useMutation({
+    mutationFn: async ({
+      door,
+      path,
+      file,
+      overwrite,
+      storedAs,
+    }: {
+      door: UploadDoor;
+      path: string;
+      file: File;
+      overwrite: boolean;
+      storedAs: string;
+    }) => {
+      if (door.kind === 'storage') {
+        await storage.mutateAsync({ path, file, overwrite });
+      } else if (door.kind === 'knowledge') {
+        await knowledge.mutateAsync({
+          scope: door.scope,
+          file,
+          ...(overwrite && { filename: storedAs }),
+        });
+      } else {
+        await material.mutateAsync({ id: door.taskId, file });
+      }
+    },
+    onSuccess: (_result, { door }) => {
+      void queryClient.invalidateQueries({ queryKey: ['storage'] });
+      if (door.kind === 'knowledge') {
+        void queryClient.invalidateQueries({ queryKey: ['knowledge'] });
+      }
+      if (door.kind === 'materials') {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.task(door.taskId),
+        });
+      }
+    },
+  });
+};
+
+/** The names of the files in one storage folder, fetched if not cached. */
+export const useFolderFileNames = (companyId: string) => {
+  const queryClient = useQueryClient();
+  return async (path: string): Promise<ReadonlySet<string>> => {
+    const listing = await queryClient.fetchQuery(
+      storageFolderQuery(companyId, path),
+    );
+    return new Set(listing.files.map((file) => file.name));
+  };
 };
 
 /** The success handler for a storage mutation: every storage cache refetches. */

@@ -1,4 +1,5 @@
 import {
+  queryOptions,
   useMutation,
   useQuery,
   type UseQueryOptions,
@@ -614,26 +615,49 @@ export const useUploadMaterialMutation = () =>
   });
 
 /**
- * Uploads one file to a role's or the company's knowledge. The `signal` lets
+ * Uploads one file to a role's or the company's knowledge. Giving `filename`
+ * (the stored name) overwrites a document of that name on purpose; without
+ * it, a converted file that clashes is refused with a 409. The `signal` lets
  * the caller cancel it.
  *
- * Goes through {@link postFile} rather than {@link api} for the same reason as
- * {@link useUploadMaterialMutation}: a `File` cannot travel through the
- * generated body type.
+ * Goes through {@link postFormForJson} rather than {@link api} for the same
+ * reason as {@link useUploadMaterialMutation}: a `File` cannot travel through
+ * the generated body type.
  */
-export const useUploadKnowledgeMutation = (scope: KnowledgeScope) =>
+export const useUploadKnowledgeMutation = () =>
   useMutation({
-    mutationFn: ({ file, signal }: { file: File; signal?: AbortSignal }) =>
-      postFile(knowledgeBase(scope), file, signal),
+    mutationFn: async ({
+      scope,
+      file,
+      filename,
+      signal,
+    }: {
+      scope: KnowledgeScope;
+      file: File;
+      filename?: string;
+      signal?: AbortSignal;
+    }) => {
+      await postFormForJson(
+        knowledgeBase(scope),
+        filename === undefined ? { file } : { file, filename },
+        signal,
+      );
+    },
   });
 
 /**
  * Deletes one knowledge file, with the role's or the company's route per scope.
  * `expectAccepted`, not `unwrap`: the route answers 204 with no body.
  */
-export const useDeleteKnowledgeMutation = (scope: KnowledgeScope) =>
+export const useDeleteKnowledgeMutation = () =>
   useMutation({
-    mutationFn: (filename: string) =>
+    mutationFn: ({
+      scope,
+      filename,
+    }: {
+      scope: KnowledgeScope;
+      filename: string;
+    }) =>
       scope.kind === 'role'
         ? expectAccepted(
             api.DELETE('/api/role/{roleId}/knowledge/{filename}', {
@@ -666,14 +690,9 @@ interface StorageReadOptions {
   enabled?: boolean;
 }
 
-/** One folder of a company's storage; `path` is relative and ends in `/`, `''` is the root. */
-export const useStorageFolder = (
-  companyId: string,
-  path: string,
-  options: StorageReadOptions = {},
-) =>
-  useQuery({
-    ...options,
+/** The query for one storage folder, shared by the hook and a one-off fetch. */
+export const storageFolderQuery = (companyId: string, path: string) =>
+  queryOptions({
     queryKey: queryKeys.storageFolder(companyId, path),
     queryFn: () =>
       unwrap(
@@ -682,6 +701,13 @@ export const useStorageFolder = (
         }),
       ),
   });
+
+/** One folder of a company's storage; `path` is relative and ends in `/`, `''` is the root. */
+export const useStorageFolder = (
+  companyId: string,
+  path: string,
+  options: StorageReadOptions = {},
+) => useQuery({ ...options, ...storageFolderQuery(companyId, path) });
 
 /** The saved versions of one stored file, newest first as the server orders them. */
 export const useStorageVersions = (

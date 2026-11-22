@@ -101,7 +101,7 @@ export const KnowledgePanel = ({
   const documents = useKnowledgeList(scope);
   const status = useKnowledgeStatus(scope);
   const upload = useUploadKnowledge(scope);
-  const remove = useDeleteKnowledge(scope);
+  const remove = useDeleteKnowledge();
   const reindex = useReindexKnowledge(scope);
 
   const [uploading, setUploading] = useState<{
@@ -184,7 +184,7 @@ export const KnowledgePanel = ({
     const index = names.indexOf(name);
     const next = names[index + 1] ?? names[index - 1] ?? null;
     try {
-      await remove.mutateAsync(name);
+      await remove.mutateAsync({ scope, filename: name });
       announce({
         channel: KNOWLEDGE_CHANNEL,
         change: 'knowledge.announce.deleted',

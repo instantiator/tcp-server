@@ -200,7 +200,14 @@ export const StorageBrowser = ({
               allowsMultiple
               onSelect={(files) =>
                 files !== null &&
-                void uploads.start(itemsFromFiles(files, target), targetName)
+                void uploads.start(
+                  itemsFromFiles(files, target),
+                  targetName,
+                  target,
+                  {
+                    kind: 'storage',
+                  },
+                )
               }
             >
               <Button
@@ -215,7 +222,14 @@ export const StorageBrowser = ({
               acceptDirectory
               onSelect={(files) =>
                 files !== null &&
-                void uploads.start(itemsFromFiles(files, target), targetName)
+                void uploads.start(
+                  itemsFromFiles(files, target),
+                  targetName,
+                  target,
+                  {
+                    kind: 'storage',
+                  },
+                )
               }
             >
               <Button
@@ -287,7 +301,7 @@ export const StorageBrowser = ({
               getDropOperation={() => 'copy'}
               onDrop={(event) =>
                 void itemsFromDrop(event.items, target).then((items) =>
-                  uploads.start(items, targetName),
+                  uploads.start(items, targetName, target, { kind: 'storage' }),
                 )
               }
             >
