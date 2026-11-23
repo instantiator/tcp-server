@@ -94,8 +94,11 @@ Preview kinds and size caps:
 | Text     | `.txt .json .jsonl .yaml .yml .xml .log .html .htm .ini .toml .ts .js .css` | 1 MiB  | Literal text. HTML is never run |
 | Image    | `.png .jpg .jpeg .gif .webp .avif .svg`                                     | 25 MiB | An image. SVG scripts can't run |
 | PDF      | `.pdf`                                                                      | 25 MiB | The browser's own viewer        |
+| Office   | `.docx .xlsx .pptx .odt .ods .odp`                                          | 25 MiB | Its text, as Markdown (002.11)  |
 
-Anything else, or a file over its cap, shows "No preview" and a download button. Office files (Word, Excel, PowerPoint, OpenDocument) have no preview yet.
+Anything else, or a file over its cap, shows "No preview" and a download button. Legacy `.doc`, `.xls` and `.ppt` files are among them.
+
+An Office file's preview is the text the server extracts from it (`GET …/storage/text`), shown with the Markdown preview under "Text only. Download the file for its original layout." Nothing of the file is parsed or run in the browser. It is the same extraction agents read through; see [Office and PDF files for agents](#office-and-pdf-files-for-agents).
 
 ### What is writable, and why
 
@@ -402,6 +405,16 @@ Agents interact with storage through the [tcp-mcp-storage](tcp-mcp-storage.md) M
 The permissive general **write** tools (`write_file`, `delete_file`, `restore_file`, `copy_file`, `move_file`) are no longer exposed to agents — the internal endpoints behind them remain for the knowledge API, storage proxy, and orchestration. See [tcp-mcp-storage.md](tcp-mcp-storage.md) for the full tool reference.
 
 ### Scope resolution
+
+### Office and PDF files for agents
+
+Since 002.11, `read_file`, `read_material_file`, `read_resource` and `read_working_file` give the text of a `.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp` or `.pdf` file, as Markdown that keeps headings, lists and tables. Before that, the bytes were decoded as UTF-8, so these files came back as noise. The text starts with a line saying it was extracted and that layout and images are lost. `get_file_summary` (and `get_working_file_summary`) outline it from the same text: its headings, marked `extracted: true`. `search_files` matches file names only, so it needs nothing.
+
+- **Where:** tcp-server extracts on read (`storage/document-text.ts`, using [officeparser](https://github.com/harshankur/officeParser)); the MCP server stays a proxy. Knowledge uploads use the same extractor before converting to OKF.
+- **Limits:** a file over 25 MB isn't read (`413`). The parse runs in a worker thread with a 256 MB heap and is stopped after 20 s; a zip-based file that would unpack past 100 MB stops there. Text past 1,000,000 characters is cut, with a note saying so. A file that breaks a limit, or isn't readable as its extension says, gets `422` with a plain reason.
+- **Nothing is run or fetched:** no macros, embedded objects, images or OCR. officeparser's remote assets are off, and the worker can't make network calls. A test checks that a document's external image link and hyperlink are never requested.
+- **Read only:** the internal `write`, `append` and `replace` routes refuse these paths (`415`), because writing text back would replace the document with its extracted text. Agents can't write Office files.
+- **The text is untrusted input** to the model, like any other file.
 
 The scoped tools resolve their working prefix and materials via `GET /internal/agent/:agentId/storage-scope` (the `agentId` is injected by `McpClientService`, never model-supplied). tcp-server returns `{ mode, readOnly, companyPrefix, workingPrefix, materials, resources }`. `companyPrefix` (`{slug}/`) keeps the shared read tools inside the caller's company. `resources` is `{ mode, readPrefixes, writePrefix }`: the folders a resource is read from in order, and the one folder writes go to, or `null` when the agent may not change resources.
 

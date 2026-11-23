@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -44,7 +46,7 @@ function makeConfig(overrides: Record<string, string> = {}): ConfigService {
   } as unknown as ConfigService;
 }
 
-function makeReadable(text: string): Readable {
+function makeReadable(text: string | Buffer): Readable {
   const r = new Readable({ read() {} });
   r.push(text);
   r.push(null);
@@ -487,6 +489,36 @@ describe('MinioStorageAdapter', () => {
         BadRequestException,
       );
     });
+
+    it('extracts an Office file to Markdown, headed by a line saying so', async () => {
+      const docx = fs.readFileSync(
+        path.join(__dirname, '__fixtures__', 'price-list.docx'),
+      );
+      send.mockImplementation((cmd: unknown) =>
+        Promise.resolve(
+          cmd instanceof HeadObjectCommand
+            ? { ContentLength: docx.length }
+            : { Body: makeReadable(docx) },
+        ),
+      );
+      const svc = makeAdapter(makeConfig());
+      const text = await svc.readFile(
+        'acme/tasks/t1/materials/price-list.docx',
+      );
+      expect(text).toMatch(
+        /^\(Text extracted from price-list\.docx; its layout and images are lost\.\)/,
+      );
+      expect(text).toContain('| Tea | 3 |');
+    }, 30_000);
+
+    it('refuses an Office file over the size cap without fetching it', async () => {
+      send.mockResolvedValue({ ContentLength: 26 * 1024 * 1024 });
+      const svc = makeAdapter(makeConfig());
+      await expect(svc.readFile('acme/big.pdf')).rejects.toThrow(
+        'big.pdf is too large to read.',
+      );
+      expect(send).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('writeFile', () => {
@@ -756,6 +788,34 @@ describe('MinioStorageAdapter', () => {
   });
 
   describe('getFileSummary', () => {
+    it('summarises an Office file from its extracted text, not its bytes', async () => {
+      const docx = fs.readFileSync(
+        path.join(__dirname, '__fixtures__', 'price-list.docx'),
+      );
+      send.mockImplementation((cmd: unknown) =>
+        Promise.resolve(
+          cmd instanceof HeadObjectCommand
+            ? {
+                ContentLength: docx.length,
+                ContentType:
+                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              }
+            : { Body: makeReadable(docx) },
+        ),
+      );
+      const svc = makeAdapter(makeConfig());
+      const summary = await svc.getFileSummary(
+        'acme/resources/price-list.docx',
+      );
+      expect(summary).toMatchObject({
+        format: 'markdown',
+        extracted: true,
+        truncated: false,
+        size: docx.length,
+        headings: [{ level: 1, text: 'Price list' }],
+      });
+    }, 30_000);
+
     it('returns format=json-object for a JSON file', async () => {
       send.mockImplementation((cmd: unknown) => {
         if (cmd instanceof HeadObjectCommand)

@@ -33,7 +33,14 @@ describe('previewKind', () => {
     ['a.avif', 'image'],
     ['a.svg', 'image'],
     ['a.pdf', 'pdf'],
-    ['a.docx', 'none'],
+    ['a.docx', 'office'],
+    ['a.XLSX', 'office'],
+    ['a.pptx', 'office'],
+    ['a.odt', 'office'],
+    ['a.ods', 'office'],
+    ['a.odp', 'office'],
+    ['a.doc', 'none'],
+    ['a.zip', 'none'],
   ])('%s is %s', (name, kind) => {
     expect(previewKind(name, 10)).toBe(kind);
   });
@@ -61,7 +68,12 @@ describe('previewKind', () => {
   });
 
   it('leaves an unknown kind as none whatever its size', () => {
-    expect(previewKind('a.docx', MEDIA_PREVIEW_MAX_BYTES * 2)).toBe('none');
+    expect(previewKind('a.zip', MEDIA_PREVIEW_MAX_BYTES * 2)).toBe('none');
+  });
+
+  it('caps an Office file at the media size, as its text is read server-side', () => {
+    expect(previewKind('a.docx', MEDIA_PREVIEW_MAX_BYTES)).toBe('office');
+    expect(previewKind('a.docx', MEDIA_PREVIEW_MAX_BYTES + 1)).toBe('tooLarge');
   });
 });
 

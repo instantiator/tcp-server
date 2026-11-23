@@ -188,6 +188,8 @@ The tools live in `resource-tools.service.ts` and are on and off with the rest o
 
 **Paths are forgiving.** `normaliseResourcePath` (`libs/tcp-shared/src/storage/resource-path.ts`) trims the path, turns `\` into `/`, collapses repeated slashes, and strips a leading `/`, `resources/` or `{slug}/resources/`. It refuses `..`, `_deleted`, an empty path, and a file path that ends in `/` (the reply suggests `list_resources`).
 
+**Office and PDF resources** (`.docx .xlsx .pptx .odt .ods .odp .pdf`) are read as their extracted text, since 002.11; tcp-server does the extraction. See [shared-storage.md → Office and PDF files for agents](shared-storage.md#office-and-pdf-files-for-agents).
+
 **Corrective replies.** These are ordinary text results, so a small model can fix the call:
 
 | Situation                                              | Reply                                                                           |
@@ -195,7 +197,7 @@ The tools live in `resource-tools.service.ts` and are on and off with the rest o
 | The file doesn't exist                                 | Names the folder and lists its files                                            |
 | The folder doesn't exist                               | Shows the tree from the deepest folder that does exist                          |
 | Same name with another extension, or in another folder | Adds "Did you mean …?"                                                          |
-| A binary extension (pdf, docx, images, zip…)           | Says the file can't be read as text                                             |
+| A binary extension (doc, xls, ppt, images, zip…)       | Says the file can't be read as text                                             |
 | A write into a folder with no `README.md`              | Says the folder is new, and suggests a one-line purpose note in its `README.md` |
 | A path to a file passed to `list_resources`            | Says it is a file, and to use `read_resource`                                   |
 | A path to a folder passed to `read_resource`           | Lists the folder's files                                                        |

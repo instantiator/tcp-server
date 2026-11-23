@@ -150,3 +150,7 @@ _2026-10-20._
 - **Memories carry `version` and `updatedAt`.** Edits add 1 to `version`. The web client compares by id and version to show an "out of date" notice when memories change under an open tab. A memory write audits `StateChange { source: 'memory' }`, which the company stream turns into a content-free signal.
 - **`remember` no longer claims success without an embedding model.** It says nothing was stored.
 - **Still deferred:** memory consolidation and a scrubbing API by date, task or tag. Individual memories can now be deleted by hand.
+
+## Amendment as implemented (002.11, phase 04) <a id="amendment-as-implemented-p04-002-11"></a>
+
+`store-knowledge` also accepts `.xlsx`, `.pptx`, `.odt`, `.ods` and `.odp`. `.docx` and `.pdf` are no longer converted with `mammoth` and `pdf-parse`, which are removed: every Office, OpenDocument and PDF upload goes through the bounded extractor agents read with ([ADR-007's 002.11 amendment](ADR-007-shared-company-storage.md#amendment-as-implemented-p04-002-11)). It runs pdf.js in a worker thread, outside Jest's sandbox, so the conversion spec no longer mocks it.

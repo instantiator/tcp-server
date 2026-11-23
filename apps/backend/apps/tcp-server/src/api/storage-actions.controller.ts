@@ -1,4 +1,5 @@
 import { InternalApiKeyGuard } from '@tcp/shared';
+import { isExtractable } from '../storage/document-text';
 import {
   BadRequestException,
   Body,
@@ -7,6 +8,7 @@ import {
   NotFoundException,
   Post,
   Query,
+  UnsupportedMediaTypeException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -61,6 +63,19 @@ function toOriginators(dto?: OriginatorsDto): Originators | undefined {
 }
 
 /**
+ * Refuses text writes to an Office, OpenDocument or PDF path (002.11).
+ * Reading one gives its extracted text, so writing text back would replace
+ * the document with it; agents may read these files, not write them.
+ */
+const refuseDocumentWrite = (path: string): void => {
+  if (isExtractable(path)) {
+    throw new UnsupportedMediaTypeException(
+      `${path} is a document file; it can be read, but not written as text.`,
+    );
+  }
+};
+
+/**
  * Internal, service-to-service file-action surface backing `tcp-mcp-storage`'s
  * MCP tools (see docs/prompts/009.4). Protected by {@link InternalApiKeyGuard},
  * not JWT — callers pass `originators` explicitly in the body rather than
@@ -100,6 +115,7 @@ export class StorageActionsController {
   async write(
     @Body() body: WriteFileDto,
   ): Promise<{ key: string; size: number }> {
+    refuseDocumentWrite(body.path);
     return this.storage.writeFile(
       body.path,
       body.content,
@@ -132,6 +148,7 @@ export class StorageActionsController {
   async append(
     @Body() body: AppendFileDto,
   ): Promise<{ key: string; size: number; created: boolean }> {
+    refuseDocumentWrite(body.path);
     const existing = await this.storage.readFile(body.path);
     const combined = (existing ?? '') + body.content;
     const result = await this.storage.writeFile(
@@ -153,6 +170,7 @@ export class StorageActionsController {
   async replace(
     @Body() body: ReplaceFileDto,
   ): Promise<{ key: string; count: number }> {
+    refuseDocumentWrite(body.path);
     if (body.find === '') {
       throw new BadRequestException('The find string must not be empty.');
     }

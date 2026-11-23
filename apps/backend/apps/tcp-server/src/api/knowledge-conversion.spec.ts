@@ -2,19 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BadRequestException } from '@nestjs/common';
 
-// pdf-parse (pdfjs-dist) sets up its text-extraction worker via a dynamic
-// `import()`, which Jest's default (non-ESM) test environment rejects with
-// "A dynamic import callback was invoked without --experimental-vm-modules"
-// — a Jest sandboxing limitation, not a real runtime issue (confirmed
-// working under plain Node). Mocked here so this suite exercises our own
-// convertPdf wiring; real end-to-end PDF extraction is covered by the
-// running server in test/api/api.spec.ts.
-const getText = jest.fn().mockResolvedValue({ text: 'Sample PDF content' });
-const destroy = jest.fn().mockResolvedValue(undefined);
-jest.mock('pdf-parse', () => ({
-  PDFParse: jest.fn().mockImplementation(() => ({ getText, destroy })),
-}));
-
 import {
   convertToMarkdown,
   ensureOkfFrontMatter,
@@ -80,14 +67,36 @@ describe('convertToMarkdown', () => {
   });
 
   describe('.pdf', () => {
-    it('extracts plain text with a null title, and releases the parser', async () => {
+    it('extracts its text, with no title when it has no heading', async () => {
       const result = await convertToMarkdown(
         'report.pdf',
         fixture('sample.pdf'),
       );
-      expect(result).toEqual({ title: null, body: 'Sample PDF content' });
-      expect(destroy).toHaveBeenCalled();
-    });
+      expect(result.title).toBeNull();
+      expect(result.body).toContain('Sample PDF content');
+    }, 30_000);
+  });
+
+  // The same extractor agents read with (002.11); one case per format here,
+  // the limits are covered in storage/document-text.spec.ts.
+  describe.each(['xlsx', 'pptx', 'odt', 'ods', 'odp'])('.%s', (format) => {
+    it('converts to Markdown that keeps the document’s text', async () => {
+      const result = await convertToMarkdown(
+        `price-list.${format}`,
+        fs.readFileSync(
+          path.join(
+            __dirname,
+            '..',
+            'storage',
+            '__fixtures__',
+            `price-list.${format}`,
+          ),
+        ),
+      );
+      expect(result.body).toContain('Tea');
+      expect(result.body.startsWith('---')).toBe(false);
+      expect(result.title ?? '').not.toContain('{#');
+    }, 30_000);
   });
 
   describe('.docx', () => {
@@ -98,7 +107,7 @@ describe('convertToMarkdown', () => {
       );
       expect(result.title).toBe('Sample Heading');
       expect(result.body).toContain('Sample docx content.');
-    });
+    }, 30_000);
   });
 
   describe('.csv', () => {

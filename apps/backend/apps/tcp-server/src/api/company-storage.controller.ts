@@ -7,6 +7,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   HttpCode,
   NotFoundException,
   Param,
@@ -17,6 +18,7 @@ import {
   Query,
   Req,
   Res,
+  UnsupportedMediaTypeException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -41,6 +43,11 @@ import { CompanyScope } from '../auth/company-scope.decorator';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DbService } from '../db/db.service';
+import {
+  DEFAULT_LIMITS,
+  extractText,
+  isExtractable,
+} from '../storage/document-text';
 import { StorageService } from '../storage/storage.service';
 import {
   isWritable,
@@ -51,6 +58,7 @@ import {
 import {
   StorageFolderDto,
   StorageRestoreRequestDto,
+  StorageTextDto,
   StorageVersionDto,
   StorageZipRequestDto,
   StoredCompanyFileDto,
@@ -177,6 +185,39 @@ export class CompanyStorageController {
       result.contentType,
       result.stream,
     );
+  }
+
+  /**
+   * An Office or OpenDocument file's text as Markdown, for the browser's
+   * preview (002.11): the same bounded extraction agents read through, so no
+   * part of the file is parsed or run in the browser. PDFs use the browser's
+   * own viewer and aren't served here.
+   */
+  @ApiOperation({ summary: 'Read an Office file in company storage as text' })
+  @ApiOkResponse({ type: StorageTextDto })
+  @CompanyScope(SCOPE)
+  @Get('text')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async text(
+    @Param('companyId') companyId: string,
+    @Query('path') path: string,
+  ): Promise<StorageTextDto> {
+    const company = await this.company(companyId);
+    const key = toCompanyKey(company.slug, path ?? '', 'file');
+    if (!isExtractable(key) || key.toLowerCase().endsWith('.pdf')) {
+      throw new UnsupportedMediaTypeException(
+        `No text preview for ${path}: only Office and OpenDocument files have one.`,
+      );
+    }
+    const name = key.split('/').at(-1) ?? key;
+    const properties = await this.storage.getFileProperties(key);
+    if (!properties.exists) throw new NotFoundException(`Not found: ${path}`);
+    if ((properties.size ?? 0) > DEFAULT_LIMITS.maxInputBytes) {
+      throw new PayloadTooLargeException(`${name} is too large to read.`);
+    }
+    const result = await this.storage.getByKey(key);
+    if (!result) throw new NotFoundException(`Not found: ${path}`);
+    return extractText(name, await streamToBuffer(result.stream));
   }
 
   /** Uploads a file into a writable folder. 409 when it exists, unless `overwrite`. */

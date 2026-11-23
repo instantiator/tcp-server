@@ -1108,7 +1108,7 @@ the CSV format). There are two ways in, and both show the same view.
   **storage browser** (`src/components/StorageBrowser/`): a keyboard-driven
   tree, a preview of the selected file, download (one file, or a zip), upload
   (files, folders, or drag and drop), delete, and a file's version history with
-  restore. `resources/` can be changed directly. Since 002.10 a knowledge
+  restore. Office files preview as their extracted text (002.11). `resources/` can be changed directly. Since 002.10 a knowledge
   scope and a task's `materials/` take uploads through their own routes, after
   one `alertdialog` that says what those routes do; everything else shows
   locked, and the server enforces all of it. Task folders are labelled with the task. One

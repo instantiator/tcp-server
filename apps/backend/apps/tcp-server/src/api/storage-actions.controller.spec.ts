@@ -65,6 +65,22 @@ describe('StorageActionsController', () => {
     expect(result).toEqual({ content: 'hello' });
   });
 
+  it.each(['write', 'append', 'replace'] as const)(
+    '%s refuses a document file, which reads as extracted text',
+    async (action) => {
+      const body = {
+        path: 'acme/resources/prices.xlsx',
+        content: 'x',
+        find: 'a',
+        replace: 'b',
+      };
+      await expect(ctrl[action](body)).rejects.toThrow(
+        'acme/resources/prices.xlsx is a document file; it can be read, but not written as text.',
+      );
+      expect(storage.writeFile).not.toHaveBeenCalled();
+    },
+  );
+
   it('read throws NotFoundException when the file does not exist', async () => {
     storage.readFile.mockResolvedValue(null);
     await expect(

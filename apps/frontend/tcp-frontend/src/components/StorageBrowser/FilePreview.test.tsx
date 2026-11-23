@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StorageFileEntryDTO } from '../../api/hooks';
 import { t } from '../../strings';
+import { expectNoA11yViolations } from '../../test-support/axe';
 import { fetchMock, installFetchMock } from '../../test-support/fetch-mock';
 import { FilePreview } from './FilePreview';
 import { MEDIA_PREVIEW_MAX_BYTES, TEXT_PREVIEW_MAX_BYTES } from './previewKind';
@@ -102,9 +103,65 @@ describe('FilePreview', () => {
   });
 
   it('does not fetch a kind with no preview, and says so', () => {
-    renderPreview(file('a.docx'));
+    renderPreview(file('a.zip'));
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText(t('storage.preview.none'))).toBeInTheDocument();
+  });
+
+  describe('an Office file', () => {
+    const respondWithText = (status: number, body: unknown) =>
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    const requested = () =>
+      fetchMock.mock.calls.map(
+        ([input]) =>
+          new URL(input instanceof Request ? input.url : String(input))
+            .pathname,
+      );
+
+    it('shows the text the server extracted, as Markdown, saying it is text only', async () => {
+      respondWithText(200, {
+        markdown:
+          '# Price list\n\n| Item | Price |\n| --- | --- |\n| Tea | 3 |\n',
+        truncated: false,
+      });
+      const { container } = renderPreview(file('price-list.docx'));
+      expect(
+        await screen.findByRole('heading', { name: 'Price list' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('table')).toHaveTextContent('Tea');
+      expect(
+        screen.getByText(t('storage.preview.office.textOnly')),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(t('storage.preview.office.truncated')),
+      ).toBeNull();
+      // The file itself is never fetched: only its extracted text.
+      expect(requested()).toEqual(['/api/company/c1/storage/text']);
+      await expectNoA11yViolations(container);
+    });
+
+    it('says when the text was cut short', async () => {
+      respondWithText(200, { markdown: 'Some text', truncated: true });
+      renderPreview(file('big.xlsx'));
+      expect(
+        await screen.findByText(t('storage.preview.office.truncated')),
+      ).toBeInTheDocument();
+    });
+
+    it('gives the server’s reason when it can’t read the file', async () => {
+      respondWithText(422, {
+        message: "broken.docx isn't a readable docx file.",
+      });
+      renderPreview(file('broken.docx'));
+      expect(
+        await screen.findByText("broken.docx isn't a readable docx file."),
+      ).toBeInTheDocument();
+    });
   });
 
   it('offers a retry when the file cannot be loaded', async () => {

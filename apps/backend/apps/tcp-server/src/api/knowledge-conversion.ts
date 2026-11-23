@@ -6,7 +6,7 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import * as mammoth from 'mammoth';
+import { extractText } from '../storage/document-text';
 import { DocumentLicence } from '../templates/company-template/format';
 
 /** Extensions `store-knowledge` accepts; each is converted to OKF Markdown server-side. */
@@ -16,6 +16,11 @@ export const SUPPORTED_EXTENSIONS = [
   '.html',
   '.pdf',
   '.docx',
+  '.xlsx',
+  '.pptx',
+  '.odt',
+  '.ods',
+  '.odp',
   '.csv',
   '.json',
   '.yaml',
@@ -56,9 +61,13 @@ export async function convertToMarkdown(
     case '.html':
       return convertHtml(buffer);
     case '.pdf':
-      return convertPdf(buffer);
     case '.docx':
-      return convertDocx(buffer);
+    case '.xlsx':
+    case '.pptx':
+    case '.odt':
+    case '.ods':
+    case '.odp':
+      return convertDocument(filename, buffer);
     case '.csv':
       return convertFenced(buffer, 'csv', (text) => parseCsv(text));
     case '.json':
@@ -86,35 +95,16 @@ function convertHtml(buffer: Buffer): ConvertedDocument {
   return { title, body };
 }
 
-async function convertPdf(buffer: Buffer): Promise<ConvertedDocument> {
-  // Imported here, not at module scope. `pdf-parse` pulls in `pdfjs-dist`,
-  // which loads `@napi-rs/canvas`'s native binding, and that starts a GC
-  // thread the moment it is required. This module is reachable from
-  // `app.module.ts`, so a top-level import started that thread in every
-  // process that touched the API module — including test runs that never
-  // convert a PDF, where it raced Jest's one-second exit grace period and
-  // occasionally hung the run outright.
-  // `require`, not `await import()`: the latter stays a real dynamic import
-  // under `module: nodenext`, which Jest's CJS sandbox rejects with "A dynamic
-  // import callback was invoked without --experimental-vm-modules" (the same
-  // limitation this module's spec already documents for pdfjs-dist).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PDFParse } = require('pdf-parse') as typeof import('pdf-parse');
-  const parser = new PDFParse({ data: buffer });
-  try {
-    const result = await parser.getText();
-    return { title: null, body: result.text };
-  } finally {
-    await parser.destroy();
-  }
-}
-
-async function convertDocx(buffer: Buffer): Promise<ConvertedDocument> {
-  // mammoth's shipped .d.ts omits `convertToMarkdown` (present at runtime,
-  // absent from the typed surface) — convert to HTML and reuse the same
-  // turndown pipeline as `.html` instead.
-  const { value: html } = await mammoth.convertToHtml({ buffer });
-  const body = turndown.turndown(html);
+/**
+ * Office, OpenDocument and PDF files, through the same bounded extractor
+ * agents read them with (002.11); the title is the first heading, if any.
+ * Text past the extractor's cap is cut: knowledge keeps what it could read.
+ */
+async function convertDocument(
+  filename: string,
+  buffer: Buffer,
+): Promise<ConvertedDocument> {
+  const { markdown: body } = await extractText(filename, buffer);
   const heading = HEADING.exec(body);
   return { title: heading ? heading[1].trim() : null, body };
 }

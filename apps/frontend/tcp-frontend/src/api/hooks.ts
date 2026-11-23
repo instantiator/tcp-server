@@ -1091,6 +1091,7 @@ export {
   useSendMessageMutation as useSendMessage,
   useStorageFileBlob,
   useStorageFolder,
+  useStorageText,
   useStorageVersions,
   useTaskHistory,
   useTemplateGalleryQuery as useTemplateGallery,

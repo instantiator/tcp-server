@@ -1,11 +1,18 @@
 /** How a stored file can be previewed in the browser, if at all. */
 export type PreviewKind =
-  'markdown' | 'csv' | 'text' | 'image' | 'pdf' | 'none' | 'tooLarge';
+  | 'markdown'
+  | 'csv'
+  | 'text'
+  | 'image'
+  | 'pdf'
+  | 'office'
+  | 'none'
+  | 'tooLarge';
 
 /** The biggest markdown, CSV or text file that is read into the page. */
 export const TEXT_PREVIEW_MAX_BYTES = 1024 * 1024;
 
-/** The biggest image or PDF that is shown. */
+/** The biggest image, PDF or Office file that is shown (Office as its text). */
 export const MEDIA_PREVIEW_MAX_BYTES = 25 * 1024 * 1024;
 
 const EXTENSION_KINDS: Readonly<Record<string, PreviewKind>> = {
@@ -34,6 +41,12 @@ const EXTENSION_KINDS: Readonly<Record<string, PreviewKind>> = {
   avif: 'image',
   svg: 'image',
   pdf: 'pdf',
+  docx: 'office',
+  xlsx: 'office',
+  pptx: 'office',
+  odt: 'office',
+  ods: 'office',
+  odp: 'office',
 };
 
 const MIME_TYPES: Readonly<Record<string, string>> = {
@@ -57,7 +70,7 @@ const extensionOf = (name: string): string => {
 export function previewKind(name: string, size: number): PreviewKind {
   const kind = EXTENSION_KINDS[extensionOf(name)] ?? 'none';
   if (kind === 'none') return kind;
-  const media = kind === 'image' || kind === 'pdf';
+  const media = kind === 'image' || kind === 'pdf' || kind === 'office';
   const cap = media ? MEDIA_PREVIEW_MAX_BYTES : TEXT_PREVIEW_MAX_BYTES;
   return size > cap ? 'tooLarge' : kind;
 }

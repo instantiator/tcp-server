@@ -101,6 +101,7 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   storageFolder: queryKeys.storageFolder('company-1', 'resources/'),
   storageVersions: queryKeys.storageVersions('company-1', 'a.md'),
   storageFile: queryKeys.storageFile('company-1', 'a.md'),
+  storageText: queryKeys.storageText('company-1', 'a.docx'),
   notifications: queryKeys.notifications('company-1'),
   spendOverview: queryKeys.spendOverview(),
   companySpend: queryKeys.companySpend('company-1'),
