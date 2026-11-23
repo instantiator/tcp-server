@@ -1082,4 +1082,18 @@ Agents read Office and PDF files as text, but the internal write routes refuse t
 
 OCR is off (002.11), so a PDF that is only images of pages reads as empty or nearly so.
 
-**Act when:** scanned PDFs matter to a company. officeparser's OCR (Tesseract) can be turned on, at a large cost in time and memory per read.
+**Act when:** scanned PDFs matter to a company. Decide it together with 006.02 (images), since an agent whose model takes images could read the page images itself.
+
+**Options:**
+
+- **officeparser's OCR (Tesseract).** Needs `extractAttachments` on, and Tesseract's language data baked into the image, because `allowRemoteAssets: false` blocks the CDN it would download from. It takes 1–5 s of CPU per page, so it doesn't fit the 20 s and 256 MB limits of a read. It is weak on tables and columns.
+- **A local vision model (preferred),** such as Gemma 3 or Qwen2.5-VL in LM Studio, called through the existing LLM settings and `LLM_ALLOWED_HOSTS`. It reads tables, forms and handwriting better, and can write Markdown directly. Its risk is fluent, wrong text: it can quietly change a figure or invent a word it couldn't read. Its output must be labelled as model-read, so readers check figures against the original. It takes seconds per page, and it competes with the agents' chat model for memory. A cloud vision model sends every page to the provider and is billed per image (spend tracking is deferred, 000.02).
+
+**Order of work, either way:**
+
+1. Cache extracted text by ETag.
+2. Pick out PDFs with no text layer.
+3. OCR them in a background job with its own limits.
+4. Label the result.
+
+Text in a scan reaches a model twice (the OCR model, then the agent), so it stays untrusted model input (003.04).
