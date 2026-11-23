@@ -132,3 +132,14 @@ Agents are granted access to the full company bucket (no hard per-agent ACL). Th
 - **`copy` encodes its source key.** S3 requires it, and a key with a space or a non-ASCII character would have failed before.
 
 See [shared-storage.md → Browsing in the web client](../shared-storage.md#browsing-in-the-web-client).
+
+## Amendment as implemented (002.11, phase 04) <a id="amendment-as-implemented-p04-002-11"></a>
+
+[002.11](../prompts/phase%2004%20-%20utility/002.11.01.plan%20-%20office%20documents%20for%20agents.md) lets agents read Office, OpenDocument and PDF files. Before it, every read decoded bytes as UTF-8, so these files, PDFs included, came back as noise.
+
+- **Extraction on read, in tcp-server.** `MinioStorageAdapter.readFile` sends `.docx .xlsx .pptx .odt .ods .odp .pdf` through `extractText` (`storage/document-text.ts`, officeparser) and returns Markdown headed by a line saying it was extracted. The MCP servers still only proxy. Nothing derived is stored, so files agents and the CLI write are covered too.
+- **Untrusted files are parsed with limits:** 25 MB in, 100 MB unpacked, 20 s, a 256 MB worker heap, 1,000,000 characters out. The parse runs in a `worker_threads` worker, so a bad file can't stall the server; remote assets are off and the worker has no network.
+- **These paths are read only for agents.** The internal `write`, `append` and `replace` routes refuse them with `415`.
+- **The browser previews them as text** through `GET /api/company/:companyId/storage/text` (company-scoped, `nosniff`).
+
+See [shared-storage.md → Office and PDF files for agents](../shared-storage.md#office-and-pdf-files-for-agents).

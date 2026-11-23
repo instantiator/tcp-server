@@ -39,8 +39,8 @@ with `run-backup-tests.sh` or by hand.
 Rarely (about one run in six on 2026-10-03), the integration tier hangs after
 every test has passed: `Jest did not exit one second after the test run has
 completed`, then nothing. The cause is unknown. The earlier one, a native
-thread from `pdf-parse`, was fixed on 2026-08-06 by loading it lazily, and no
-integration spec loads it now. `--detectOpenHandles` didn't reproduce it in
+thread from `pdf-parse`, was fixed on 2026-08-06 by loading it lazily, and
+`pdf-parse` was removed in 002.11 (PDFs are parsed in a worker thread now). `--detectOpenHandles` didn't reproduce it in
 three runs, probably because it changes the timing.
 
 `run-integration-tests.sh` now catches it: after `INTEGRATION_HANG_SECONDS` it
@@ -454,16 +454,15 @@ company.
 
 [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), a
 denial of service in `sprintf-js` (every version up to 1.1.3), reaches us
-through `argparse@1`: in `mammoth` (runtime, but only its command-line entry
-point uses `argparse`) and in the jest tool chain (dev only). `npm audit`
+through `argparse@1` in the jest tool chain (dev only). `mammoth`, which also
+pulled it in at runtime, was removed in 002.11. `npm audit`
 reports it as 21 moderate findings, one per package in those chains. Its
-suggested fix downgrades jest, ts-jest and mammoth to old majors — don't take
-it. The criticals and highs found alongside it were fixed by a lockfile
+suggested fix downgrades jest and ts-jest to old majors — don't take it. The criticals and highs found alongside it were fixed by a lockfile
 refresh (2026-10-09).
 
 **Act when:** `sprintf-js` publishes a patched version (add an npm `overrides`
-entry if `argparse@1` doesn't pick it up), or `mammoth` and the jest chain
-drop `argparse@1`. Recheck with `npm audit --omit=dev` before any release.
+entry if `argparse@1` doesn't pick it up), or the jest chain drops
+`argparse@1`. Recheck with `npm audit --omit=dev` before any release.
 
 ## Startup recovery runs only when tcp-server boots
 
@@ -1060,3 +1059,33 @@ The tray (002.08) reads storage, which has been static since 002.05. A folder or
 `test/browser/resources.spec.ts` (002.08) focuses the folder row directly. `FolderTree.test.tsx` covers arrow-key expansion, but no browser test moves between rows with the arrows.
 
 **Act when:** the tree's keyboard behaviour changes, or a browser-tier keyboard sweep is done (phase 06).
+
+## File summaries and search still decode documents as text
+
+002.11 extracts Office and PDF text for `read_file` and the other read tools, but `get_file_summary` and `search_files` still decode a file's bytes as UTF-8, so for those files they summarise or search noise.
+
+**Act when:** an agent is seen summarising or searching a PDF or Office file. Route both through `extractText` (`storage/document-text.ts`) for extractable files.
+
+## Legacy Office files can't be read
+
+`.doc`, `.xls` and `.ppt` stay binary: officeparser doesn't read them, so agents are told they can't be read and the browser shows no preview.
+
+**Act when:** someone uploads one and expects an agent to use it. Find a maintained reader for the old binary formats, or ask for the file to be re-saved in the current format.
+
+## Document text isn't cached
+
+Every read of an Office or PDF file starts a worker and parses it again (002.11).
+
+**Act when:** reads of large files are slow, or an agent reads the same big file many times in one task. Cache the extracted text by the object's ETag.
+
+## Agents can't write Office files
+
+Agents read Office and PDF files as text, but the internal write routes refuse those paths (002.11). Writing one would mean generating an Office file from the agent's text.
+
+**Act when:** someone asks for agents to produce Word or Excel files. officeparser can generate them, but that is a separate design: layout, templates and review.
+
+## Scanned PDFs have no text
+
+OCR is off (002.11), so a PDF that is only images of pages reads as empty or nearly so.
+
+**Act when:** scanned PDFs matter to a company. officeparser's OCR (Tesseract) can be turned on, at a large cost in time and memory per read.

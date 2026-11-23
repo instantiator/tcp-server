@@ -571,7 +571,7 @@ Retrieve a single knowledge-base document's content, for a role or a company's s
 
 Upload (or overwrite) a single document into a role's knowledge base, or a company's shared knowledge. The file's extension is checked before upload — if it's not supported, nothing is sent.
 
-Accepts `.md`, `.txt`, `.html`, `.pdf`, `.docx`, `.csv`, `.json`, and `.yaml`. The server converts non-`.md` formats to OKF Markdown (YAML front-matter with a `title` field, generated from the source's own title/heading, or the filename if neither is present) and stores the result under a `.md` filename — e.g. `report.pdf` is stored as `report.md`. A derived name that collides with an existing document is rejected (409) rather than silently overwritten, unless `--target` is given explicitly. `.md` files are passed through unchanged and must already carry valid OKF front-matter with a non-empty `title` field — this is not auto-generated.
+Accepts `.md`, `.txt`, `.html`, `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp`, `.csv`, `.json`, and `.yaml`. The server converts non-`.md` formats to OKF Markdown (YAML front-matter with a `title` field, generated from the source's own title/heading, or the filename if neither is present) and stores the result under a `.md` filename — e.g. `report.pdf` is stored as `report.md`. A derived name that collides with an existing document is rejected (409) rather than silently overwritten, unless `--target` is given explicitly. `.md` files are passed through unchanged and must already carry valid OKF front-matter with a non-empty `title` field — this is not auto-generated.
 
 - **stdout**: JSON `{ key, name, size, lastModified }` for the stored document
 - **stderr**: validation errors and upload progress
