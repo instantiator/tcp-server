@@ -532,11 +532,11 @@ describe('the role and knowledge mutations', () => {
     async (_name, scope, path) => {
       fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-      const { result } = renderHook(() => useDeleteKnowledgeMutation(scope), {
+      const { result } = renderHook(() => useDeleteKnowledgeMutation(), {
         wrapper: wrapper(queryClient),
       });
       await act(async () => {
-        await result.current.mutateAsync('a.md');
+        await result.current.mutateAsync({ scope, filename: 'a.md' });
       });
 
       const request = requestMade();

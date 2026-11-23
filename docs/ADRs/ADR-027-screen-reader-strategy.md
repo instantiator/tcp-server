@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202), [000.01](#amendment-as-implemented-00001) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) and [002.08](#amendment-as-implemented-p04-002-08) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202), [000.01](#amendment-as-implemented-00001) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) [002.08](#amendment-as-implemented-p04-002-08) and [002.10](#amendment-as-implemented-p04-002-10) at the end)
 
 ## Context
 
@@ -386,3 +386,12 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **The purpose is part of the row's name.** React Aria names a row from its `textValue`, so the purpose is joined into it ("pricing, Price lists"). It was never read at all before. `aria-describedby` would not have helped.
 - **Focus returns to the row** after the dialog closes. The tray is non-modal and opening it moves no focus, so this is the same rule as [the four focus points](#focus-is-managed-at-four-points): focus goes back to what opened the dialog.
 - **React Aria's expandability workaround.** React Aria 1.20's `Tree` does not pass `hasChildItems` to the hook that decides whether a row is expandable. A row counts as expandable only once it has child items. A collapsed folder therefore holds a `CollapsedPlaceholder` row that is never drawn or fetched. Folders now expose `aria-expanded` and open with the arrow keys. This also fixes 002.05's storage browser, where only the chevron button worked.
+
+## Amendment as implemented (002.10, phase 04) <a id="amendment-as-implemented-p04-002-10"></a>
+
+[002.10](../prompts/phase%2004%20-%20utility/002.10.01.plan%20-%20knowledge%20uploads%20from%20the%20storage%20browser.md) let the storage browser upload into knowledge and task materials through their own routes. The policy table is unchanged.
+
+- **One question per upload, before anything is sent.** An upload through a knowledge or materials route opens an `alertdialog` (`ConfirmDialog`) saying what the route does besides storing: knowledge is converted and its originals aren't kept, with each rename listed; materials are read by the task's agents. It is asked once for the whole upload, never per file. "Replace?" comes after it, once, for every taken name.
+- **Focus returns to Upload files** when the question closes, because that button had focus while the file chooser was open. React Aria's restore does this; the browser journey checks it, since jsdom's upload focuses the hidden input instead.
+- **The result is announced once** on the `storage` channel, as for `resources/` uploads; failures interrupt and are listed under the toolbar with the server's reason.
+- **A folder that takes nothing says why** in the target line under the toolbar: `knowledge/` itself asks for a scope, a task folder asks for its `materials/`.

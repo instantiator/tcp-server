@@ -29,6 +29,7 @@ const SIGNED_IN_SPECS = [
   /company-visualisation\.spec\.ts/,
   /consultation\.spec\.ts/,
   /data-protection\.spec\.ts/,
+  /knowledge-upload\.spec\.ts/,
   /records\.spec\.ts/,
   /resources\.spec\.ts/,
   /spend\.spec\.ts/,

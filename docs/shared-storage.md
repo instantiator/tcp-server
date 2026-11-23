@@ -62,13 +62,15 @@ Since 002.05 the web client has its own storage browser. It talks to tcp-server,
 
 ### Where it appears
 
-| Place                                                   | Rooted at                    | Can change files?    |
-| ------------------------------------------------------- | ---------------------------- | -------------------- |
-| Company page → **Data** → **Documents**                 | The company folder           | In `resources/` only |
-| Task dialog → **Files**                                 | `tasks/{task_id}/`           | No                   |
-| Office task tray → **Browse outputs** (succeeded tasks) | `tasks/{task_id}/completed/` | No                   |
-| Office archive tray → **Browse {shortcode} outputs**    | `tasks/{task_id}/completed/` | No                   |
-| Office plan chest → **Company resources** tray          | `resources/` (folders only)  | In `resources/` only |
+| Place                                                   | Rooted at                    | Can change files?                                                |
+| ------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- |
+| Company page → **Data** → **Documents**                 | The company folder           | `resources/`; uploads into knowledge and task materials (002.10) |
+| Admin → **Knowledge**                                   | `knowledge/shared/`          | Through the knowledge routes (002.10)                            |
+| Role dialog → **Knowledge**                             | `knowledge/{role_slug}/`     | Through the knowledge routes (002.10)                            |
+| Task dialog → **Files**                                 | `tasks/{task_id}/`           | Uploads into `materials/`, before the task starts (002.10)       |
+| Office task tray → **Browse outputs** (succeeded tasks) | `tasks/{task_id}/completed/` | No                                                               |
+| Office archive tray → **Browse {shortcode} outputs**    | `tasks/{task_id}/completed/` | No                                                               |
+| Office plan chest → **Company resources** tray          | `resources/` (folders only)  | In `resources/` only                                             |
 
 The resources tray shows only folders. A click or Enter on one opens the browser in a dialog rooted there. The dialog is headed by the folder's name, with its purpose underneath. **Browse all resources** opens it at `resources/`.
 
@@ -97,11 +99,23 @@ Anything else, or a file over its cap, shows "No preview" and a download button.
 
 ### What is writable, and why
 
-Only `resources/` can be changed from the browser. The server refuses upload, delete and restore anywhere else with `403`. The lock icons in the tree only show that rule.
+The storage routes change only `resources/`. They refuse upload, delete and restore anywhere else with `403`, and the lock icons in the tree only show that rule.
 
-- **Tasks (`tasks/`, `assignments/`)** belong to the agents that work in them. A person adding or removing a file mid-task would change what the agents see. Task materials are the task row's list, not the folder, so a file dropped into `materials/` would be ignored anyway.
+Two other folders take uploads from the browser, but only through their own routes, because a file dropped there directly would do nothing (002.10). The browser picks the route by the target folder (`doorFor` in `src/components/StorageBrowser/paths.ts`). Each route stays the authority on what it accepts.
+
+| Folder                                        | Route                                                             | What it does besides storing                                                                | Asks first                                                             |
+| --------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `resources/…`                                 | `POST …/storage/file`                                             | Keeps old versions                                                                          | No; only "Replace?" for a taken name                                   |
+| `knowledge/shared/`, `knowledge/{role_slug}/` | `POST /api/company/:id/knowledge`, `POST /api/role/:id/knowledge` | Converts to OKF Markdown (the original is not kept) and reindexes the scope                 | Yes: says it converts, and lists renames (`report.docx → report.md`)   |
+| `tasks/{task_id}/materials/`                  | `POST /api/task/:id/materials`                                    | Adds the file to the task's materials list, which its agents read; only while it is `ready` | Yes: says agents read it and that it only works before the task starts |
+
+- **One question per upload**, an `alertdialog`, before anything is sent. "Replace?" comes after it, once, for every name that is already there.
+- **Names are checked first** through a knowledge or materials door, by the name each file will be stored under: a `.docx` clashes as its `.md`. A **Replace** sends that name to the knowledge route, which is how it is told to overwrite. A re-uploaded material replaces its list entry. A `409` from these routes (a task that has started) is a failure, not a clash.
+- **Files only.** Knowledge and materials are flat, so **Upload folder** is off there, and a file inside a dropped folder is refused.
+- **`knowledge/` itself** takes nothing: the target line says to choose `shared/` or a role's folder. A folder with no matching role takes nothing either.
+- **Deleting knowledge** goes through the knowledge route, so its index entries go too. Materials can't be deleted from the browser: there is no route for it.
+- **Tasks (`tasks/`, `assignments/`)** otherwise belong to the agents that work in them. A person changing a file mid-task would change what the agents see.
 - **Audit (`audit/`)** is append-only.
-- **Knowledge (`knowledge/`)** has its own upload door, which converts the file to OKF Markdown and reindexes. Writing there directly would skip the conversion. Use the Admin tab's knowledge panels.
 
 The folder `resources/` itself can't be deleted. Any member of the company can change resources, as in records; roles and permissions come later.
 

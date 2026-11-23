@@ -229,6 +229,27 @@ describe('TaskController (e2e)', () => {
               ]);
             });
 
+            it('replaces the entry when the same name is uploaded again, and adds one for a new name', async () => {
+              const upload = (name: string, body: string) =>
+                request(app.getHttpServer())
+                  .post(`/api/task/${task.id}/materials`)
+                  .set('Authorization', `Bearer ${jwt}`)
+                  .attach('file', Buffer.from(body), name)
+                  .expect(201);
+              await upload('brief.txt', 'first');
+              const again = await upload('brief.txt', 'second draft');
+              expect(again.body).toMatchObject({ name: 'brief.txt', size: 12 });
+              await upload('notes.txt', 'more');
+
+              const updated = await request(app.getHttpServer())
+                .get(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect((updated.body as TcpTask).materials).toEqual([
+                { type: 'task-materials-path', value: 'brief.txt' },
+                { type: 'task-materials-path', value: 'notes.txt' },
+              ]);
+            });
+
             it('returns 404 for an unknown task', async () => {
               const res = await request(app.getHttpServer())
                 .post(

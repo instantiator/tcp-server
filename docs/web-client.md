@@ -570,7 +570,6 @@ this is how to use what it decided.
 | `useLiveAgentState({ agentId, assignmentId })`                                           | One agent, found by either id it can be reached through          | Yes                                    |
 | `useAgentHistory(id)`                                                                    | An agent's audit history                                         | No                                     |
 | `useCompanyUsers(companyId)`                                                             | A company's members                                              | No                                     |
-| `useKnowledgeList(scope)`                                                                | Documents in a role's or the company's knowledge                 | No                                     |
 | `useKnowledgeStatus(scope)`                                                              | Indexing status; polled every 3 s while indexing                 | No — polled                            |
 | `useLiveRoleMemories(roleId)`, `useLiveRoleMemoryChanges(roleId, shown)`                 | A role's memories; what changed since they were read             | Yes — notice only, see below           |
 | `useCreateMemory()`, `useUpdateMemory()`, `useDeleteMemory()`, `useReloadRoleMemories()` | Memory writes, and the reload behind the notice                  | No                                     |
@@ -1109,8 +1108,10 @@ the CSV format). There are two ways in, and both show the same view.
   **storage browser** (`src/components/StorageBrowser/`): a keyboard-driven
   tree, a preview of the selected file, download (one file, or a zip), upload
   (files, folders, or drag and drop), delete, and a file's version history with
-  restore. Only `resources/` can be changed, and the server enforces that;
-  everything else shows locked. Task folders are labelled with the task. One
+  restore. `resources/` can be changed directly. Since 002.10 a knowledge
+  scope and a task's `materials/` take uploads through their own routes, after
+  one `alertdialog` that says what those routes do; everything else shows
+  locked, and the server enforces all of it. Task folders are labelled with the task. One
   link still opens the company's folder in the storage console, when it is
   configured. Details, routes and limits are in
   [shared-storage.md](shared-storage.md#browsing-in-the-web-client).
@@ -1326,11 +1327,11 @@ unknown `#admin` opens.
   and member type. The name filter falls back to the sign-in identifier when a
   member has no name.
 - **Knowledge** is the company's shared documents.
-- **`KnowledgePanel`** serves both the role dialog and Admin → Knowledge. The
-  upload control is a labelled file input that states the accepted types and
-  the 50 MB limit before a file is picked, and an upload can be cancelled
-  (`postFile` takes an `AbortSignal`). Documents can be deleted. **Rebuild
-  index** queues a rebuild. While indexing, status is polled every 3 s
+- **`KnowledgePanel`** serves both the role dialog and Admin → Knowledge. Since
+  002.10 its documents are a storage browser rooted at the scope's folder
+  (`knowledge/shared/` or `knowledge/{role_slug}/`), which uploads and deletes
+  through the knowledge routes; a line above it states the accepted types and
+  the 50 MB limit. **Rebuild index** queues a rebuild. While indexing, status is polled every 3 s
   (`useKnowledgeStatus`). **Test search** shows the chunks a prompt would
   retrieve, with no LLM call.
 
@@ -1357,7 +1358,8 @@ or drop its own model. Submitting imports (`POST /api/company/import`) and
 opens the new company. A 409 asks, in a `ConfirmDialog`, whether to replace the
 company at that slug. Only one dialog is open at a time; the page holds which.
 Admin → Company has **Export as template** (with or without model settings),
-the knowledge table shows each document's licence, and admins manage gallery
+a knowledge document's licence is in its front matter (the preview shows it),
+and admins manage gallery
 sources from the system menu's **Template sources**
 (`components/TemplateSourcesDialog/`). See [company-templates.md](company-templates.md).
 

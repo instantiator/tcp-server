@@ -893,13 +893,8 @@ const strings = {
   'knowledge.headingShared': 'Shared knowledge',
   'knowledge.introShared':
     'Every role can draw on these documents. A role’s own knowledge is in its dialog, on the Knowledge tab.',
-  'knowledge.upload': 'Upload a document',
   'knowledge.uploadHint':
-    'Markdown, text, HTML, PDF, Word, CSV, JSON or YAML, up to 50 MB. Each one is turned into Markdown and indexed.',
-  'knowledge.uploading': 'Uploading {name}',
-  'knowledge.cancelUpload': 'Cancel the upload',
-  'knowledge.tooLarge': 'That file is over the 50 MB limit.',
-  'knowledge.uploadFailed': 'The document could not be uploaded: {message}',
+    'Upload Markdown, text, HTML, PDF, Word, CSV, JSON or YAML, up to 50 MB, into the files below. Each one is turned into Markdown and indexed.',
   'knowledge.refresh': 'Refresh the index status',
   'knowledge.rebuild': 'Rebuild the index',
   'knowledge.status.documents.one': '{count} document',
@@ -911,20 +906,7 @@ const strings = {
   'knowledge.status.indexing': 'Indexing now…',
   'knowledge.status.error': 'The last indexing failed: {message}',
   'knowledge.status.loading': 'Loading the index status',
-  'knowledge.list.loading': 'Loading the documents',
   'knowledge.list.error': 'The documents could not be loaded.',
-  'knowledge.list.empty': 'No documents yet.',
-  'knowledge.column.name': 'Document',
-  'knowledge.column.size': 'Size',
-  'knowledge.column.modified': 'Changed',
-  'knowledge.column.actions': 'Actions',
-  'knowledge.license.column': 'Licence',
-  'knowledge.delete': 'Delete {name}',
-  'knowledge.deleteHeading': 'Delete {name}?',
-  'knowledge.deleteMessage':
-    'Agents will no longer find what it says. The file can’t be recovered here.',
-  'knowledge.deleteConfirm': 'Delete',
-  'knowledge.deleteFailed': '{name} could not be deleted: {message}',
   'knowledge.query.heading': 'Test the knowledge',
   'knowledge.query.label': 'Ask about something',
   'knowledge.query.hint':
@@ -938,9 +920,6 @@ const strings = {
   'knowledge.query.column.match': 'Match',
   'knowledge.query.column.text': 'Passage',
   'knowledge.query.match': '{percent}%',
-  'knowledge.announce.uploaded': 'Uploaded: {name}',
-  'knowledge.announce.cancelled': 'Upload cancelled',
-  'knowledge.announce.deleted': 'Deleted: {name}',
   'knowledge.announce.ready': 'Knowledge index ready',
   'knowledge.announce.failed': 'Knowledge indexing failed',
   'knowledge.announce.rebuilding': 'Rebuilding the knowledge index',
@@ -1061,7 +1040,7 @@ const strings = {
   /** Where uploads land; `{folder}` is a path, or the root's name. */
   'storage.target': 'Uploads go to {folder}',
   'storage.target.readOnly':
-    '{folder} is read-only. Choose a folder in resources/ to upload into.',
+    '{folder} is read-only. Choose a folder in resources/, a knowledge folder or a task’s materials/ to upload into.',
   'storage.rootName': 'the top folder',
   'storage.readOnlyHere': 'These files are read-only.',
   'storage.dropZone': 'Drop files here to upload them to {folder}',
@@ -1082,6 +1061,26 @@ const strings = {
     '{names} already in {folder}. Replacing keeps the old version in its history.',
   'storage.replace.confirm': 'Replace',
   'storage.replace.skip': 'Skip',
+  /** A file inside a dropped folder, refused by a knowledge or materials door, which are flat. */
+  'storage.door.noFolders': 'folders can’t be uploaded here, only files',
+  'storage.door.target.knowledge':
+    '{folder} takes no uploads. Choose shared/ or a role’s folder to upload knowledge into.',
+  'storage.door.target.materials':
+    '{folder} takes no uploads. Choose the task’s materials/ folder to add materials.',
+  /** Asked once per upload into knowledge, before anything is sent. */
+  'storage.door.knowledge.heading': 'Upload {files} to knowledge?',
+  'storage.door.knowledge.message':
+    'They will be converted to OKF Markdown, and the originals won’t be kept. The index rebuilds by itself.',
+  /** `{renames}` lists `old → new` names, comma separated. */
+  'storage.door.renames': 'Stored as: {renames}.',
+  /** Asked once per upload into a task's materials. */
+  'storage.door.materials.heading': 'Add {files} to the task’s materials?',
+  'storage.door.materials.message':
+    'The task’s agents read its materials. Materials can only be added before the task starts.',
+  'storage.door.confirm': 'Upload',
+  'storage.door.cancel': 'Cancel',
+  'storage.door.replace.message':
+    '{names} already in {folder}. Replacing overwrites them.',
   'storage.delete.heading': 'Delete {items}?',
   'storage.delete.message':
     'Deleting can’t be undone here. An administrator can recover deleted files from the storage console.',

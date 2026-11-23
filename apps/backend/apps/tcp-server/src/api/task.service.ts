@@ -188,7 +188,13 @@ export class TaskService {
       type: 'task-materials-path',
       value: filename,
     };
-    task.materials = [...task.materials, artifact];
+    // Same name, same file: replace the entry rather than list it twice.
+    task.materials = [
+      ...task.materials.filter(
+        (m) => !(m.type === artifact.type && m.value === filename),
+      ),
+      artifact,
+    ];
     await this.taskRepo.save(task);
 
     return { key, name: filename, size };

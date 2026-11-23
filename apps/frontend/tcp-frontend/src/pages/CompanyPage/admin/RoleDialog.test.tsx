@@ -261,6 +261,53 @@ describe('RoleDialog', () => {
   });
 
   describe('editing', () => {
+    it('shows the role’s own knowledge folder in its Knowledge tab', async () => {
+      const user = userEvent.setup();
+      respondByRoute([
+        [
+          /\/storage\/folder\?path=knowledge%2Fwriter%2F$/,
+          {
+            body: {
+              path: 'knowledge/writer/',
+              writable: false,
+              folders: [],
+              files: [
+                {
+                  path: 'knowledge/writer/style.md',
+                  name: 'style.md',
+                  size: 10,
+                  lastModified: '2026-11-01T09:00:00Z',
+                },
+              ],
+            },
+          },
+        ],
+        [
+          /\/api\/role\/r1\/knowledge\/status$/,
+          {
+            body: {
+              documentCount: 1,
+              totalBytes: 10,
+              chunkCount: 1,
+              generation: 1,
+              lastIndexedAt: null,
+              indexing: false,
+              lastError: null,
+              lastErrorAt: null,
+            },
+          },
+        ],
+        ...routes(),
+      ]);
+      render_('r1');
+      await user.click(
+        await screen.findByRole('tab', { name: t('admin.role.tab.knowledge') }),
+      );
+      expect(
+        await screen.findByRole('row', { name: /style\.md/ }),
+      ).toBeInTheDocument();
+    });
+
     it('sends only the changed field, and never the api key', async () => {
       const user = userEvent.setup();
       render_('r1');

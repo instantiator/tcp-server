@@ -35,9 +35,8 @@ import {
   useCreateCompany,
   useDeleteCompany,
   useDeleteRole,
-  useKnowledgeList,
   useKnowledgeStatus,
-  useUploadKnowledge,
+  useDoorUpload,
   useLiveTaskState,
   useRoleState,
   useTranscriptSearch,
@@ -755,18 +754,27 @@ describe('role and knowledge writes', () => {
     expect(queryClient.getQueryState(list)?.isInvalidated).toBe(true);
   });
 
-  it('useUploadKnowledge invalidates knowledge queries only', async () => {
-    respondWithJson(200, {});
+  it('useDoorUpload through knowledge invalidates knowledge and storage, not roles', async () => {
+    respondWithJson(201, {});
     const { result, queryClient } = renderHookWithClient(() =>
-      useUploadKnowledge({ kind: 'role', roleId: 'r1' }),
+      useDoorUpload(COMPANY_ID),
     );
     const invalidated = seed(queryClient);
+    const storage = ['storage', 'list', { companyId: COMPANY_ID, path: '' }];
+    queryClient.setQueryData(storage, {});
 
     await act(async () => {
-      await result.current.mutateAsync({ file: new File(['x'], 'a.md') });
+      await result.current.mutateAsync({
+        door: { kind: 'knowledge', scope: { kind: 'role', roleId: 'r1' } },
+        path: 'knowledge/writer/a.md',
+        file: new File(['x'], 'a.md'),
+        overwrite: false,
+        storedAs: 'a.md',
+      });
     });
 
     expect(invalidated('knowledge')).toBe(true);
+    expect(queryClient.getQueryState(storage)?.isInvalidated).toBe(true);
     expect(invalidated('role')).toBe(false);
   });
 });
@@ -785,19 +793,6 @@ describe('the scoped knowledge reads', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-  });
-
-  it('makes no company request for a role-scope list', async () => {
-    respondByRoute([[/\/api\/role\/r1\/knowledge$/, { body: [] }]]);
-
-    const { result } = renderHookWithClient(() =>
-      useKnowledgeList({ kind: 'role', roleId: 'r1' }),
-    );
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(requestedUrls().some((url) => url.includes('/api/company'))).toBe(
-      false,
-    );
   });
 
   it('returns the shared part of a company status', async () => {

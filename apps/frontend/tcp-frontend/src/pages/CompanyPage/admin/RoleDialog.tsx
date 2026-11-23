@@ -458,7 +458,9 @@ const RoleEditor = ({
         <TabPanel id="knowledge" className="react-aria-TabPanel">
           {saved !== null && (
             <KnowledgePanel
+              companyId={companyId}
               scope={{ kind: 'role', roleId: saved.id }}
+              folder={`knowledge/${saved.slug}/`}
               headingLevel={3}
             />
           )}
