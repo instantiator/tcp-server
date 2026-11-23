@@ -8,6 +8,7 @@ import type { SelectionTarget } from '../TcpPhaserEventBus';
 import { AgentDetails } from './AgentDetails';
 import { ArchiveDetails } from './ArchiveDetails';
 import { RecordsDetails } from './RecordsDetails';
+import { ResourcesDetails } from './ResourcesDetails';
 import { RoleDetails } from './RoleDetails';
 import { TaskDetails } from './TaskDetails';
 
@@ -108,6 +109,13 @@ export const VisualisationTray = forwardRef<
         )}
         {selection.kind === 'records' && (
           <RecordsDetails
+            companyId={companyId}
+            headingId={headingId}
+            portalContainer={portalContainer}
+          />
+        )}
+        {selection.kind === 'resources' && (
+          <ResourcesDetails
             companyId={companyId}
             headingId={headingId}
             portalContainer={portalContainer}

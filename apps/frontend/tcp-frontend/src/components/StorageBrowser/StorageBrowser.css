@@ -191,3 +191,36 @@
 .storage-browser__meta {
   margin: 0;
 }
+
+/*
+ * A row that opens its folder (002.08's resources tray): it selects nothing,
+ * so no selection box; the pointer, the hover highlight and the open icon at
+ * its end say that a click acts.
+ */
+.storage-browser__row--opens {
+  cursor: pointer;
+}
+
+.storage-browser__row--opens::before {
+  display: none;
+}
+
+.storage-browser__row--opens[data-hovered] {
+  background-color: var(--tcp-color-highlight);
+  color: var(--tcp-color-highlight-text);
+}
+
+.storage-browser__row--opens[data-hovered] .storage-browser__purpose {
+  color: inherit;
+}
+
+.storage-browser__opens {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+/* What the folder is for, under the dialog's heading (002.08). */
+.storage-browser__description {
+  margin: 0 0 var(--tcp-space-sm);
+  color: var(--tcp-color-text-muted);
+}

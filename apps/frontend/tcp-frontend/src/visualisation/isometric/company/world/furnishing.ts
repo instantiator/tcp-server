@@ -98,6 +98,13 @@ export function furnishRoom(room: Room): Furniture[] {
           roomId: room.id,
           tile: roomTile(room, 5, 1),
         },
+        // The company's resources, a low plan chest on the bookshelf's other side.
+        {
+          id: `${room.id}:resourcesChest`,
+          kind: 'resourcesChest',
+          roomId: room.id,
+          tile: roomTile(room, 3, 1),
+        },
       ];
     case 'corridor':
       return [];

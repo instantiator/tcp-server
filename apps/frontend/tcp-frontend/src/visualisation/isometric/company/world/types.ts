@@ -57,7 +57,8 @@ export type FurnitureKind =
   | 'table'
   | 'officeDoor'
   | 'bookshelf'
-  | 'filingCabinet';
+  | 'filingCabinet'
+  | 'resourcesChest';
 
 /** One piece of furniture, standing on one tile. */
 export interface Furniture {

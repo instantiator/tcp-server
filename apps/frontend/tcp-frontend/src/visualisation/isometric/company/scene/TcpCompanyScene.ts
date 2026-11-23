@@ -10,9 +10,10 @@ import type {
 import { furnitureIsLit, tileIsLit } from '../rules/roomLighting';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import {
-  ARCHIVE_BOOKSHELF_ID,
-  ARCHIVE_CABINET_ID,
+  ARCHIVE_FURNITURE_IDS,
+  ARCHIVE_FURNITURE_KINDS,
   mapBounds,
+  type ArchiveFurnitureKind,
 } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
@@ -61,10 +62,12 @@ function statusKey(status: OfficeStatus): string {
 const DOOR_ZONE_DEPTH_OFFSET = 0.5;
 
 /** Furniture a click selects, and what it selects. */
-const SELECTABLE_FURNITURE = new Map<string, 'archive' | 'records'>([
-  [ARCHIVE_BOOKSHELF_ID, 'archive'],
-  [ARCHIVE_CABINET_ID, 'records'],
-]);
+const SELECTABLE_FURNITURE = new Map(
+  ARCHIVE_FURNITURE_KINDS.map((kind): [string, ArchiveFurnitureKind] => [
+    ARCHIVE_FURNITURE_IDS[kind],
+    kind,
+  ]),
+);
 
 /**
  * The isometric office scene. React works out the whole office and sends it
@@ -90,11 +93,12 @@ export class TcpCompanyScene extends Scene {
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
   /**
-   * The archive's selectable furniture, for follow: the bookshelf (`archive`)
-   * and the filing cabinet (`records`). There is only ever one of each.
+   * The archive's selectable furniture, for follow: the bookshelf (`archive`),
+   * the filing cabinet (`records`) and the plan chest (`resources`). There is
+   * only ever one of each.
    */
   private archiveFurniture = new Map<
-    'archive' | 'records',
+    ArchiveFurnitureKind,
     GameObjects.IsoBox
   >();
   private readonly crowd = new Crowd();

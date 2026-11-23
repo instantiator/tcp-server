@@ -68,12 +68,15 @@ Since 002.05 the web client has its own storage browser. It talks to tcp-server,
 | Task dialog → **Files**                                 | `tasks/{task_id}/`           | No                   |
 | Office task tray → **Browse outputs** (succeeded tasks) | `tasks/{task_id}/completed/` | No                   |
 | Office archive tray → **Browse {shortcode} outputs**    | `tasks/{task_id}/completed/` | No                   |
+| Office plan chest → **Company resources** tray          | `resources/` (folders only)  | In `resources/` only |
+
+The resources tray shows only folders. A click or Enter on one opens the browser in a dialog rooted there. The dialog is headed by the folder's name, with its purpose underneath. **Browse all resources** opens it at `resources/`.
 
 The root is a view, not a boundary. A browser rooted at a task never shows anything above it, but a member can reach the rest of their own company through Data → Documents anyway. In Data → Documents a task folder is labelled with the task ("T-12 — Restock tea") instead of its id.
 
 ### What it does
 
-- **Tree.** Folders open one level at a time. Folders under `resources/` show their purpose, which is the first line of their `README.md`. Elsewhere there is no purpose, because reading every `README.md` under `tasks/` would cost one read per task.
+- **Tree.** Folders open one level at a time, with a click, the chevron or the arrow keys (they expose `aria-expanded`). A folder's purpose is read as part of its row name. Folders under `resources/` show their purpose, which is the first line of their `README.md`. Elsewhere there is no purpose, because reading every `README.md` under `tasks/` would cost one read per task.
 - **Preview.** Select one file and it opens beside the tree, or under it in a narrow dialog or tray. The kinds and caps are in the table below.
 - **Download.** One file downloads as it is. Several files, or a folder, download as one zip with entries named relative to the browser's root. With nothing selected, **Download all** zips the whole root. A zip is built in memory and refused above 200 MB in total. Downloads are always attachments, sent with `X-Content-Type-Options: nosniff`.
 - **Upload.** **Upload files**, **Upload folder**, or drag files and folders onto the drop strip. They go to the selected folder, or the folder of the selected file, or the root; the target is shown under the toolbar. Uploads run one at a time, up to 50 MB each. If a name is already there, the browser asks once: "Replace N files?" Replacing is safe, because the old version stays in the history.

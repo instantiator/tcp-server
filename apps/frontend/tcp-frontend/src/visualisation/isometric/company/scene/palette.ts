@@ -42,6 +42,8 @@ export const FURNITURE_COLOURS: Record<FurnitureKind, number> = {
   bookshelf: 0x6b4a30,
   // Painted-steel grey, so it reads as a different thing from the wood beside it.
   filingCabinet: 0x7d8790,
+  // Muted green, distinct from the bookshelf's wood and the cabinet's grey.
+  resourcesChest: 0x6f8f6a,
 };
 
 /** The tick above a succeeded task's whiteboard, and the disc behind it. */

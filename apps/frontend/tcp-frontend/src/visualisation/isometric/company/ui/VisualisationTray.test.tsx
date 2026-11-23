@@ -549,6 +549,17 @@ describe('VisualisationTray', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders the resources tray for a resources selection', async () => {
+    respond({});
+    renderTray({ selection: { kind: 'resources' } });
+
+    expect(
+      await screen.findByRole('complementary', {
+        name: t('visualisation.resources.heading'),
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('has no accessibility violations for the archive, with its links', async () => {
     window.__TCP_CONFIG__ = {
       oidcIssuerUrl: 'https://idp.example.com',

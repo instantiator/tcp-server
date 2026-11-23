@@ -115,15 +115,19 @@ describe('describeFurniture', () => {
     );
   });
 
-  it.each(['sofa', 'pigeonholes', 'table', 'officeDoor'] as const)(
-    'describes a %s',
-    (kind) => {
-      expect(describeFurniture(furniture(kind), WORLD, SNAPSHOT)).toEqual({
-        title: t(`visualisation.furniture.${kind}`),
-        description: t(`visualisation.furniture.${kind}.description`),
-      });
-    },
-  );
+  it.each([
+    'sofa',
+    'pigeonholes',
+    'table',
+    'officeDoor',
+    'filingCabinet',
+    'resourcesChest',
+  ] as const)('describes a %s', (kind) => {
+    expect(describeFurniture(furniture(kind), WORLD, SNAPSHOT)).toEqual({
+      title: t(`visualisation.furniture.${kind}`),
+      description: t(`visualisation.furniture.${kind}.description`),
+    });
+  });
 });
 
 describe('describeRoom', () => {
