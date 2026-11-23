@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import {
   expect,
   test,
@@ -320,6 +320,47 @@ test.describe('storage browser', () => {
     await expect(
       page.getByRole('button', { name: UPLOAD_FILES }),
     ).toBeDisabled();
+  });
+
+  test('an Office file previews as its text, chosen from the keyboard', async ({
+    page,
+  }) => {
+    // The backend's own fixture: a Word price list with a heading and a table.
+    const docx = await readFile(
+      new URL(
+        '../../../../backend/apps/tcp-server/src/storage/__fixtures__/price-list.docx',
+        import.meta.url,
+      ),
+    );
+    await openDocuments(page, fixture.companyId);
+    await openResources(page);
+    await page
+      .locator('input[type=file]:not([webkitdirectory])')
+      .setInputFiles({
+        name: 'price-list.docx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        buffer: docx,
+      });
+    await expect(row(page, 'price-list.docx')).toBeVisible();
+
+    // Only the Word file selected: resources/ off, then Space on its row.
+    await toggle(page, 'resources');
+    await row(page, 'price-list.docx').focus();
+    await page.keyboard.press('Space');
+
+    const preview = page.getByRole('region', { name: 'price-list.docx' });
+    await expect(
+      preview.getByRole('heading', { name: 'Price list' }),
+    ).toBeVisible();
+    await expect(preview.getByRole('table')).toContainText('Tea');
+    await expect(preview).toContainText(
+      'Text only. Download the file for its original layout.',
+    );
+    expect(
+      (await new AxeBuilder({ page }).include(DOCUMENTS_REGION).analyze())
+        .violations,
+    ).toEqual([]);
   });
 
   test('has no accessibility violations with a preview open', async ({
