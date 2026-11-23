@@ -4,6 +4,7 @@ import { render } from '@testing-library/react';
 import { AuthProvider } from 'react-oidc-context';
 import { BrowserRouter, MemoryRouter } from 'react-router';
 import { App } from '../App';
+import { retryQuery } from '../api/client';
 import { AuthSession } from '../auth/AuthSession';
 import { getUserManager } from '../auth/user-manager';
 import type { Session } from '../auth/useSession';
@@ -30,7 +31,11 @@ import { ThemeProvider } from '../theme/ThemeProvider';
  */
 const withProviders = (children: ReactNode) => (
   <StrictMode>
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: retryQuery } } })
+      }
+    >
       <AuthProvider userManager={getUserManager()}>
         <ThemeProvider>{children}</ThemeProvider>
       </AuthProvider>

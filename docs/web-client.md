@@ -683,6 +683,27 @@ of this is `src/pages/CompanyPage/activity/TasksList.tsx`.
   against shipping unreadable, so this class of gap cannot reach the client
   silently again.
 
+### Retries: only where asking again can help
+
+A failed query is retried only when a second try might get a different
+answer. `retryQuery` in `client.ts` decides; it is the `QueryClient`'s
+`retry` default in `main.tsx` and in `test-support/render-app.tsx`, and
+TanStack's own back-off spaces the tries (1 s, 2 s, 4 s).
+
+| Failure                                  | Retries | Why                                                 |
+| ---------------------------------------- | ------- | --------------------------------------------------- |
+| Never landed (`0`), 429, 502, 503, 504   | 3       | The connection or the service may come back         |
+| 500                                      | 1       | Usually a bug, sometimes a passing fault            |
+| 401 and every other 4xx                  | 0       | The same request gets the same answer; 401 signs in |
+| Not an `ApiError` (a bug in this client) | 0       | Retrying would only hide it                         |
+
+So a 404 or 403 page shows its error at once, not after about 7 seconds. A
+final failure is announced once: `ErrorState` mounts only after the last try.
+Mutations are never retried, and a hook that sets its own `retry` (the shutdown
+poll, the system status) keeps it. 429 doesn't read `Retry-After` yet, because
+tcp-server never sends one. The event stream reconnects by its own rules
+([ADR-025](ADRs/ADR-025-browser-event-stream-consumption.md)).
+
 ## Shared building blocks
 
 Reach for these before writing the markup again:
