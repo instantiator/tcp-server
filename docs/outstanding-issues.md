@@ -1060,12 +1060,6 @@ The tray (002.08) reads storage, which has been static since 002.05. A folder or
 
 **Act when:** the tree's keyboard behaviour changes, or a browser-tier keyboard sweep is done (phase 06).
 
-## File summaries and search still decode documents as text
-
-002.11 extracts Office and PDF text for `read_file` and the other read tools, but `get_file_summary` and `search_files` still decode a file's bytes as UTF-8, so for those files they summarise or search noise.
-
-**Act when:** an agent is seen summarising or searching a PDF or Office file. Route both through `extractText` (`storage/document-text.ts`) for extractable files.
-
 ## Legacy Office files can't be read
 
 `.doc`, `.xls` and `.ppt` stay binary: officeparser doesn't read them, so agents are told they can't be read and the browser shows no preview.
@@ -1074,9 +1068,9 @@ The tray (002.08) reads storage, which has been static since 002.05. A folder or
 
 ## Document text isn't cached
 
-Every read of an Office or PDF file starts a worker and parses it again (002.11).
+Every read or summary (`get_file_summary`) of an Office or PDF file starts a worker and parses it again (002.11). A summary of a large document costs as much as reading it.
 
-**Act when:** reads of large files are slow, or an agent reads the same big file many times in one task. Cache the extracted text by the object's ETag.
+**Act when:** reads or summaries of large files are slow, or an agent reads the same big file many times in one task. Cache the extracted text by the object's ETag. A content search across documents (`search_files` matches names only) would need this cache first.
 
 ## Agents can't write Office files
 

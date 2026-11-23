@@ -57,7 +57,7 @@ describe('extractText', () => {
         `price-list.${format}`,
         fixture(`price-list.${format}`),
       );
-      expect(markdown).toContain('# Price list');
+      expect(markdown).toMatch(/^# Price list$/m);
       expect(markdown).toContain('| Tea | 3 |');
       expect(markdown).not.toMatch(/^---\n(created|modified):/);
       expect(truncated).toBe(false);

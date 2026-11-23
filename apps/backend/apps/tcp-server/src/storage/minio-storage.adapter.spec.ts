@@ -788,6 +788,34 @@ describe('MinioStorageAdapter', () => {
   });
 
   describe('getFileSummary', () => {
+    it('summarises an Office file from its extracted text, not its bytes', async () => {
+      const docx = fs.readFileSync(
+        path.join(__dirname, '__fixtures__', 'price-list.docx'),
+      );
+      send.mockImplementation((cmd: unknown) =>
+        Promise.resolve(
+          cmd instanceof HeadObjectCommand
+            ? {
+                ContentLength: docx.length,
+                ContentType:
+                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              }
+            : { Body: makeReadable(docx) },
+        ),
+      );
+      const svc = makeAdapter(makeConfig());
+      const summary = await svc.getFileSummary(
+        'acme/resources/price-list.docx',
+      );
+      expect(summary).toMatchObject({
+        format: 'markdown',
+        extracted: true,
+        truncated: false,
+        size: docx.length,
+        headings: [{ level: 1, text: 'Price list' }],
+      });
+    }, 30_000);
+
     it('returns format=json-object for a JSON file', async () => {
       send.mockImplementation((cmd: unknown) => {
         if (cmd instanceof HeadObjectCommand)

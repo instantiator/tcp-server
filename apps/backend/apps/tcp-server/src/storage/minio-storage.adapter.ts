@@ -14,10 +14,15 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as nodePath from 'path';
 import { Readable } from 'stream';
-import { analyzeContent } from './content-analysis';
-import { DEFAULT_LIMITS, extractText, isExtractable } from './document-text';
+import { analyzeContent, analyzeMarkdown } from './content-analysis';
+import {
+  DEFAULT_LIMITS,
+  extractText,
+  isExtractable,
+  type ExtractedText,
+} from './document-text';
 import { DocumentValidationException } from './document-validation.exception';
-import { S3ObjectStore } from './s3-object-store';
+import { S3ObjectStore, type ObjectHead } from './s3-object-store';
 import { StorageSideEffects } from './storage-side-effects.service';
 import {
   KnowledgeScope,
@@ -258,14 +263,10 @@ export class MinioStorageAdapter
     assertValidStoragePath(path);
     if (!isExtractable(path)) return this.store.getText(path);
     const head = await this.store.head(path);
-    if (head === null) return null;
+    const extracted = head === null ? null : await this.extract(path, head);
+    if (extracted === null) return null;
+    const { markdown, truncated } = extracted;
     const name = nodePath.basename(path);
-    if ((head.size ?? 0) > DEFAULT_LIMITS.maxInputBytes) {
-      throw new PayloadTooLargeException(`${name} is too large to read.`);
-    }
-    const bytes = await this.store.getBuffer(path);
-    if (bytes === null) return null;
-    const { markdown, truncated } = await extractText(name, bytes);
     const cut = truncated
       ? `\n\n(Cut short here: ${name} has more text than can be read at once.)`
       : '';
@@ -394,14 +395,51 @@ export class MinioStorageAdapter
       : { key: path, exists: false };
   }
 
+  /**
+   * A file's structure without its full content. An Office, OpenDocument or
+   * PDF file is summarised from its extracted text as Markdown (its headings),
+   * marked `extracted` (002.11); its raw bytes would only count noise.
+   */
   async getFileSummary(path: string): Promise<Record<string, unknown>> {
     assertValidStoragePath(path);
     const head = await this.store.head(path);
+    if (head !== null && isExtractable(path)) {
+      const extracted = await this.extract(path, head);
+      if (extracted === null) {
+        throw new NotFoundException(`File not found: ${path}`);
+      }
+      return analyzeMarkdown(
+        {
+          path,
+          size: head.size,
+          contentType: head.contentType ?? 'application/octet-stream',
+          extracted: true,
+          truncated: extracted.truncated,
+        },
+        extracted.markdown,
+      );
+    }
     const content = head === null ? null : await this.store.getText(path);
     if (head === null || content === null) {
       throw new NotFoundException(`File not found: ${path}`);
     }
     return analyzeContent(path, content, head.size);
+  }
+
+  /**
+   * An extractable file's text, refusing one over the input cap before its
+   * bytes are fetched; `null` when it has gone since `head` was read.
+   */
+  private async extract(
+    path: string,
+    head: ObjectHead,
+  ): Promise<ExtractedText | null> {
+    const name = nodePath.basename(path);
+    if ((head.size ?? 0) > DEFAULT_LIMITS.maxInputBytes) {
+      throw new PayloadTooLargeException(`${name} is too large to read.`);
+    }
+    const bytes = await this.store.getBuffer(path);
+    return bytes === null ? null : extractText(name, bytes);
   }
 
   async checkMissingFiles(paths: string[]): Promise<string[]> {

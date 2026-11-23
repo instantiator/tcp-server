@@ -408,7 +408,7 @@ The permissive general **write** tools (`write_file`, `delete_file`, `restore_fi
 
 ### Office and PDF files for agents
 
-Since 002.11, `read_file`, `read_material_file`, `read_resource` and `read_working_file` give the text of a `.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp` or `.pdf` file, as Markdown that keeps headings, lists and tables. Before that, the bytes were decoded as UTF-8, so these files came back as noise. The text starts with a line saying it was extracted and that layout and images are lost.
+Since 002.11, `read_file`, `read_material_file`, `read_resource` and `read_working_file` give the text of a `.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp` or `.pdf` file, as Markdown that keeps headings, lists and tables. Before that, the bytes were decoded as UTF-8, so these files came back as noise. The text starts with a line saying it was extracted and that layout and images are lost. `get_file_summary` (and `get_working_file_summary`) outline it from the same text: its headings, marked `extracted: true`. `search_files` matches file names only, so it needs nothing.
 
 - **Where:** tcp-server extracts on read (`storage/document-text.ts`, using [officeparser](https://github.com/harshankur/officeParser)); the MCP server stays a proxy. Knowledge uploads use the same extractor before converting to OKF.
 - **Limits:** a file over 25 MB isn't read (`413`). The parse runs in a worker thread with a 256 MB heap and is stopped after 20 s; a zip-based file that would unpack past 100 MB stops there. Text past 1,000,000 characters is cut, with a note saying so. A file that breaks a limit, or isn't readable as its extension says, gets `422` with a plain reason.

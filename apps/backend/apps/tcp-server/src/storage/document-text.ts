@@ -86,8 +86,11 @@ const { OfficeParser } = require('officeparser');
   // The document's own metadata would come out as front matter; the
   // caller adds its own where it needs one.
   ast.metadata = {};
+  // No heading anchors: neither generated ids nor a document's own
+  // bookmarks, which would come out as "# Title {#slug}".
   const { value } = await ast.to('md', {
     generateIds: false,
+    ignoreInternalLinks: true,
     includeImages: false,
     mdConfig: { fallbackToHtml: false },
   });

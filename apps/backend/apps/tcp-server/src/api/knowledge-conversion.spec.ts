@@ -95,6 +95,7 @@ describe('convertToMarkdown', () => {
       );
       expect(result.body).toContain('Tea');
       expect(result.body.startsWith('---')).toBe(false);
+      expect(result.title ?? '').not.toContain('{#');
     }, 30_000);
   });
 
