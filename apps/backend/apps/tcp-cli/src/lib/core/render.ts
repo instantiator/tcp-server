@@ -1,8 +1,7 @@
 // The Renderer seam chat's streamAgent/runTurn control flow drives, now a thin
 // adapter over the shared render library (EventLogBuffer + StreamPresenter) —
-// the same pipeline the TUI panes and eavesdrop use. Kept as a seam so that
-// control flow stays identical between piped-output and TUI modes; only which
-// Renderer is constructed differs (see tuiRenderer in tui.ts).
+// the same pipeline eavesdrop uses. Kept as a seam so that chat's control flow
+// stays independent of how and where lines are written.
 
 import { WireEvent, EventLogBuffer } from '@tcp/shared';
 import { StreamPresenter } from '../render/stream-presenter';

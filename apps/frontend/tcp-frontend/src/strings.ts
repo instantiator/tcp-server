@@ -66,6 +66,16 @@ const strings = {
   // wordings have to exist for that pass to be a one-line change.
   'transcript.announce.response': 'Response from {role} received',
   'transcript.announce.responseBody': '{role} replied: {body}',
+  // 002.07 — consultations, as the asking agent sees them. Announced on
+  // arrival only, without the question or answer (as for responses).
+  'transcript.announce.consulting': 'Consulting {role}',
+  'transcript.announce.consultationAnswered': '{role} answered',
+  'transcript.announce.consultationFailed': "{role} couldn't answer",
+  'transcript.consultation.asked': 'Asked {role}',
+  'transcript.consultation.answered': '{role} answered',
+  'transcript.consultation.failed': "{role} couldn't answer",
+  'transcript.consultation.waiting': '{role} is working on it…',
+  'transcript.consultation.open': 'Open conversation with {role}',
   // The label React Aria's audit-event rows carry after the time. Rendered as
   // written by the shared renderers, so it is not a translatable string.
   'transcript.entry.label': '{time}, {label}',

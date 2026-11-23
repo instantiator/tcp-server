@@ -102,6 +102,40 @@ describe('PauseAndResumeService', () => {
     );
   });
 
+  /** The `input` audit rows recorded so far. */
+  const inputRows = (): unknown[][] =>
+    (recordAudit.mock.calls as unknown[][]).filter(
+      (call) => call[3] === AuditEventType.Input,
+    );
+
+  /** The asking agent got its answer row, and got it before being resumed. */
+  function expectAnswerRecordedBeforeResume(
+    caller: TcpAgent,
+    consulted: TcpAgent,
+    text: string,
+    failed: boolean,
+  ): void {
+    const index = (recordAudit.mock.calls as unknown[][]).findIndex(
+      (call) => call[3] === AuditEventType.Input,
+    );
+    expect(recordAudit.mock.calls[index]).toEqual([
+      caller.companyId,
+      expect.any(String),
+      caller.id,
+      AuditEventType.Input,
+      {
+        text,
+        source: 'consultation',
+        consultedAgentId: consulted.id,
+        consultedRoleName: expect.any(String) as string,
+        failed,
+      },
+    ]);
+    expect(recordAudit.mock.invocationCallOrder[index]).toBeLessThan(
+      orchestration.resumeAgent.mock.invocationCallOrder[0],
+    );
+  }
+
   describe('pauseForUserInput', () => {
     it('throws NotFoundException when agent does not exist', async () => {
       agentRepo.findOneBy.mockResolvedValue(null);
@@ -396,7 +430,20 @@ describe('PauseAndResumeService', () => {
           reason: 'consultation',
           consultedAgentId: consultAgent.id,
           consultedRoleName: 'analyst',
+          question: 'Can you analyse this?',
         }),
+      );
+      // The consulted agent's transcript opens with the question, from 'cto'.
+      expect(recordAudit).toHaveBeenCalledWith(
+        caller.companyId,
+        'analyst',
+        consultAgent.id,
+        AuditEventType.Input,
+        {
+          text: 'Question: Can you analyse this?',
+          source: 'consultation',
+          fromRoleName: 'cto',
+        },
       );
     });
   });
@@ -430,6 +477,7 @@ describe('PauseAndResumeService', () => {
         status: AgentStatus.Completed,
         output: 'final answer',
       });
+      expect(inputRows()).toHaveLength(0);
     });
 
     it('records a terminal completed state_change carrying the resolved output', async () => {
@@ -504,6 +552,12 @@ describe('PauseAndResumeService', () => {
         result: 'consultation result',
       });
       expect(orchestration.resumeAgent).toHaveBeenCalledWith(callingAgent.id);
+      expectAnswerRecordedBeforeResume(
+        callingAgent,
+        consultAgent,
+        'consultation result',
+        false,
+      );
     });
 
     it('does not resume calling agent when it is not Paused', async () => {
@@ -562,6 +616,7 @@ describe('PauseAndResumeService', () => {
       });
       expect(consultRepo.update).not.toHaveBeenCalled();
       expect(orchestration.resumeAgent).not.toHaveBeenCalled();
+      expect(inputRows()).toHaveLength(0);
     });
 
     it('records a terminal failed state_change carrying the reason', async () => {
@@ -612,6 +667,12 @@ describe('PauseAndResumeService', () => {
         result: 'no complete_task after retries',
       });
       expect(orchestration.resumeAgent).toHaveBeenCalledWith(callingAgent.id);
+      expectAnswerRecordedBeforeResume(
+        callingAgent,
+        consultAgent,
+        'no complete_task after retries',
+        true,
+      );
     });
 
     it('does not resume the calling agent when it is not Paused', async () => {

@@ -19,6 +19,7 @@ import {
   installFetchMock,
   respondByRoute,
 } from '../../test-support/fetch-mock';
+import { ChatContext } from '../ChatDialog/useChat';
 import { ReasoningRuleMenu } from './ReasoningRuleMenu';
 import {
   REASONING_RULE_STORAGE_KEY,
@@ -442,6 +443,160 @@ describe('Transcript', () => {
 
     expect(screen.getByText(t('transcript.error.refused'))).toBeTruthy();
     expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  describe('consultations', () => {
+    const asked = (agentId: string, roleName: string, question: string) =>
+      auditEvent({
+        id: `asked-${agentId}`,
+        eventType: 'state_change',
+        payload: {
+          entity: 'agent',
+          newStatus: 'paused',
+          reason: 'consultation',
+          consultedAgentId: agentId,
+          consultedRoleName: roleName,
+          question,
+        },
+      });
+    const answer = (
+      agentId: string,
+      roleName: string,
+      text: string,
+      failed = false,
+    ) =>
+      auditEvent({
+        id: `answer-${agentId}`,
+        eventType: 'input',
+        payload: {
+          text,
+          source: 'consultation',
+          consultedAgentId: agentId,
+          consultedRoleName: roleName,
+          failed,
+        },
+      });
+
+    it('shows the question set apart, waiting for the consulted role', async () => {
+      await renderTranscript([
+        asked('analyst-1', 'Analyst', 'What is the VAT rate on books?'),
+      ]);
+
+      const entry = entryFor(
+        t('transcript.consultation.asked', { role: 'Analyst' }),
+      );
+      expect(entry.className).toContain('transcript__entry--consultation');
+      expect(
+        within(entry).getByText('What is the VAT rate on books?'),
+      ).toBeTruthy();
+      expect(
+        within(entry).getByText(
+          t('transcript.consultation.waiting', { role: 'Analyst' }),
+        ),
+      ).toBeTruthy();
+    });
+
+    it('stops waiting once the answer arrives, and shows it', async () => {
+      await renderTranscript([asked('analyst-1', 'Analyst', 'VAT on books?')]);
+
+      act(() => {
+        emit?.({
+          type: 'audit',
+          event: answer('analyst-1', 'Analyst', 'Books are zero-rated.'),
+        });
+      });
+
+      expect(
+        screen.queryByText(
+          t('transcript.consultation.waiting', { role: 'Analyst' }),
+        ),
+      ).toBeNull();
+      const reply = entryFor(
+        t('transcript.consultation.answered', { role: 'Analyst' }),
+      );
+      expect(within(reply).getByText('Books are zero-rated.')).toBeTruthy();
+    });
+
+    it("says when the consulted role couldn't answer", async () => {
+      await renderTranscript([
+        asked('analyst-1', 'Analyst', 'VAT on books?'),
+        answer('analyst-1', 'Analyst', 'The model is unreachable.', true),
+      ]);
+
+      const reply = entryFor(
+        t('transcript.consultation.failed', { role: 'Analyst' }),
+      );
+      expect(within(reply).getByText('The model is unreachable.')).toBeTruthy();
+      expect(
+        screen.queryByText(
+          t('transcript.consultation.waiting', { role: 'Analyst' }),
+        ),
+      ).toBeNull();
+    });
+
+    it('waits on each consultation separately', async () => {
+      await renderTranscript([
+        asked('analyst-1', 'Analyst', 'VAT on books?'),
+        asked('lawyer-1', 'Lawyer', 'Can we sell abroad?'),
+        answer('analyst-1', 'Analyst', 'Zero-rated.'),
+      ]);
+
+      expect(
+        screen.queryByText(
+          t('transcript.consultation.waiting', { role: 'Analyst' }),
+        ),
+      ).toBeNull();
+      expect(
+        screen.getByText(
+          t('transcript.consultation.waiting', { role: 'Lawyer' }),
+        ),
+      ).toBeTruthy();
+    });
+
+    it("opens the consulted agent's conversation, read-only, when asked", async () => {
+      respondByRoute([
+        [
+          /\/api\/agent\/.*\/history/,
+          { status: 200, body: [asked('analyst-1', 'Analyst', 'VAT?')] },
+        ],
+      ]);
+      const openChat = vi.fn();
+      render(
+        <ChatContext.Provider value={{ openChat, startChat: vi.fn() }}>
+          <Transcript agentId={AGENT_ID} roleName={ROLE} />
+        </ChatContext.Provider>,
+        { wrapper },
+      );
+
+      await userEvent.click(
+        await screen.findByRole('button', {
+          name: t('transcript.consultation.open', { role: 'Analyst' }),
+        }),
+      );
+
+      expect(openChat).toHaveBeenCalledWith({
+        agentId: 'analyst-1',
+        roleName: 'Analyst',
+        reference: null,
+        readOnly: true,
+      });
+    });
+
+    it('offers no link where there is no chat to open it in', async () => {
+      await renderTranscript([asked('analyst-1', 'Analyst', 'VAT?')]);
+
+      expect(screen.queryByRole('button', { name: /Analyst/ })).toBeNull();
+    });
+
+    it('has no accessibility violations', async () => {
+      const { container } = await renderTranscript([
+        asked('analyst-1', 'Analyst', 'VAT on **books**?'),
+        asked('lawyer-1', 'Lawyer', 'Can we sell abroad?'),
+        answer('analyst-1', 'Analyst', 'Zero-rated.'),
+      ]);
+
+      await expectNoA11yViolations(container);
+    });
   });
 
   it('has no accessibility violations', async () => {

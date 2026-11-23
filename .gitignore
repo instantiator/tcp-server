@@ -89,3 +89,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # scripts/backup.sh's output: tarballs of a running stack's Postgres and
 # MinIO data — never committed.
 backups/
+
+# aislop: per-machine scan baseline and session log, rewritten on every scan.
+.aislop/baseline.json
+.aislop/session.jsonl

@@ -33,7 +33,7 @@ describe('resolveChatContext', () => {
     mockedApiRequest.mockResolvedValueOnce(role); // GET /api/role/:id
     mockedApiRequest.mockResolvedValueOnce(company); // GET /api/company/:id
 
-    const context = await resolveChatContext(opts, { roleId: role.id }, true);
+    const context = await resolveChatContext(opts, { roleId: role.id });
 
     expect(mockedApiRequest).toHaveBeenNthCalledWith(
       1,
@@ -72,11 +72,10 @@ describe('resolveChatContext', () => {
   it('resolves a role by --role-slug scoped to --company-slug', async () => {
     mockByUrl();
 
-    const context = await resolveChatContext(
-      opts,
-      { roleSlug: 'analyst', companySlug: 'acme' },
-      true,
-    );
+    const context = await resolveChatContext(opts, {
+      roleSlug: 'analyst',
+      companySlug: 'acme',
+    });
 
     expect(context.roleId).toBe(role.id);
     expect(context.companyId).toBe(company.id);
@@ -85,11 +84,10 @@ describe('resolveChatContext', () => {
   it('resolves a role by combined --role scoped by --company', async () => {
     mockByUrl();
 
-    const context = await resolveChatContext(
-      opts,
-      { role: 'analyst', company: 'acme' },
-      true,
-    );
+    const context = await resolveChatContext(opts, {
+      role: 'analyst',
+      company: 'acme',
+    });
 
     expect(context.roleId).toBe(role.id);
     expect(context.companyId).toBe(company.id);
@@ -98,7 +96,7 @@ describe('resolveChatContext', () => {
   it('resolves a role by combined --role given as a UUID, without a company', async () => {
     mockByUrl();
 
-    const context = await resolveChatContext(opts, { role: role.id }, true);
+    const context = await resolveChatContext(opts, { role: role.id });
 
     expect(context.roleId).toBe(role.id);
     expect(context.companyId).toBe(company.id);
@@ -107,11 +105,10 @@ describe('resolveChatContext', () => {
   it('resolves a role by --role-slug scoped to --company-id', async () => {
     mockByUrl();
 
-    const context = await resolveChatContext(
-      opts,
-      { roleSlug: 'analyst', companyId: 'company-uuid' },
-      true,
-    );
+    const context = await resolveChatContext(opts, {
+      roleSlug: 'analyst',
+      companyId: 'company-uuid',
+    });
 
     expect(context.roleId).toBe(role.id);
   });
@@ -119,11 +116,7 @@ describe('resolveChatContext', () => {
   it('browses a company by --company-slug with no role', async () => {
     mockedApiRequest.mockResolvedValueOnce(company); // GET /api/company/:slug
 
-    const context = await resolveChatContext(
-      opts,
-      { companySlug: 'acme' },
-      true,
-    );
+    const context = await resolveChatContext(opts, { companySlug: 'acme' });
 
     expect(mockedApiRequest).toHaveBeenCalledWith(
       expect.anything(),
@@ -137,11 +130,7 @@ describe('resolveChatContext', () => {
   it('normalises companyId to the real UUID even when resolved via a company slug', async () => {
     mockedApiRequest.mockResolvedValueOnce(company);
 
-    const context = await resolveChatContext(
-      opts,
-      { companySlug: 'acme' },
-      true,
-    );
+    const context = await resolveChatContext(opts, { companySlug: 'acme' });
 
     expect(context.companyId).toBe('company-uuid');
     expect(context.companyId).not.toBe('acme');

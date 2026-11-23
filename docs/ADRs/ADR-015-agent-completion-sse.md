@@ -200,3 +200,14 @@ company and task rows described above, and is primed with one row per current
 task, active agent, open consultation and open enquiry. See the
 [002.04.01 amendment to ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md#amendments-as-implemented-002041)
 for why, including the `entity: 'enquiry'` rows that did not previously exist.
+
+---
+
+<a id="amendments-as-implemented-00207"></a>
+
+## Amendments as implemented (002.07)
+
+[002.07](../prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md) retired the TUI. This ADR's 010.3.2 amendment above gave the company and task streams a TUI rationale: its roster and task panels were to live-update without polling. That reason is gone. The streams stay, because the web client uses them (see the [002.04.01 amendment](#amendments-as-implemented-002041)).
+
+- **`tcp-cli chat` has one renderer,** the colour-coded scrolling text. The full-screen view, `tcp-cli tui` and `--no-tui` no longer exist.
+- **`chat` still follows consultations.** It opens the consulted agent's stream and interleaves it on stderr. The asking agent's own stream now also carries each consultation step, so `chat` and `eavesdrop` print them as lines (`consultation:asked Analyst`). See [tcp-cli.md](../tcp-cli.md#consultation-lines).

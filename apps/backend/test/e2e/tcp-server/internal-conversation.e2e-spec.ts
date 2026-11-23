@@ -464,6 +464,31 @@ describe('InternalController + ConversationController (e2e)', () => {
         .expect(200);
       const rows = historyRes.body as { agentId: string }[];
       expect(rows.some((r) => r.agentId === consultant.id)).toBe(true);
+
+      // Answering skips QA despite the inherited task: the consultation
+      // resolves at once and no QA assignment is created.
+      await request(app.getHttpServer())
+        .post(`/internal/assignment/${consultAssignment.id}/complete`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          agentId: consultant.id,
+          summary: 'It looks sound.',
+          prepared: [],
+        })
+        .expect(200);
+      const resolved = await consultRepo.findOneByOrFail({
+        id: consultationId,
+      });
+      expect(resolved).toMatchObject({
+        status: 'complete',
+        result: 'It looks sound.',
+      });
+      const answered = await assignmentRepo.findOneByOrFail({
+        id: consultAssignment.id,
+      });
+      expect(answered.status).toBe('succeeded');
+      const qa = await assignmentRepo.findBy({ taskId: task.id, mode: 'qa' });
+      expect(qa).toHaveLength(0);
     });
   });
 

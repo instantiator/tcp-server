@@ -1,12 +1,14 @@
 import {
   isBlankText,
+  type ConsultationStep,
   type LogEntry,
   type ToolSummary,
 } from '@tcp/shared/client';
 import { ArrowDownToLine } from 'lucide-react';
-import { useState } from 'react';
-import { ToggleButton } from 'react-aria-components';
+import { use, useState } from 'react';
+import { Button, ToggleButton } from 'react-aria-components';
 import { t, type StringKey } from '../../strings';
+import { ChatContext } from '../ChatDialog/useChat';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { Icon, WithTooltip } from '../Icon/Icon';
@@ -118,6 +120,65 @@ const EntryBody = ({ entry }: { readonly entry: LogEntry }) => {
   return <Markdown text={entry.text} />;
 };
 
+/** The heading each step of a consultation shows, naming the consulted role. */
+const CONSULTATION_HEADINGS: Record<ConsultationStep['kind'], StringKey> = {
+  asked: 'transcript.consultation.asked',
+  answered: 'transcript.consultation.answered',
+  failed: 'transcript.consultation.failed',
+};
+
+/**
+ * One step of a consultation, set off like a quotation: the question asked,
+ * then later the answer. A question still waiting says so. Each step offers
+ * the consulted agent's own conversation, which opens only when asked for, so
+ * following a consultation costs no stream until then (002.07).
+ */
+const ConsultationEntry = ({
+  entry,
+  step,
+  waiting,
+}: {
+  readonly entry: LogEntry;
+  readonly step: ConsultationStep;
+  readonly waiting: boolean;
+}) => {
+  // Outside a chat provider (a test, a future surface) the link has nowhere
+  // to open, so it is left out rather than failing.
+  const chat = use(ChatContext);
+  const role = { role: step.roleName };
+  return (
+    <li className="transcript__entry transcript__entry--consultation">
+      <p className="transcript__meta">
+        {t('transcript.entry.label', {
+          time: entry.time,
+          label: t(CONSULTATION_HEADINGS[step.kind], role),
+        })}
+      </p>
+      <EntryBody entry={entry} />
+      {waiting && (
+        <p className="transcript__consultation-waiting">
+          {t('transcript.consultation.waiting', role)}
+        </p>
+      )}
+      {chat !== null && step.agentId !== '' && (
+        <Button
+          className="react-aria-Button transcript__consultation-open"
+          onPress={() => {
+            chat.openChat({
+              agentId: step.agentId,
+              roleName: step.roleName,
+              reference: null,
+              readOnly: true,
+            });
+          }}
+        >
+          {t('transcript.consultation.open', role)}
+        </Button>
+      )}
+    </li>
+  );
+};
+
 /** Whether a reasoning entry starts open under the rule. */
 const openByRule = (
   rule: ReasoningRule,
@@ -186,6 +247,14 @@ export const Transcript = ({
   const latestReasoning = entries.findLastIndex(
     (entry) => entry.style === 'reasoning',
   );
+  // Consulted agents that have answered (or failed); any other question waits.
+  const answered = new Set(
+    entries.flatMap(({ consultation }) =>
+      consultation !== undefined && consultation.kind !== 'asked'
+        ? [consultation.agentId]
+        : [],
+    ),
+  );
   const followLabel = t('transcript.follow');
 
   return (
@@ -202,6 +271,19 @@ export const Transcript = ({
             label: entry.label ?? '',
           });
           const className = `transcript__entry transcript__entry--${entry.style}`;
+          if (entry.consultation !== undefined) {
+            return (
+              <ConsultationEntry
+                key={index}
+                entry={entry}
+                step={entry.consultation}
+                waiting={
+                  entry.consultation.kind === 'asked' &&
+                  !answered.has(entry.consultation.agentId)
+                }
+              />
+            );
+          }
           if (entry.style !== 'reasoning') {
             return (
               // The list only ever appends, and only its last entry changes, so

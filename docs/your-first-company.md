@@ -308,53 +308,29 @@ It'll give you a list of all roles in each company:
 
 ## 2. Talk to an agent
 
-### 2.1 Interactive mode (TUI)
-
-TUI[^TUI] mode is the easiest way to manually interact with the company and roles.
-
-[^TUI]: Terminal User Interface - an interactive user interface that's displayed using a text-based terminal.
-
-In the example below, the TUI is launched with a company slug. This could have been provided with `--company` or `--company-slug` (to be explicit).
-
-```bash
-./tcp-cli.sh tui --company test-company
-```
-
-> [!TIP]
-> Use `tab` and `shift`+`tab` to switch between tabs. Other keyboard shortcuts are described at the bottom of the interface.
-
-See [tcp-cli.md](tcp-cli.md#chat) for a full description of the TUI.
-
-| Screenshot                                                                                            | Description                                                                                                                                     |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![All roles in the test company](./screenshots/001.chat.tui.test-company.png)                         | The first tab shows the company, and lists all roles available. Use ⬆️ / ⬇️ / `enter` to select a role to talk to.                              |
-| ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given an assignment on a new tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
-| ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.                       |
-
-### 2.2 `chat` verb
+### 2.1 `chat` verb
 
 Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it. It'll enter chat mode, where you can ask it about itself, other agents, and shared resources.
 
 The `chat` verb has several options:
 
 - `-r` / `--role-id`, or `--role-slug` (needs `--company-id`/`--company-slug` alongside it — role slugs are only unique within a company) - a role to talk to
-- `-c` / `--company-id`, or `--company-slug` - the company that scopes a `--role-slug` (role slugs are unique only within a company). `chat` always needs a role; to browse a company's roster without picking one first, use `tui` instead
+- `-c` / `--company-id`, or `--company-slug` - the company that scopes a `--role-slug` (role slugs are unique only within a company). `chat` always needs a role
 - `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires a role)
 - `--hide-reasoning` - doesn't show the reasoning stream before an answer
-- `--no-tui` - disables the full-screen TUI in favour of a plain scrolling renderer; still interactive on its own (a readline prompt) - combine with `--query` for fully non-interactive, pipeable output
 
 > [!NOTE]
 > When neither the role nor the company carries an explicit LLM config, the CLI will display `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
 
-### 2.3 Non-TUI mode
+With no `--query`, `chat` is interactive (a readline prompt). Combine it with `--query` for fully non-interactive, pipeable output.
 
 > [!TIP]
-> Using `chat --no-tui --query <query>` means your agents' answers are easily read by other tools. You can include it in pipes, or redirect the answer into a file for analysis later.
+> Using `chat --query <query>` means your agents' answers are easily read by other tools. You can include it in pipes, or redirect the answer into a file for analysis later.
 
-In the example below, `chat` is started without TUI, and the prompt is provided directly:
+In the example below, the prompt is provided directly:
 
 ```bash
-./tcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
+./tcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --query 'Tell me about yourself'
 ```
 
 The agent will be invoked, should respond to the query, and your session will then be closed.
@@ -494,17 +470,17 @@ But tell you what—if this company isn't going to be testing for grubs or roost
 
 </details>
 
-### 2.4 Agents that consult each other
+### 2.2 Agents that consult each other
 
 If necessary, an agent may choose to pause mid-chat, and consult another role.
 
 There's an internal consultation mechanism to support this.
 
-When this happens, the CLI will automatically follow the consulted agent's stream.
+When this happens, you can follow it in the web UI or in the CLI.
 
-In the TUI, this opens a new (read-only) tab labelled with the consulted role's name.
+In the web UI, the asking agent's transcript shows each step as a quoted entry: "Asked {Role}" with the question and a "{Role} is working on it…" line, then "{Role} answered" (or "{Role} couldn't answer") with the text. Each entry has an "Open conversation with {Role}" button. It opens the consulted agent's conversation, read-only.
 
-With `--no-tui` (or piped output), its activity renders inline prefixed with its role name instead (e.g. `[Chicken assistant] Response: ...`).
+In `chat`, the same steps print as lines: `consultation:asked Analyst`, then `consultation:Analyst answered` (or `consultation:Analyst couldn't answer`). The consulted agent's own activity is followed on stderr.
 
 When it receives a response, your agent will resume and use the information in the response.
 
@@ -513,7 +489,7 @@ If the consultation fails (eg. the consulted agent errors, times out, or never s
 > [!NOTE]
 > See [cross-agent-consultations.md](cross-agent-consultations.md) for more information about consultations and user queries.
 
-### 2.5 User queries
+### 2.3 User queries
 
 Agents may also choose to initiate a user query. These are asynchronous messages sent to users known to the system.
 

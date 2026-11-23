@@ -1,10 +1,9 @@
 // Converts one audit event into zero or more LogEntries. A registry of small
-// renderers (first `canRender` wins) replaces the three near-duplicate switch
-// blocks the tui/eavesdrop/chat surfaces each carried.
+// renderers (first `canRender` wins) shared by the CLI and the web transcript.
 
 import type { AuditWireEvent } from '../events/wire-events';
 import { ASSIGNMENT_COMPLETE_LABEL, parseClockTime } from './format';
-import type { LogEntry, ToolSummary } from './entries';
+import type { ConsultationStep, LogEntry, ToolSummary } from './entries';
 import {
   compactionSummary,
   eventLabel,
@@ -30,12 +29,53 @@ function clock(e: AuditWireEvent): string {
   return parseClockTime(e.timestamp) ?? new Date().toTimeString().slice(0, 8);
 }
 
-/** All `state_change` rows — one line-only `newStatus (reason)`. */
+/** A payload field as a string, or `''`. */
+const text = (payload: Record<string, unknown>, key: string): string =>
+  typeof payload[key] === 'string' ? payload[key] : '';
+
+/** A consultation entry; the label reads on its own in a terminal, e.g. `consultation:Analyst answered`. */
+function consultationEntry(
+  time: string,
+  step: ConsultationStep,
+  body: string,
+): LogEntry {
+  const label = {
+    asked: `asked ${step.roleName}`,
+    answered: `${step.roleName} answered`,
+    failed: `${step.roleName} couldn't answer`,
+  }[step.kind];
+  return {
+    style: 'consultation',
+    time,
+    label: `consultation:${label}`,
+    text: body,
+    consultation: step,
+  };
+}
+
+/**
+ * All `state_change` rows — one line-only `newStatus (reason)`. A pause to
+ * consult that carries its question becomes the consultation's `asked` entry.
+ */
 class StateChangeAuditEventRenderer implements AuditEventRenderer {
   canRender(e: AuditWireEvent): boolean {
     return e.eventType === 'state_change';
   }
   toEntries(e: AuditWireEvent): LogEntry[] {
+    const question = text(e.payload, 'question');
+    if (e.payload['reason'] === 'consultation' && question) {
+      return [
+        consultationEntry(
+          clock(e),
+          {
+            agentId: text(e.payload, 'consultedAgentId'),
+            roleName: text(e.payload, 'consultedRoleName'),
+            kind: 'asked',
+          },
+          question,
+        ),
+      ];
+    }
     return [
       {
         style: 'state',
@@ -64,9 +104,7 @@ class TextContentAuditEventRenderer implements AuditEventRenderer {
   toEntries(e: AuditWireEvent, state: TurnState): LogEntry[] {
     const time = clock(e);
     if (e.eventType === 'input') {
-      const text =
-        typeof e.payload['text'] === 'string' ? e.payload['text'] : '';
-      return [{ style: 'user', time, label: 'input', text }];
+      return [inputEntry(e, time)];
     }
     if (e.eventType === 'agent_loop_completion') {
       const summary =
@@ -105,6 +143,34 @@ class TextContentAuditEventRenderer implements AuditEventRenderer {
     }
     return entries;
   }
+}
+
+/**
+ * An `input` row: a person's message, a consultation's question as the
+ * consulted agent sees it (labelled with who asked), or a consultation's
+ * answer as the asking agent sees it.
+ */
+function inputEntry(e: AuditWireEvent, time: string): LogEntry {
+  const body = text(e.payload, 'text');
+  const consultedAgentId = text(e.payload, 'consultedAgentId');
+  if (e.payload['source'] === 'consultation' && consultedAgentId) {
+    return consultationEntry(
+      time,
+      {
+        agentId: consultedAgentId,
+        roleName: text(e.payload, 'consultedRoleName'),
+        kind: e.payload['failed'] === true ? 'failed' : 'answered',
+      },
+      body,
+    );
+  }
+  const from = text(e.payload, 'fromRoleName');
+  return {
+    style: 'user',
+    time,
+    label: from ? `input:from ${from}` : 'input',
+    text: body,
+  };
 }
 
 /** `tool_call`/`tool_result` — a pretty-printed `{tool, input|output}` JSON block. Never renders `llm_request` bodies. */

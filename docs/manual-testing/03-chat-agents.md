@@ -148,97 +148,47 @@ event, replayed from the stored output.
 
 ## 3.7 — Streamed rendering via the CLI
 
-Run an interactive session in a real terminal (not piped) to exercise the
-full-screen TUI, the default rendering mode since 008.6.
+Run an interactive session. The output is colour-coded scrolling text.
 
 ```bash
 ./tcp-cli.sh chat --role-id "$ROLE_ID"
 ```
 
-**What to check (TUI mode — default on a real terminal):**
-
-- The screen switches to a full-screen view with a tab bar at the top and an
-  input line at the bottom. Unlike the old linear transcript, you can no longer
-  eyeball "one scrolling stream" — instead, confirm correctness **per tab**:
-  - The root tab (your own conversation) shows only its own events: no
-    interleaving with any consulted agent's output.
-  - Discrete events render as `hh:mm:ss | event_type | text` (e.g.
-    `14:32:01 | agent_status | running`), blank-line separated.
-  - Reasoning renders specially: no time/type columns, indented two spaces,
-    grey, word-wrapped — with a blank line separating it from the events
-    before and after it. Confirm it's an actual colour, not literal `^K`/`^:`
-    text leaking into the pane.
-  - The active tab is shown in bold/bright colour in the tab bar; switch tabs
-    and confirm the highlight moves with focus, not just the `[ ]` brackets.
-  - If the model ever emits a literal `^` (e.g. in code or math), confirm it
-    displays as a single `^` and doesn't corrupt the colour of anything after it.
-  - No raw/unformatted event JSON leaks into any pane.
-  - `--hide-reasoning` suppresses the reasoning block; the response still renders.
-- **Company roster (pane 0):** the first tab is always the company, listing
-  its roles. **Up/Down** moves the highlight, **Enter** starts a new chat
-  with the highlighted role (a new talkable tab opens and becomes active),
-  **r** re-fetches the list. This tab has no input box — confirm arrow keys
-  and Enter never fall through to the input from an adjacent talkable tab.
-- **Consultation tab:** trigger a consultation and confirm a **new tab**
-  appears for the consulted agent (labelled with its role name), switchable via
-  **Tab**/**Shift+Tab**. That tab has no input box (spectate-only) and
-  its own independent scrollback — switching back to the root tab and back
-  again should not lose or reorder anything in either tab.
-- **Multiple talkable tabs:** start a second chat from the roster while the
-  root agent's turn is still running. Confirm the new tab's input works
-  immediately (busy state is per-tab, not global), a draft typed on one
-  talkable tab survives switching away and back, and submitting on each tab
-  reaches the right agent (not whichever tab was active first).
-- **Closing a tab (Ctrl+W):** on a talkable tab with a turn in flight, confirm
-  Ctrl+W removes the tab immediately, the turn stops (no further output for
-  that agent), and the agent is deleted server-side (check `Agent ... removed`
-  on stderr). On a consultation-follower tab, confirm Ctrl+W just removes the
-  tab without a deletion message (that agent isn't ours to delete). On the
-  roster tab, confirm Ctrl+W does nothing — it's never closable. After closing
-  the last agent tab, confirm you're left on the roster, same as starting with
-  `--company-id` alone.
-- **Ctrl+C mid-turn** stops watching (prints nothing destructive to either
-  pane; the agent keeps running server-side) and returns you to the input box.
-  **Ctrl+C at the idle prompt** tears down the TUI, cleans up the agent, and
-  exits back to a normal terminal — confirm the terminal is left in a sane
-  state (cursor visible, no leftover escape sequences).
-- Typing `exit` or `quit` in the input box ends the session the same way.
-
-**What to check (plain renderer — pipe the command, or pass `--no-tui`):**
-
-```bash
-./tcp-cli.sh chat --role-id "$ROLE_ID" --no-tui
-```
+**What to check:**
 
 - Colour-coded, blank-line-separated blocks appear: **Agent state** (cyan),
   **LLM state** (magenta), **Reasoning** (grey, indented), **Response** (white).
 - No raw/unformatted event JSON leaks into the output.
+- `--hide-reasoning` suppresses the reasoning block; the response still renders.
 - **Stray-`>` check:** after each turn completes, exactly **one** `> ` prompt is
   shown — never a duplicate or an orphaned prompt while the model is still
   working. Run several turns, including one that triggers a consultation, and one
   where you press **Ctrl+C mid-turn** (which should stop watching, print that the
   agent continues server-side, and re-show a single prompt).
-- **Consultation follow:** when the agent consults another role, its activity is
-  rendered inline prefixed with the consulted role name (e.g.
-  `[Cat assistant] Response: …`).
+- **Ctrl+C at the idle prompt** cleans up the agent and exits. Typing `exit` or
+  `quit` ends the session the same way.
+- **Consultation lines:** when the agent consults another role, you see
+  `consultation:asked <Role>` with the question, then
+  `consultation:<Role> answered` (or `couldn't answer`) with the text. The
+  consulted agent's own activity is followed on stderr.
 
-**What to check (`tui`, no role given):**
+**What to check (web UI, consultation):**
 
-```bash
-./tcp-cli.sh tui --company-id "$COMPANY_ID"
-```
+Open a chat with a role that can consult another (for example, ask a chat agent
+something only another role can answer).
 
-- Opens straight onto the company roster — no agent tab exists yet, no agent
-  is created until a role is picked. (`chat` always requires a role; browsing a
-  company without one is `tui`'s job.)
-- Enter on a role starts a chat and switches to its new talkable tab; Ctrl+C
-  at the idle prompt still cleans up every agent created this way, not just
-  one.
-- `tui` piped, or with `--no-tui`, is rejected with a clear error — there's no
-  roster to browse without a TTY.
+- The transcript shows an "Asked {Role}" entry with the question, and a
+  "{Role} is working on it…" line under it.
+- When the other role finishes, the waiting line goes and a "{Role} answered"
+  entry (or "{Role} couldn't answer") appears with the text. The asking agent
+  then carries on.
+- Click "Open conversation with {Role}". The consulted agent's conversation
+  opens read-only, and its first message is the question.
+- A screen reader announces "Consulting {Role}" and "{Role} answered", without
+  reading out the body.
 
 `scripts/manual-verify.sh` automates the consultation scenario (`-r 4` runs just
-the consultation prompt) and asks these as yes/no checks, covering both modes.
+the consultation prompt) and asks these as yes/no checks.
 
 ---
 

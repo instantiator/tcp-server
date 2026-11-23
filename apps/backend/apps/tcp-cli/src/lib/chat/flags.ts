@@ -1,20 +1,6 @@
 import { EntityRefOpts, UUID_RE } from '../core/entity-ref';
 
 /**
- * Whether the full-screen TUI should replace the linear stdout/stderr
- * renderer: only when stdout is a real TTY (there's a screen to draw
- * full-screen to) and the user hasn't passed `--no-tui`. This holds for
- * `--query` too — only a genuinely piped/redirected stdout falls back to the
- * plain renderer.
- */
-export function shouldUseTui(
-  cmdOpts: { tui?: boolean },
-  isTty: boolean,
-): boolean {
-  return isTty && cmdOpts.tui !== false;
-}
-
-/**
  * Validates the role/company/query flag combination, returning an error
  * message (or `null` if valid). A role is identified by exactly one of
  * `--role`, `--role-id`, `--role-slug` — a UUID form (`--role-id`, or
@@ -22,10 +8,8 @@ export function shouldUseTui(
  * (`--role-slug`, or a non-UUID `--role`) requires a company
  * (`--company`/`--company-id`/`--company-slug`) to scope it — role slugs are
  * only unique within a company. `chat` always means a talkable session with a
- * role: a bare company (no role) is rejected outright, pointed at `tui
- * <company>` instead — see `010.3.2.1`'s feedback for why the two verbs were
- * split. `--query` needs a specific role up front (a one-shot can't wait for
- * an interactive roster pick).
+ * role: a bare company (no role) is rejected outright, pointed at
+ * `list-roles <company>` to find one. `--query` needs a specific role up front.
  */
 export function validateChatFlags(
   cmdOpts: EntityRefOpts & { query?: string },
@@ -69,7 +53,7 @@ export function validateChatFlags(
     return '--query requires a role (--role, --role-id, or --role-slug)';
   }
   if (companyGiven && !roleGiven) {
-    return "chat requires a role (--role, --role-id, or --role-slug) — to browse a company's roster without one, use `tui <company>` instead";
+    return 'chat requires a role (--role, --role-id, or --role-slug) — run `tcp-cli list-roles <company>` to see the roles';
   }
   return null;
 }

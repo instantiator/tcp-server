@@ -29,7 +29,7 @@ MCP server (port 3014) that gives agents exact arithmetic (`calculate`), date ma
 MCP server (port 3015) that lets agents keep structured records in typed, per-company tables: `create_table`, `insert`, `update`, `delete`, `query` and `aggregate`. It has its own database connection and audits every read and change. See [tcp-mcp-records](tcp-mcp-records.md).
 
 **tcp-cli**
-Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, creating and monitoring tasks, chatting with agents (including a full-screen TUI), responding to open queries, and draining the system for shutdown. See [tcp-cli.md](tcp-cli.md).
+Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, creating and monitoring tasks, chatting with agents, responding to open queries, and draining the system for shutdown. See [tcp-cli.md](tcp-cli.md).
 
 ## Domain entities
 
@@ -90,7 +90,7 @@ One unit of work given to an agent of a specific role — a plan step, the plann
 The role that plans a company's tasks. Resolved per task: the task's own `plannerRoleId`, falling back to the company's. Set with `tcp-cli set-planner`.
 
 **Shortcode**
-A task's short, per-company identifier (`000`, `001`, …), assigned at creation and used to label it in the CLI and TUI.
+A task's short, per-company identifier (`000`, `001`, …), assigned at creation and used to label it in the CLI.
 
 ## Prompt and context
 
@@ -175,7 +175,7 @@ An append-only record of system activity: `llm_request`, `llm_response`, `tool_c
 The payload of an `agent_loop_completion` event: a brief narrative plus tracked lists of actions taken and storage changes (created, modified, deleted, moved files).
 
 **Wire event (`WireEvent`)**
-What crosses an SSE or Redis event stream: either a persisted audit row (`{ type: 'audit', event }`) or a live-only token delta (`StreamDelta`). One shape for three CLI surfaces — `chat`, `tui`, and `eavesdrop` all render through the same library.
+What crosses an SSE or Redis event stream: either a persisted audit row (`{ type: 'audit', event }`) or a live-only token delta (`StreamDelta`). One shape for two CLI surfaces — `chat` and `eavesdrop` render through the same library.
 
 ## Agent status values
 

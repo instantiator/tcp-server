@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   EventLogBuffer,
+  renderAuditEvent,
   responseText,
   type AppendEvent,
   type AuditWireEvent,
+  type ConsultationStep,
   type LogEntry,
   type WireEvent,
 } from '@tcp/shared/client';
@@ -12,6 +14,7 @@ import { useAgentHistory } from '../../api/hooks';
 import { ApiError } from '../../api/errors';
 import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
+import type { StringKey } from '../../strings';
 
 /**
  * Whether a completed response is announced in full, or only as having
@@ -28,6 +31,14 @@ import { useEventStream } from '../../events/useEventStream';
  * live code that the compiler checks.
  */
 export const ANNOUNCE_RESPONSE_BODY: boolean = false;
+
+/** What each step of a consultation announces, naming the consulted role. */
+const CONSULTATION_ANNOUNCEMENTS: Record<ConsultationStep['kind'], StringKey> =
+  {
+    asked: 'transcript.announce.consulting',
+    answered: 'transcript.announce.consultationAnswered',
+    failed: 'transcript.announce.consultationFailed',
+  };
 
 /**
  * What a transcript is doing.
@@ -120,7 +131,7 @@ export const useTranscript = (
   const [entries, setEntries] = useState<readonly LogEntry[]>([]);
   const bufferRef = useRef<EventLogBuffer | null>(null);
 
-  // Keyed on which response was announced, not on whether this has announced
+  // Keyed on which event was announced, not on whether this has announced
   // before: StrictMode invokes effects twice and the announcer counts repeats
   // rather than discarding them, so a run-count guard would speak twice.
   const lastAnnounced = useRef<string | null>(null);
@@ -149,17 +160,34 @@ export const useTranscript = (
     };
   }, [agentId, historyRows]);
 
-  const announceCompletion = (event: AuditWireEvent): void => {
-    if (!COMPLETION_EVENTS.has(event.eventType)) return;
+  /**
+   * Announces a completed response, or a step of a consultation, on arrival.
+   * Both share this agent's channel, so a step and a response arriving
+   * together are one sentence.
+   */
+  const announceArrival = (event: AuditWireEvent): void => {
+    const step = renderAuditEvent(event, { deltasSeen: false })[0]
+      ?.consultation;
+    if (step === undefined && !COMPLETION_EVENTS.has(event.eventType)) return;
 
     const key = event.id ?? event.timestamp;
     if (lastAnnounced.current === key) return;
     lastAnnounced.current = key;
 
+    // Its own channel per agent, so two transcripts streaming at once are
+    // two sentences rather than one describing neither.
+    const channel = `transcript:${agentId}`;
+    if (step !== undefined) {
+      announce({
+        channel,
+        change: CONSULTATION_ANNOUNCEMENTS[step.kind],
+        params: { role: step.roleName },
+        politeness: 'polite',
+      });
+      return;
+    }
     announce({
-      // Its own channel per agent, so two transcripts streaming at once are
-      // two sentences rather than one describing neither.
-      channel: `transcript:${agentId}`,
+      channel,
       change: ANNOUNCE_RESPONSE_BODY
         ? 'transcript.announce.responseBody'
         : 'transcript.announce.response',
@@ -180,7 +208,7 @@ export const useTranscript = (
       return;
     }
     buffer.appendAudit(event.event);
-    announceCompletion(event.event);
+    announceArrival(event.event);
   };
 
   const { error } = useEventStream(

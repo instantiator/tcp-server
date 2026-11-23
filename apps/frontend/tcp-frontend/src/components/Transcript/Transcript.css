@@ -120,3 +120,23 @@
 
 .transcript__entry--heading {
 }
+
+/*
+ * A consultation reads as a quotation set into the conversation: a bar down
+ * its start edge and a small indent (002.07).
+ */
+.transcript__entry--consultation {
+  padding-inline-start: var(--tcp-space-sm);
+  border-inline-start: calc(var(--tcp-border-width) * 4) solid
+    var(--tcp-color-accent);
+}
+
+.transcript__consultation-waiting {
+  margin: var(--tcp-space-xs) 0 0;
+  color: var(--tcp-color-text-muted);
+  font-style: italic;
+}
+
+.transcript__consultation-open {
+  margin-block-start: var(--tcp-space-xs);
+}

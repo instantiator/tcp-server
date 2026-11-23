@@ -189,7 +189,7 @@ alongside `agent-jobs`, both defined in `@tcp/shared`
 | ------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `agent:events:{agentId}` | tcp-agent → tcp-server | `WireEvent`s for one agent — persisted audit rows plus live token deltas — relayed onto that agent's SSE stream        |
 | `task:events:{taskId}`   | tcp-server → itself    | Task and assignment state changes, relayed onto the task's SSE stream                                                  |
-| `company:events:{id}`    | tcp-server → itself    | Company/task state changes, backing the TUI roster's live task list                                                    |
+| `company:events:{id}`    | tcp-server → itself    | Company/task state changes, backing the company event stream (`GET /api/company/:id/events`)                           |
 | `tcp:shutdown:command`   | tcp-server → workers   | `drain` \| `force` \| `cancel` (see [ADR-019](ADRs/ADR-019-graceful-shutdown.md))                                      |
 | `tcp:shutdown:status`    | workers → tcp-server   | `{ activeAgents }` — the worker's real in-memory count of running loops, which is what lets a drain confirm quiescence |
 

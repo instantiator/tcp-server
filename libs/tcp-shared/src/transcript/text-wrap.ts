@@ -1,7 +1,5 @@
-// Pure word-wrap, shared by every output surface (TUI panes, eavesdrop,
-// non-TUI chat) so long lines wrap consistently without duplicating the
-// logic — no terminal-kit dependency, unlike tui-format.ts (which re-exports
-// this for its own existing callers).
+// Pure word-wrap, shared by every output surface (eavesdrop, chat) so long
+// lines wrap consistently without duplicating the logic.
 
 /**
  * Greedy word-wrap: splits on existing newlines (kept as hard breaks, with

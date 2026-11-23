@@ -45,11 +45,7 @@ export {
 } from './events/wire-events';
 export { parseWireEvents, readWireStream } from './events/wire-stream';
 export type { StreamEnd } from './events/wire-stream';
-export {
-  str,
-  planIndexFromShortcode,
-  parseTaskChangeSummary,
-} from './events/wire-parse';
+export { str } from './events/wire-parse';
 
 // -- Records downloads: one file name for the server, CLI and web ------------
 // These import nothing, so they are safe as values.
@@ -147,7 +143,11 @@ export type {
 export { EventLogBuffer } from './transcript/event-log';
 export type { AppendEvent } from './transcript/event-log';
 export { renderEntry } from './transcript/entries';
-export type { LogEntry, ToolSummary } from './transcript/entries';
+export type {
+  ConsultationStep,
+  LogEntry,
+  ToolSummary,
+} from './transcript/entries';
 export { plainStyle } from './transcript/style';
 export type { EntryStyle, StyleBackend } from './transcript/style';
 export { HeadingBlockRenderer, ScopeTracker } from './transcript/heading';

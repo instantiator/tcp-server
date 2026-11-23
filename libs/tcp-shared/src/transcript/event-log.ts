@@ -1,17 +1,14 @@
 // The one state machine every surface shares. Accumulates audit events and
-// stream deltas into a heading/entry list that the TUI re-renders on resize
-// (render) and streaming surfaces observe incrementally (onAppend). This
-// replaces the per-surface PaneEntryLog / responseSeen / mapAuditHistoryToEvents.
+// stream deltas into a heading/entry list that the web and CLI clients observe
+// incrementally (onAppend).
 
 import type { AuditWireEvent, StreamDelta } from '../events/wire-events';
 import { isBlankText, parseClockTime } from './format';
 import { renderAuditEvent } from './audit-renderers';
 import type { TurnState } from './audit-renderers';
-import { renderEntry } from './entries';
 import type { LogEntry } from './entries';
 import { HeadingBlockRenderer, ScopeTracker } from './heading';
 import type { HeadingInfo, HeadingInfoProvider } from './heading';
-import type { StyleBackend } from './style';
 
 /** An incremental change to the log, delivered to {@link EventLogBuffer.onAppend} listeners. */
 export type AppendEvent =
@@ -113,19 +110,5 @@ export class EventLogBuffer {
     };
     this.items.push({ type: 'entry', entry });
     this.emit({ kind: 'entry', entry });
-  }
-
-  /** Full re-render for the TUI (re-wraps to `width`). Blank line between items. */
-  render(width: number, style: StyleBackend): string[] {
-    const lines: string[] = [];
-    this.items.forEach((item, i) => {
-      if (i > 0) lines.push('');
-      if (item.type === 'heading') {
-        lines.push(...this.headingRenderer.render(item.info, style));
-      } else {
-        lines.push(...renderEntry(item.entry, width, style));
-      }
-    });
-    return lines;
   }
 }

@@ -73,3 +73,9 @@ tcp-agent resolves the `BaseChatModel` instance at task step startup using this 
 - **No native clients.** Anthropic, Google, Azure and Bedrock are reached through their OpenAI-compatible endpoints rather than `@langchain/anthropic` and similar, so no dependencies were added. The cost: Anthropic describes its compatibility layer as meant for testing, not production, and provider-specific features (prompt caching, for example) aren't available. Revisit if a provider's compatibility layer blocks real use.
 - **Embeddings are limited to 2000 dimensions.** The vector indexes are pgvector `ivfflat`, which can't index wider vectors, so the catalogue lists no wider embedding model (`MAX_EMBEDDING_DIMENSION`). Anthropic, Bedrock's compatible API and OpenRouter offer no embedding models, and Gemini's are 3072 wide by default.
 - **Only LM Studio has been run for real.** The other providers' URLs were checked against their documentation on 2026-09-30, not against a live key. See [outstanding issues](../outstanding-issues.md).
+
+<a id="amendments-as-implemented-00207"></a>
+
+## Amendments as implemented (002.07)
+
+[002.07](../prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md) retired the TUI. The catalogue note above that lists the TUI as a consumer is now history: the setup wizard, CLI and web client share it.

@@ -118,7 +118,7 @@ Notifications gained a nullable `companyId` and `taskId`. The original plan was 
 - `TaskControlService` holds the two user controls (pause and close).
 - `failureReason` wording changed everywhere. Tests that asserted the old strings were updated to the new wording.
 - Every new `PauseReason` needs a branch in `pauseResumePrompt()`, a line in `PAUSE_REASON_TEXT`, a string key in the web client, and a place in `taskWaiting`'s precedence. The first two fail to compile if missed.
-- Deferred, each with its own tracked condition in [outstanding-issues.md](../outstanding-issues.md): supporting services fail a task rather than pause it; no retry for a failed task; a stranded `running` agent when the failure write itself fails; an MCP server that is down at tool-load time is skipped quietly; no CLI `close-room`; the chat `sendMessage` has no pause guard; failed or cancelled rooms get no marker; the task dialog's live agent data comes from the company stream; `UpdateTaskDto` cannot clear a planner; the TUI has no pause or resume keys.
+- Deferred, each with its own tracked condition in [outstanding-issues.md](../outstanding-issues.md): supporting services fail a task rather than pause it; no retry for a failed task; a stranded `running` agent when the failure write itself fails; an MCP server that is down at tool-load time is skipped quietly; no CLI `close-room`; the chat `sendMessage` has no pause guard; failed or cancelled rooms get no marker; the task dialog's live agent data comes from the company stream; `UpdateTaskDto` cannot clear a planner; the TUI had no pause or resume keys (the TUI is retired, see the [002.07 amendment](#amendment-as-implemented-p04-002-07)).
 - See [ADR-026](ADR-026-web-ui-accessibility-and-component-library.md#amendment-as-implemented-p04-000-04) and [ADR-031](ADR-031-spend-tracking-and-notifications.md#amendment-as-implemented-p04-000-04) for the amendments this work made.
 
 ## Amendment as implemented (001.04, phase 04) <a id="amendment-as-implemented-p04-001-04"></a>
@@ -129,3 +129,9 @@ Notifications gained a nullable `companyId` and `taskId`. The original plan was 
 - **Repeated calls are counted across the whole run**, not just in a row; an MCP server refusing three connections in a row mid-run fails the run with `service_unavailable`; `unexpected` names the error type and last tool.
 - **A failure that can't be recorded halts the system**: tcp-agent retries three times then stops taking jobs; tcp-server logs, tries an audit row, and starts a drain flagged `haltedOnError`, which the banner shows.
 - A failed step's reason shows in the task dialog, live.
+
+## Amendment as implemented (002.07, phase 04) <a id="amendment-as-implemented-p04-002-07"></a>
+
+[002.07](../prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md) retired the TUI, so the outstanding issue "The TUI has no pause or resume keys" is closed by removal. Pause and resume stay in the CLI (`pause-task`, `resume-task`) and the web dialog.
+
+Consultations also changed what a consultation pause carries. The `consultation` pause `state_change` now has a `question`, so a transcript can show what was asked.

@@ -2,7 +2,7 @@
 
 What TCP is missing before a company could help someone run a second income
 from home. It covers selling online, handling orders and enquiries, and keeping
-records. It also covers the gap between the web UI and the TUI.
+records. It also covers the gap between the web UI and the TUI (retired in 002.07).
 
 Sources: [usage.prompt.md](usage.prompt.md), [unplanned.md](<../phase 05 - service quality/unplanned.md>), and
 the code as of 2026-10-04 (`main` at `7e5bf71`).
@@ -41,8 +41,8 @@ that has been implemented.
 | [Customer data protection](#customer-data-protection)               | Customer names and addresses would be stored with no retention rules       | Retention per table, deletion and export, and a note on data protection duties     |
 | ✅ [Backup and restore](#backup-and-restore)                        | No backup of the DB or MinIO; business records could be lost               | One backup script and one restore script, plus a guide                             |
 | 📝 [Single-user home install](#single-user-home-install)            | Docker plus Zitadel is a lot for a non-developer                           | A single-user mode; 002.01 (third-party services) covers part of it                |
-| 📝 [Web UI: create a company](#web-ui-create-a-company)             | Companies can only be created from the TUI or CLI                          | A create-company flow, starting from a template                                    |
-| 📝 [Web UI vs TUI](#web-ui-vs-tui)                                  | Company, role, knowledge, storage and admin features exist only in the CLI | Close the gaps in the table below, then retire the TUI                             |
+| 📝 [Web UI: create a company](#web-ui-create-a-company)             | Companies could only be created from the CLI                               | A create-company flow, starting from a template                                    |
+| 📝 [Web UI vs TUI](#web-ui-vs-tui)                                  | Company, role, knowledge, storage and admin features exist only in the CLI | Close the gaps in the table below, then retire the TUI (done in 002.07)            |
 
 ## Gaps raised in usage.prompt.md
 
@@ -461,8 +461,8 @@ localhost or a private network only. Security-sensitive: Opus.
 
 > ✅ **A plain form is done, in [002.02](<002.02.01.plan - web ui create and edit a company.md>):** a New company dialog on the Companies page, and Admin → Company to edit, choose the default planner and delete. Starting from a template comes with [002.03](<002.03.00.prompt - company template format v1 with import and export.md>) and [005.04](<005.04.00.prompt - company templates v2, gallery and create from template (draft).md>), which also carry listing required secrets and offering a first task. There is no `region` field on a company.
 
-Already noted in [unplanned.md](<../phase 05 - service quality/unplanned.md>). Today companies are created with
-the TUI or `tcp-cli set-company`. The web flow should start from the
+Already noted in [unplanned.md](<../phase 05 - service quality/unplanned.md>). Companies were created with
+`tcp-cli set-company`. The web flow should start from the
 [template gallery](#company-templates), and then set name, region and LLM
 config, list required secrets, and offer a first task.
 
@@ -471,7 +471,8 @@ config, list required secrets, and offer a first task.
 > 📝 **In a draft, not implemented:** [phase 06 002.01 company configuration view](<../phase 06 - web ui quality/002.01.00.prompt - company configuration view (draft).md>) covers rows 3–5 of the table below (roles, knowledge, company users, and the permission flags). [deferred-work.md](../deferred-work.md#system-health-monitoring) ("System health monitoring") adds a system menu and a `get-health` verb.
 
 Checked against the code on 2026-10-04. "CLI" means individual `tcp-cli`
-verbs. The TUI is `tcp-cli tui` (`apps/backend/apps/tcp-cli/src/lib/tui/`).
+verbs. The TUI was `tcp-cli tui`. It is retired (002.07), so the TUI column
+below is a record of what it did on that date.
 
 **What the web UI does well today:** watching a company live (office view,
 tasks, agents, enquiries, consultations), creating tasks with file
@@ -511,11 +512,7 @@ can't attach files to a task or answer an enquiry.
 by slug, and `DELETE /api/system/shutdown` (cancel a drain). Either give each a
 surface or remove it.
 
-**Retiring the TUI:** once rows 1–8 are in the web UI, the TUI does nothing the
-web UI and CLI don't. The remaining TUI-only strength is following a chat
-agent into its consultations in new tabs; the web transcript should do the
-same before the TUI goes. Every web feature added here should also have a CLI
-verb, so scripting never needs the TUI.
+> ✅ **Retiring the TUI is done in [002.07](<002.07.01.plan - consultation following in the web transcript and retiring the tui.md>):** the asking agent's web transcript shows each consultation step (asked, waiting, answered or failed) with a link to open the consulted agent's conversation read-only, and `chat` and `eavesdrop` print the same steps as lines. `tcp-cli tui`, `--no-tui` and `terminal-kit` are gone. Every web feature added here should also have a CLI verb, so scripting never needs a full-screen view.
 
 ## Recommended implementation order
 
@@ -566,7 +563,7 @@ long-lived company documents.
 
 ### Stage 2: web configuration parity (web track, alongside stage 1)
 
-After this stage, the TUI can be retired and a company can be set up without
+After this stage, the TUI could be retired (it was, in 002.07) and a company can be set up without
 the CLI.
 
 | Item                                                                                  | Needs                       | Notes                                                                                                                                                                                 |
@@ -578,7 +575,7 @@ the CLI.
 | Parity row 2: admin view of all companies                                             | —                           |                                                                                                                                                                                       |
 | Parity row 8: storage browser                                                         | Company resources (stage 1) | Browse `resources/` as well as task folders                                                                                                                                           |
 | Parity row 14: memory view                                                            | —                           | Read-only                                                                                                                                                                             |
-| Consultation following in the web transcript, then **retire the TUI**                 | Rows 1–8                    | The last TUI-only feature                                                                                                                                                             |
+| ✅ Consultation following in the web transcript, then **retire the TUI**              | Rows 1–8                    | Done in 002.07                                                                                                                                                                        |
 
 ### Stage 3: control layer
 

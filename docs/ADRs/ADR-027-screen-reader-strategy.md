@@ -369,3 +369,11 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **A change closes the dialog and is announced.** Focus returns to the More menu that opened it, the one stable place, rather than into a list that has just changed under it.
 - **Delete asks first** in an `alertdialog` with the row count and a download, focus on No, as Clear and Delete table do. So do dropping a unique key and a retype that would blank values; the latter quotes the server's count and examples, so the reader hears exactly what would go.
 - **A refused key change is linked to its checkbox group** with `aria-describedby`, not `isInvalid`: native validation would block the next submit until the ticks changed, though the fix may lie in the rows.
+
+## Amendment as implemented (002.07, phase 04) <a id="amendment-as-implemented-p04-002-07"></a>
+
+[002.07](../prompts/phase%2004%20-%20utility/002.07.01.plan%20-%20consultation%20following%20in%20the%20web%20transcript%20and%20retiring%20the%20tui.md) added consultation entries to the transcript. The transcript policy in the table above is unchanged: arrival only, one announcer.
+
+- **Each step is announced once, by role only.** "Consulting {Role}" when the question appears, then "{Role} answered" or "{Role} couldn't answer". The question and answer text are not read out, as with responses (`ANNOUNCE_RESPONSE_BODY` stays `false`).
+- **The waiting line is plain text,** not an animation. A still line says the same thing, and nothing is announced while it shows.
+- **The link names the role.** "Open conversation with {Role}" is a link button, and it is left out when there is no chat dialog to open.
