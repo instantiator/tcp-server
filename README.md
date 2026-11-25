@@ -65,12 +65,7 @@ Good starting points...
 
 ## AI assisted coding
 
-This project is not vibe-coded, nor is it a fully human endeavour.
-
-The code in this repository was created with a prompt / planning / implementation cycle, with human review points. Design and development prompts are documented in [docs/prompts](./docs/prompts/).
-
-> [!NOTE]
-> Some work required repeated development cycles, and many plans were refined multiple times until ready - so the prompt sequence here is not the full story.
+The code in this repository was created with a prompt / planning / consultation / implementation / review cycle. Code written by coding assistants, with human review points. The full history of design and development prompts are documented in [docs/prompts](./docs/prompts/).
 
 ### Coding standards
 
